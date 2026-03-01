@@ -8,7 +8,7 @@ interface AuthState {
   user: User | null
   loading: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (email: string, password: string) => Promise<void>
+  register: (email: string, password: string, inviteCode: string) => Promise<void>
   logout: () => void
 }
 
@@ -41,8 +41,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(me)
   }, [])
 
-  const register = useCallback(async (email: string, password: string) => {
-    const resp = await api.auth.register(email, password)
+  const register = useCallback(async (email: string, password: string, inviteCode: string) => {
+    const resp = await api.auth.register(email, password, inviteCode)
     localStorage.setItem('access_token', resp.access_token)
     localStorage.setItem('refresh_token', resp.refresh_token)
     const me = await api.auth.me()

@@ -232,3 +232,49 @@ def admin_delete_artifact(
     user_id = row.get("user_id") if row else None
     remove_artifact(supabase, user_id, course_id, artifact_id, storage_path)
     return {"ok": True, "id": artifact_id}
+
+
+# ── Invite Code Management ────────────────────────────────────────────────────
+
+@router.post("/invites", status_code=201)
+def create_invite(
+    note: str = Body(default="", embed=True),
+    max_uses: int = Body(default=1, embed=True),
+    _: None = Depends(_require_admin),
+    supabase: Client = Depends(get_db),
+) -> dict[str, Any]:
+    """Generate a new invite code."""
+    import secrets
+    code = secrets.token_urlsafe(6).upper()[:8]
+    row = supabase.table("invites").insert({
+        "code": code,
+        "note": note or None,
+        "max_uses": max_uses,
+    }).execute()
+    return row.data[0]
+
+
+@router.get("/invites")
+def list_invites(
+    _: None = Depends(_require_admin),
+    supabase: Client = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """List all invite codes with usage stats."""
+    return (
+        supabase.table("invites")
+        .select("*")
+        .order("created_at", desc=True)
+        .execute()
+        .data
+    )
+
+
+@router.delete("/invites/{invite_id}", status_code=200)
+def delete_invite(
+    invite_id: str,
+    _: None = Depends(_require_admin),
+    supabase: Client = Depends(get_db),
+) -> dict[str, Any]:
+    """Delete an invite code."""
+    supabase.table("invites").delete().eq("id", invite_id).execute()
+    return {"ok": True, "id": invite_id}

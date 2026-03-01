@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, Response
@@ -22,16 +23,49 @@ def _build_token_response(session: Any) -> TokenResponse:
     )
 
 
+def _use_invite(supabase: Client, code: str) -> None:
+    """Validate and consume an invite code. Raises AuthError if invalid."""
+    try:
+        row = (
+            supabase.table("invites")
+            .select("*")
+            .eq("code", code.strip().upper())
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        raise AuthError("Could not verify invite code") from exc
+
+    if not row.data:
+        raise AuthError("Invalid invite code")
+
+    invite = row.data[0]
+
+    if invite["use_count"] >= invite["max_uses"]:
+        raise AuthError("This invite code has already been used")
+
+    if invite.get("expires_at"):
+        expires = datetime.fromisoformat(invite["expires_at"].replace("Z", "+00:00"))
+        if datetime.now(timezone.utc) > expires:
+            raise AuthError("This invite code has expired")
+
+    # Consume one use
+    supabase.table("invites").update(
+        {"use_count": invite["use_count"] + 1}
+    ).eq("id", invite["id"]).execute()
+
+
 @router.post("/register", response_model=TokenResponse, status_code=201)
 def register(body: RegisterRequest, supabase: Client = Depends(get_db)) -> TokenResponse:
-    """Create a new user account and return tokens."""
+    """Create a new user account (requires valid invite code) and return tokens."""
+    _use_invite(supabase, body.invite_code)
+
     try:
         resp = supabase.auth.sign_up({"email": body.email, "password": body.password})
     except Exception as exc:
         raise AuthError(f"Registration failed: {exc}") from exc
 
     if resp.session is None:
-        # Supabase email confirmation is enabled — user must confirm before logging in
         raise AuthError(
             "Registration successful. Please check your email to confirm your account."
         )

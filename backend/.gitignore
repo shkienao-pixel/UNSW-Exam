@@ -5,9 +5,10 @@ __pycache__/
 .venv/
 venv/
 
-# Secrets
+# Secrets (keep .env.example as it has no real keys)
 .env
 .env.*
+!.env.example
 
 # DB / runtime
 *.db

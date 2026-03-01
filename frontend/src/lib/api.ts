@@ -33,8 +33,8 @@ async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export const api = {
   auth: {
-    register: (email: string, password: string) =>
-      req<TokenResponse>('/auth/register', { method: 'POST', body: JSON.stringify({ email, password }) }),
+    register: (email: string, password: string, invite_code: string) =>
+      req<TokenResponse>('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, invite_code }) }),
     login: (email: string, password: string) =>
       req<TokenResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
     refresh: (refresh_token: string) =>

@@ -11,6 +11,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -25,9 +26,13 @@ export default function RegisterPage() {
       setError('密码至少 8 位')
       return
     }
+    if (!inviteCode.trim()) {
+      setError('请输入邀请码')
+      return
+    }
     setLoading(true)
     try {
-      await register(email, password)
+      await register(email, password, inviteCode.trim())
       router.push('/dashboard')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '注册失败')
@@ -37,14 +42,14 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: '#0D0D0D' }}>
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: '#08080f' }}>
       <div className="fixed top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full pointer-events-none"
         style={{ background: 'radial-gradient(circle, rgba(255,215,0,0.06) 0%, transparent 70%)' }} />
 
       <div className="glass p-8 w-full max-w-md relative z-10">
         <div className="text-center mb-8">
           <div className="text-3xl font-bold mb-1" style={{ color: '#FFD700' }}>
-            ✦ UNSW Exam Master
+            ✦ Exam Master
           </div>
           <p className="text-sm" style={{ color: '#888' }}>AI 驱动的考前复习平台</p>
         </div>
@@ -52,6 +57,20 @@ export default function RegisterPage() {
         <h1 className="text-xl font-semibold text-white mb-6">创建账户</h1>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm mb-2" style={{ color: '#AAA' }}>邀请码</label>
+            <input
+              type="text"
+              className="input-glass font-mono tracking-widest"
+              placeholder="XXXXXXXX"
+              value={inviteCode}
+              onChange={e => setInviteCode(e.target.value.toUpperCase())}
+              required
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </div>
+
           <div>
             <label className="block text-sm mb-2" style={{ color: '#AAA' }}>邮箱</label>
             <input
@@ -89,7 +108,8 @@ export default function RegisterPage() {
           </div>
 
           {error && (
-            <div className="text-sm px-3 py-2 rounded-lg" style={{ background: 'rgba(255,68,68,0.1)', color: '#FF6666', border: '1px solid rgba(255,68,68,0.2)' }}>
+            <div className="text-sm px-3 py-2 rounded-lg"
+              style={{ background: 'rgba(255,68,68,0.1)', color: '#FF6666', border: '1px solid rgba(255,68,68,0.2)' }}>
               {error}
             </div>
           )}
