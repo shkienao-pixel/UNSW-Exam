@@ -1,0 +1,235 @@
+@import "tailwindcss";
+
+/* ── Design tokens ───────────────────────────────────────────────────────────── */
+
+@theme {
+  --color-gold:         #FFD700;
+  --color-gold-dim:     #B8860B;
+  --color-page:         #08080f;
+  --color-glass:        rgba(255, 255, 255, 0.03);
+  --color-glass-border: rgba(255, 255, 255, 0.07);
+  --color-surface:      rgba(255, 255, 255, 0.04);
+  --color-muted:        #555566;
+  --color-danger:       #FF4444;
+  --color-success:      #22C55E;
+}
+
+:root {
+  --background: #08080f;
+  --foreground: #e8e8f0;
+}
+
+/* ── Base ────────────────────────────────────────────────────────────────────── */
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  min-height: 100vh;
+  /* Deep gradient — gives backdrop-filter something to blur through */
+  background-image:
+    radial-gradient(ellipse 70% 55% at 12% 12%, rgba(255, 215, 0, 0.055) 0%, transparent 65%),
+    radial-gradient(ellipse 55% 70% at 88% 88%, rgba(40, 38, 120, 0.13)  0%, transparent 65%),
+    radial-gradient(ellipse 90% 90% at 50% 50%, rgba(14, 14, 28, 0.7)    0%, transparent 100%);
+  background-attachment: fixed;
+}
+
+/* ── Glassmorphism card ──────────────────────────────────────────────────────── */
+
+.glass {
+  /* Near-transparent — lets background gradient show through */
+  background: rgba(255, 255, 255, 0.028);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  /* Asymmetric border: lighter top-left = "lit glass" illusion */
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-top-color:  rgba(255, 255, 255, 0.10);
+  border-left-color: rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  /* Depth shadow + inner highlight */
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+}
+
+.glass:hover {
+  background: rgba(255, 215, 0, 0.035);
+  border-color: rgba(255, 215, 0, 0.22);
+  border-top-color: rgba(255, 215, 0, 0.32);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.45),
+    0 0 22px rgba(255, 215, 0, 0.07),
+    inset 0 1px 0 rgba(255, 215, 0, 0.05);
+}
+
+/* ── Gold glow button ────────────────────────────────────────────────────────── */
+
+.btn-gold {
+  background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+  color: #0a0a0f;
+  font-weight: 700;
+  border-radius: 9px;
+  padding: 10px 20px;
+  border: none;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  box-shadow: 0 0 14px rgba(255, 215, 0, 0.32);
+}
+
+.btn-gold:hover {
+  box-shadow: 0 0 28px rgba(255, 215, 0, 0.52);
+  transform: translateY(-1px);
+}
+
+.btn-gold:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Ghost button ────────────────────────────────────────────────────────────── */
+
+.btn-ghost {
+  background: transparent;
+  color: #888899;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.btn-ghost:hover {
+  background: rgba(255, 215, 0, 0.06);
+  border-color: rgba(255, 215, 0, 0.35);
+  color: #FFD700;
+}
+
+/* ── Input ───────────────────────────────────────────────────────────────────── */
+
+.input-glass {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 9px;
+  padding: 10px 14px;
+  color: #e8e8f0;
+  outline: none;
+  width: 100%;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  backdrop-filter: blur(8px);
+}
+
+.input-glass:focus {
+  border-color: rgba(255, 215, 0, 0.55);
+  box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.08);
+}
+
+.input-glass::placeholder {
+  color: #44445a;
+}
+
+/* ── Sidebar nav item — active glow ─────────────────────────────────────────── */
+
+.nav-active {
+  color: #FFD700;
+  background: rgba(255, 215, 0, 0.07);
+  border-left: 2px solid #FFD700;
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.45);
+  box-shadow: inset 0 0 18px rgba(255, 215, 0, 0.04);
+}
+
+/* ── Status badges (transparent, not jarring) ────────────────────────────────── */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.badge-success {
+  background: rgba(34, 197, 94, 0.10);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.22);
+}
+
+.badge-warning {
+  background: rgba(255, 215, 0, 0.10);
+  color: #FFD700;
+  border: 1px solid rgba(255, 215, 0, 0.22);
+}
+
+.badge-danger {
+  background: rgba(255, 68, 68, 0.10);
+  color: #ff7070;
+  border: 1px solid rgba(255, 68, 68, 0.22);
+}
+
+.badge-neutral {
+  background: rgba(255, 255, 255, 0.05);
+  color: #888;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 215, 0, 0.18);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 215, 0, 0.38);
+}
+
+/* ── Tab active ──────────────────────────────────────────────────────────────── */
+
+.tab-active {
+  border-bottom: 2px solid #FFD700;
+  color: #FFD700;
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.4);
+}
+
+/* ── Spinner ─────────────────────────────────────────────────────────────────── */
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 215, 0, 0.15);
+  border-top-color: #FFD700;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+
+/* ── Flashcard flip ──────────────────────────────────────────────────────────── */
+
+@keyframes flipIn {
+  from { transform: rotateY(90deg); opacity: 0; }
+  to   { transform: rotateY(0deg);  opacity: 1; }
+}
+.flip-in {
+  animation: flipIn 0.25s ease-out;
+}
+
+/* ── Prose (Markdown) ────────────────────────────────────────────────────────── */
+
+.prose-invert {
+  --tw-prose-headings: #e8e8f0;
+  --tw-prose-body: #b0b0c0;
+  --tw-prose-bold: #e8e8f0;
+  --tw-prose-links: #FFD700;
+  --tw-prose-code: #FFD700;
+  --tw-prose-pre-bg: rgba(255,255,255,0.04);
+  --tw-prose-hr: rgba(255,255,255,0.08);
+  --tw-prose-bullets: #555566;
+  --tw-prose-counters: #555566;
+}

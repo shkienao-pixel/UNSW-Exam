@@ -39,3 +39,14 @@ data/app.db
 data/chroma/
 src/data/app.db
 src/data/chroma/
+src/app.db
+
+# Claude Code internal
+.claude/
+
+# Pip install artifacts
+backend/=*
+
+# Node / Next.js (root-level catch)
+node_modules/
+.next/

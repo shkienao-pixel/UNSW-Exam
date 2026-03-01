@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+.venv/
+venv/
+
+# Secrets
+.env
+.env.*
+
+# DB / runtime
+*.db
+*.sqlite3
+
+# Pip artifacts
+=*
