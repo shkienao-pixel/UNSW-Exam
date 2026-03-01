@@ -32,14 +32,15 @@ function CoursePageInner() {
 
   const load = useCallback(async () => {
     try {
-      const [c, arts, scopes] = await Promise.all([
-        api.courses.get(courseId),
+      const c = await api.courses.get(courseId)
+      setCourse(c)
+      // Load artifacts and scope-sets independently — don't let either block course display
+      const [arts, scopes] = await Promise.allSettled([
         api.artifacts.list(courseId),
         api.scopeSets.list(courseId),
       ])
-      setCourse(c)
-      setArtifacts(arts)
-      setScopeSets(scopes)
+      if (arts.status === 'fulfilled') setArtifacts(arts.value)
+      if (scopes.status === 'fulfilled') setScopeSets(scopes.value)
     } finally {
       setLoading(false)
     }

@@ -222,11 +222,11 @@ def delete_artifact(
 def list_scope_sets(
     supabase: Client, user_id: str, course_id: str
 ) -> list[dict[str, Any]]:
+    # Courses are shared/admin-managed, so scope sets are visible to all users
     resp = (
         supabase.table("scope_sets")
         .select("id, course_id, name, is_default, created_at, updated_at")
         .eq("course_id", course_id)
-        .eq("user_id", user_id)
         .order("is_default", desc=True)
         .order("created_at")
         .execute()
@@ -279,7 +279,7 @@ def ensure_default_scope_set(
     )
     if resp.data:
         row = dict(resp.data[0])
-        row["artifact_ids"] = get_scope_set_artifact_ids(supabase, row["id"])
+        row["artifact_ids"] = _get_scope_set_artifact_ids(supabase, row["id"])
         return row
 
     now = _now_iso()
