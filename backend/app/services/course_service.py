@@ -268,15 +268,24 @@ def _get_scope_set_artifact_ids(supabase: Client, scope_set_id: int) -> list[int
 def ensure_default_scope_set(
     supabase: Client, user_id: str, course_id: str
 ) -> dict[str, Any]:
-    existing = list_scope_sets(supabase, user_id, course_id)
-    for ss in existing:
-        if ss["is_default"]:
-            return ss
-
-    now = _now_iso()
+    # Query without user_id filter to find any existing default scope set for this course
     resp = (
         supabase.table("scope_sets")
-        .insert(
+        .select("*")
+        .eq("course_id", course_id)
+        .eq("is_default", True)
+        .limit(1)
+        .execute()
+    )
+    if resp.data:
+        row = dict(resp.data[0])
+        row["artifact_ids"] = get_scope_set_artifact_ids(supabase, row["id"])
+        return row
+
+    now = _now_iso()
+    upsert_resp = (
+        supabase.table("scope_sets")
+        .upsert(
             {
                 "course_id": course_id,
                 "user_id": user_id,
@@ -284,11 +293,12 @@ def ensure_default_scope_set(
                 "is_default": True,
                 "created_at": now,
                 "updated_at": now,
-            }
+            },
+            on_conflict="course_id,name",
         )
         .execute()
     )
-    row = dict(resp.data[0])
+    row = dict(upsert_resp.data[0])
     row["artifact_ids"] = []
     return row
 
