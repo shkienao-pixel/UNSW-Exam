@@ -91,3 +91,21 @@ export interface MetricsSummary {
   by_operation: Record<string, number>
   avg_elapsed_s: number
 }
+
+export interface AskSource {
+  artifact_id: number
+  file_name: string
+  storage_url: string
+}
+
+export interface AskResponse {
+  question: string
+  answer: string
+  sources: AskSource[]
+  image_url: string | null
+  model_used: string
+}
+
+export interface ExplainImageResponse {
+  image_data_url: string | null
+}

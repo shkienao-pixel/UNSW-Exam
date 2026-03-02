@@ -9,7 +9,7 @@ import type { Course, Artifact, ScopeSet, Output } from '@/lib/types'
 import {
   FileText, Upload, Loader2, Zap, History, Settings2,
   CheckSquare, ChevronDown, MessageSquare, BookOpen, Send, RotateCcw,
-  ExternalLink, Trash2, Languages, HelpCircle,
+  ExternalLink, Trash2, Languages, HelpCircle, ImagePlus, X, Sparkles,
 } from 'lucide-react'
 import { addMistake } from '@/lib/mistakes-store'
 import MistakesView from '@/components/MistakesView'
@@ -55,14 +55,18 @@ function CoursePageInner() {
   )
   if (!course) return <div className="p-8 text-red-400">{t('course_404')}</div>
 
+  // Ask 视图独占全屏（ChatGPT 风格），其他视图正常滚动
+  if (view === 'ask') {
+    return <AskTab courseId={courseId} scopeSets={scopeSets} artifacts={artifacts} />
+  }
+
   return (
-    <div className="p-8 max-w-5xl mx-auto">
+    <div className="p-8 max-w-5xl mx-auto overflow-y-auto flex-1">
       {view === 'flashcards' && <FlashcardsTab courseId={courseId} />}
       {view === 'mistakes'   && <MistakesTab courseId={courseId} />}
       {view === 'quiz'       && <QuizTab courseId={courseId} />}
       {view === 'summary'    && <SummaryTab courseId={courseId} />}
       {view === 'outline'    && <OutlineTab courseId={courseId} />}
-      {view === 'ask'        && <AskTab courseId={courseId} scopeSets={scopeSets} artifacts={artifacts} />}
       {view === 'generate'   && (
         <GenerateTab courseId={courseId} scopeSets={scopeSets} setScopeSets={setScopeSets}
           artifacts={artifacts} setOutputs={setOutputs} />
@@ -669,7 +673,44 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
 // ── AI 问答 Tab ───────────────────────────────────────────────────────────────
 
 type AskSource = { artifact_id: number; file_name: string; storage_url: string }
-type Message = { role: 'user' | 'assistant'; content: string; sources?: AskSource[] }
+type Message = {
+  role: 'user' | 'assistant'
+  content: string
+  sources?: AskSource[]
+  imagePreview?: string        // 用户上传的图片（data URL）
+  explainImage?: string        // Gemini 生成的讲解图（data URL）
+  explainFailed?: boolean      // 生成失败标记
+  loadingExplain?: boolean
+}
+
+// ── 图片灯箱 ─────────────────────────────────────────────────────────────────
+function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.85)' }}
+      onClick={onClose}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src} alt="讲解图（全屏）"
+        className="max-w-full max-h-full rounded-xl shadow-2xl"
+        style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain' }}
+        onClick={e => e.stopPropagation()} />
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 p-2 rounded-full"
+        style={{ background: 'rgba(255,255,255,0.1)', color: '#fff' }}>
+        <X size={20} />
+      </button>
+    </div>
+  )
+}
 
 function AskTab({ courseId, scopeSets, artifacts }: {
   courseId: string; scopeSets: ScopeSet[]; artifacts: Artifact[]
@@ -678,29 +719,90 @@ function AskTab({ courseId, scopeSets, artifacts }: {
   const searchParams = useSearchParams()
   const prefilledQ = searchParams.get('q') || ''
 
-  const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput] = useState(prefilledQ)
-  const [loading, setLoading] = useState(false)
-  const [scopeSetId, setScopeSetId] = useState<number | undefined>(scopeSets[0]?.id)
-  const bottomRef = useRef<HTMLDivElement>(null)
-  const autoSentRef = useRef(false)
+  const [messages, setMessages]         = useState<Message[]>([])
+  const [input, setInput]               = useState(prefilledQ)
+  const [loading, setLoading]           = useState(false)
+  const [scopeSetId, setScopeSetId]     = useState<number | undefined>(scopeSets[0]?.id)
+  const [imageFile, setImageFile]       = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [lightboxSrc, setLightboxSrc]   = useState<string | null>(null)
+  const bottomRef     = useRef<HTMLDivElement>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  const autoSentRef   = useRef(false)
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
   const approvedCount = artifacts.filter(a => a.status === 'approved').length
 
+  function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImageFile(file)
+    const reader = new FileReader()
+    reader.onload = ev => setImagePreview(ev.target?.result as string)
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
+  function clearImage() {
+    setImageFile(null)
+    setImagePreview(null)
+  }
+
   async function send(overrideInput?: string) {
     const q = (overrideInput ?? input).trim()
     if (!q || loading) return
+
+    const userMsg: Message = {
+      role: 'user',
+      content: q,
+      imagePreview: imagePreview ?? undefined,
+    }
+
     setInput('')
-    setMessages(prev => [...prev, { role: 'user', content: q }])
+    clearImage()
+    setMessages(prev => [...prev, userMsg])
     setLoading(true)
+
     try {
-      const res = await api.generate.ask(courseId, q, scopeSetId)
-      setMessages(prev => [...prev, { role: 'assistant', content: res.answer, sources: res.sources }])
+      const res = await api.generate.ask(courseId, q, scopeSetId, imageFile ?? undefined)
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: res.answer,
+        sources: res.sources,
+      }])
     } catch (err: unknown) {
-      setMessages(prev => [...prev, { role: 'assistant', content: `❌ ${err instanceof Error ? err.message : '请求失败'}` }])
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `❌ ${err instanceof Error ? err.message : '请求失败'}`,
+      }])
     } finally { setLoading(false) }
+  }
+
+  async function generateExplainImage(msgIndex: number) {
+    const aiMsg  = messages[msgIndex]
+    const userMsg = messages.slice(0, msgIndex).reverse().find(m => m.role === 'user')
+    if (!aiMsg || !userMsg) return
+
+    setMessages(prev => prev.map((m, i) =>
+      i === msgIndex ? { ...m, loadingExplain: true } : m
+    ))
+
+    try {
+      const res = await api.generate.explainWithImage(userMsg.content, aiMsg.content)
+      setMessages(prev => prev.map((m, i) =>
+        i === msgIndex ? {
+          ...m,
+          loadingExplain: false,
+          explainImage:   res.image_data_url ?? undefined,
+          explainFailed:  !res.image_data_url,
+        } : m
+      ))
+    } catch {
+      setMessages(prev => prev.map((m, i) =>
+        i === msgIndex ? { ...m, loadingExplain: false, explainFailed: true } : m
+      ))
+    }
   }
 
   // Auto-send pre-filled question once
@@ -713,32 +815,42 @@ function AskTab({ courseId, scopeSets, artifacts }: {
   }, [prefilledQ, approvedCount])
 
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100vh - 100px)' }}>
-      <div className="mb-4 flex-shrink-0">
-        <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-          <MessageSquare size={22} style={{ color: '#FFD700' }} /> {t('ask_title')}
+    <>
+    {lightboxSrc && <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
+    <div className="flex flex-col h-full">
+      {/* 顶部标题栏 */}
+      <div className="flex-shrink-0 px-8 pt-6 pb-3 border-b"
+        style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+          <MessageSquare size={20} style={{ color: '#FFD700' }} /> {t('ask_title')}
         </h2>
-        <p className="text-sm mt-0.5" style={{ color: '#555' }}>{t('ask_sub')}</p>
+        <p className="text-xs mt-0.5" style={{ color: '#555' }}>{t('ask_sub')}</p>
       </div>
 
-      {scopeSets.length > 0 && (
-        <div className="flex items-center gap-2 mb-3 flex-shrink-0">
-          <label className="text-xs" style={{ color: '#666' }}>{t('ask_scope_label')}</label>
-          <select className="input-glass text-xs py-1" value={scopeSetId ?? ''}
-            onChange={e => setScopeSetId(Number(e.target.value) || undefined)}>
-            {scopeSets.map(s => <option key={s.id} value={s.id}>{s.name}{s.is_default ? ' (全部)' : ''}</option>)}
-          </select>
+      {/* scope 选择器 + 警告 */}
+      {(scopeSets.length > 0 || approvedCount === 0) && (
+        <div className="flex-shrink-0 px-8 py-2 flex flex-wrap items-center gap-3"
+          style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+          {scopeSets.length > 0 && (
+            <div className="flex items-center gap-2">
+              <label className="text-xs" style={{ color: '#666' }}>{t('ask_scope_label')}</label>
+              <select className="input-glass text-xs py-1" value={scopeSetId ?? ''}
+                onChange={e => setScopeSetId(Number(e.target.value) || undefined)}>
+                {scopeSets.map(s => <option key={s.id} value={s.id}>{s.name}{s.is_default ? ' (全部)' : ''}</option>)}
+              </select>
+            </div>
+          )}
+          {approvedCount === 0 && (
+            <p className="text-xs px-2.5 py-1 rounded-lg"
+              style={{ background: 'rgba(255,165,0,0.1)', color: '#FFA500', border: '1px solid rgba(255,165,0,0.2)' }}>
+              {t('ask_no_files')}
+            </p>
+          )}
         </div>
       )}
 
-      {approvedCount === 0 && (
-        <div className="text-sm px-3 py-2 mb-3 rounded-lg flex-shrink-0"
-          style={{ background: 'rgba(255,165,0,0.1)', color: '#FFA500', border: '1px solid rgba(255,165,0,0.2)' }}>
-          {t('ask_no_files')}
-        </div>
-      )}
-
-      <div className="flex-1 overflow-y-auto space-y-3 pr-1 min-h-0">
+      {/* 消息列表（唯一滚动区域） */}
+      <div className="flex-1 overflow-y-auto min-h-0 px-8 py-4 space-y-4">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-3" style={{ color: '#444' }}>
             <MessageSquare size={36} className="opacity-30" />
@@ -748,6 +860,16 @@ function AskTab({ courseId, scopeSets, artifacts }: {
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className="max-w-[82%] space-y-1.5">
+              {/* 用户上传的图片预览 */}
+              {m.role === 'user' && m.imagePreview && (
+                <div className="flex justify-end">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={m.imagePreview} alt="上传的图片"
+                    className="max-w-[240px] max-h-[180px] rounded-xl object-cover"
+                    style={{ border: '1px solid rgba(255,215,0,0.3)' }} />
+                </div>
+              )}
+
               <div className="px-4 py-3 rounded-2xl text-sm"
                 style={{
                   background: m.role === 'user' ? 'rgba(255,215,0,0.15)' : 'rgba(255,255,255,0.05)',
@@ -758,6 +880,8 @@ function AskTab({ courseId, scopeSets, artifacts }: {
                   ? <div className="prose prose-invert prose-sm max-w-none"><ReactMarkdown>{m.content}</ReactMarkdown></div>
                   : m.content}
               </div>
+
+              {/* 来源引用 */}
               {m.role === 'assistant' && m.sources && m.sources.length > 0 && (
                 <div className="px-3 py-2 rounded-xl text-xs space-y-1"
                   style={{ background: 'rgba(255,215,0,0.04)', border: '1px solid rgba(255,215,0,0.1)' }}>
@@ -773,6 +897,46 @@ function AskTab({ courseId, scopeSets, artifacts }: {
                   ))}
                 </div>
               )}
+
+              {/* 生成图解按钮 + 图解结果 */}
+              {m.role === 'assistant' && (
+                <div>
+                  {m.explainImage ? (
+                    <div className="mt-2 rounded-xl overflow-hidden"
+                      style={{ border: '1px solid rgba(255,215,0,0.2)' }}>
+                      <p className="px-3 py-1.5 text-xs flex items-center gap-1"
+                        style={{ color: '#888', background: 'rgba(255,215,0,0.04)' }}>
+                        <Sparkles size={10} style={{ color: '#FFD700' }} />
+                        AI 生成讲解图
+                        <span className="ml-auto opacity-50 text-[10px]">点击放大</span>
+                      </p>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={m.explainImage} alt="AI 讲解图"
+                        className="w-full cursor-zoom-in"
+                        style={{ background: '#fff' }}
+                        onClick={() => setLightboxSrc(m.explainImage!)} />
+                    </div>
+                  ) : m.explainFailed ? (
+                    <p className="text-xs px-1" style={{ color: '#555' }}>图解生成失败，请重试</p>
+                  ) : (
+                    <button
+                      onClick={() => generateExplainImage(i)}
+                      disabled={!!m.loadingExplain}
+                      className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg transition-opacity hover:opacity-100"
+                      style={{
+                        opacity: m.loadingExplain ? 0.6 : 0.5,
+                        color: '#FFD700',
+                        border: '1px solid rgba(255,215,0,0.2)',
+                        background: 'rgba(255,215,0,0.04)',
+                      }}>
+                      {m.loadingExplain
+                        ? <><Loader2 size={10} className="animate-spin" />生成中…</>
+                        : <><Sparkles size={10} />生成讲解图</>}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -786,17 +950,59 @@ function AskTab({ courseId, scopeSets, artifacts }: {
         <div ref={bottomRef} />
       </div>
 
-      <div className="flex gap-2 mt-3 flex-shrink-0">
+      {/* 底部输入区（固定在底部，永远可见） */}
+      <div className="flex-shrink-0 px-8 pb-6 pt-3 border-t"
+        style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+
+      {/* 图片预览 */}
+      {imagePreview && (
+        <div className="flex items-center gap-2 mb-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={imagePreview} alt="待发送图片"
+            className="h-14 w-14 rounded-lg object-cover"
+            style={{ border: '1px solid rgba(255,215,0,0.3)' }} />
+          <span className="text-xs flex-1 truncate" style={{ color: '#888' }}>{imageFile?.name}</span>
+          <button onClick={clearImage} className="p-1 rounded-full hover:bg-white/10 transition-colors"
+            style={{ color: '#666' }}>
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        {/* 隐藏文件选择 */}
+        <input ref={imageInputRef} type="file" accept="image/*"
+          className="hidden" onChange={handleImageSelect} />
+
+        {/* 上传图片按钮 */}
+        <button
+          onClick={() => imageInputRef.current?.click()}
+          disabled={loading || approvedCount === 0}
+          title="上传图片（Gemini 多模态分析）"
+          className="px-3 rounded-xl transition-opacity hover:opacity-100"
+          style={{
+            opacity: 0.55,
+            background: imagePreview ? 'rgba(255,215,0,0.12)' : 'rgba(255,255,255,0.05)',
+            border: `1px solid ${imagePreview ? 'rgba(255,215,0,0.4)' : 'rgba(255,255,255,0.08)'}`,
+            color: imagePreview ? '#FFD700' : '#666',
+          }}>
+          <ImagePlus size={16} />
+        </button>
+
         <input className="input-glass flex-1 text-sm" placeholder={t('ask_placeholder')}
           value={input} onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
           disabled={loading || approvedCount === 0} />
+
         <button className="btn-gold px-4" onClick={() => send()}
           disabled={loading || !input.trim() || approvedCount === 0}>
           <Send size={14} />
         </button>
       </div>
+
+      </div>{/* end 底部输入区 */}
     </div>
+    </>
   )
 }
 

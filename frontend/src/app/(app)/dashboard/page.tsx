@@ -17,7 +17,7 @@ export default function DashboardPage() {
   }, [])
 
   return (
-    <div className="p-8">
+    <div className="p-8 overflow-y-auto flex-1">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white">课程列表</h1>

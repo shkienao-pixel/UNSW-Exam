@@ -17,10 +17,12 @@ app = FastAPI(
     description="Backend API for UNSW Exam Master — multi-user AI exam prep platform",
 )
 
-# CORS
+# CORS — 开发模式允许所有 localhost 端口，生产模式使用白名单
+_allow_origin_regex = r"http://localhost:\d+" if settings.app_env == "development" else None
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
+    allow_origin_regex=_allow_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

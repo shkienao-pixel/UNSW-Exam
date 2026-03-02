@@ -20,8 +20,14 @@ class Settings(BaseSettings):
     supabase_anon_key: str
     supabase_service_role_key: str
 
-    # OpenAI (platform-managed)
-    openai_api_key: str
+    # OpenAI
+    openai_api_key: str = ""
+
+    # Google Gemini (optional — can also be set via admin panel DB)
+    gemini_api_key: str = ""
+
+    # DeepSeek (optional — can also be set via admin panel DB)
+    deepseek_api_key: str = ""
 
     # Data directory (local files: PDFs, ChromaDB)
     data_dir: str = "../data"

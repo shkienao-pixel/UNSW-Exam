@@ -1,7 +1,15 @@
 """AI generation endpoints — summary, quiz, outline, flashcards, ask, translate.
 
 All generation uses pre-cleaned, chunked content from artifact_chunks table.
-Q&A uses RAG (ChromaDB vector search, bilingual: Chinese + English).
+
+Q&A (/ask) uses a 4-stage multi-model pipeline:
+  Stage 1 — Supabase pgvector / ChromaDB  : retrieve top-K relevant chunks
+  Stage 2 — GPT-4o-mini (judge)           : filter irrelevant chunks
+  Stage 3 — Gemini 2.0 Flash              : generate grounded final answer
+  Stage 4 — Imagen 3 (optional)           : visual aid for complex topics
+
+Other endpoints (summary, quiz, outline, flashcards) continue to use GPT-4o.
+All endpoints dynamically load API keys from DB (admin panel) → env fallback.
 
 POST /courses/{id}/generate/summary
 POST /courses/{id}/generate/quiz
@@ -14,8 +22,9 @@ POST /courses/{id}/generate/translate
 from __future__ import annotations
 
 import json
+import logging
 import re
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -33,27 +42,28 @@ from app.services.course_service import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ── Request schemas ───────────────────────────────────────────────────────────
 
 class GenerateRequest(BaseModel):
-    scope_set_id: int | None = None
-    artifact_ids: list[int] | None = None
-    num_questions: int = 10
+    scope_set_id:  int | None       = None
+    artifact_ids:  list[int] | None = None
+    num_questions: int               = 10
 
 
 class AskRequest(BaseModel):
-    question: str
+    question:     str
     scope_set_id: int | None = None
 
 
 class TranslateRequest(BaseModel):
-    texts: list[str]
+    texts:       list[str]
     target_lang: str = "en"  # 'en' or 'zh'
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Generic helpers ───────────────────────────────────────────────────────────
 
 def _resolve_artifact_ids(
     supabase: Client,
@@ -62,7 +72,7 @@ def _resolve_artifact_ids(
     scope_set_id: int | None,
     artifact_ids: list[int] | None,
 ) -> list[int] | None:
-    """Return explicit artifact_id filter, or None (= all approved)."""
+    """Return an explicit artifact_id filter list, or None (= all approved)."""
     if artifact_ids:
         return artifact_ids
     if scope_set_id:
@@ -78,10 +88,9 @@ def _get_context_from_chunks(
     artifact_ids: list[int] | None,
     max_chars: int = 80_000,
 ) -> tuple[str, list[dict]]:
-    """Get cleaned, chunked context from DB. Returns (text, sources)."""
+    """Load pre-indexed chunks from DB. Returns (context_text, sources)."""
     from app.services.rag_service import get_course_chunks
-    ctx, sources = get_course_chunks(supabase, course_id, artifact_ids, max_chars)
-    return ctx, sources
+    return get_course_chunks(supabase, course_id, artifact_ids, max_chars)
 
 
 def _fallback_extract(
@@ -91,14 +100,14 @@ def _fallback_extract(
     artifact_ids: list[int] | None,
     max_chars: int = 80_000,
 ) -> tuple[str, list[dict]]:
-    """Fallback: extract text directly from storage (when chunks not yet built)."""
-    import io
+    """Direct extraction from Storage when chunks not yet indexed."""
     from app.services.artifact_service import download_artifact_bytes
 
-    if artifact_ids:
-        arts = list_artifacts_by_ids(supabase, user_id, course_id, artifact_ids)
-    else:
-        arts = list_artifacts(supabase, user_id, course_id)
+    arts = (
+        list_artifacts_by_ids(supabase, user_id, course_id, artifact_ids)
+        if artifact_ids
+        else list_artifacts(supabase, user_id, course_id)
+    )
     arts = [a for a in arts if a.get("status") == "approved"]
 
     parts: list[str] = []
@@ -114,7 +123,7 @@ def _fallback_extract(
             data = download_artifact_bytes(supabase, sp)
             text = _raw_extract(ft, data)
             if total + len(text) > max_chars:
-                text = text[:max_chars - total]
+                text = text[: max_chars - total]
             parts.append(f"=== {a['file_name']} ===\n{text}")
             sources.append({
                 "artifact_id": a["id"],
@@ -155,27 +164,23 @@ def _get_context(
     course_id: str,
     artifact_ids: list[int] | None,
 ) -> tuple[str, list[dict]]:
-    """Get context text + sources. Prefers DB chunks, falls back to direct extraction."""
+    """Preferred: DB chunks. Fallback: direct Storage extraction."""
     ctx, sources = _get_context_from_chunks(supabase, course_id, artifact_ids)
     if ctx.strip():
         return ctx, sources
-    # Chunks not yet built — fall back to direct extraction
     return _fallback_extract(supabase, user_id, course_id, artifact_ids)
 
 
 def _extract_json(text: str) -> str:
-    """Strip markdown fences and extract the first JSON array/object from LLM output."""
+    """Strip markdown fences and isolate the first JSON array/object."""
     text = text.strip()
-    # Remove ```json ... ``` or ``` ... ``` fences
     fence = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
     if fence:
         text = fence.group(1).strip()
-    # Find start of JSON array or object
     for i, ch in enumerate(text):
         if ch in "[{":
             text = text[i:]
             break
-    # Trim to matching close bracket
     if text.startswith("["):
         idx = text.rfind("]")
         if idx != -1:
@@ -187,9 +192,16 @@ def _extract_json(text: str) -> str:
     return text
 
 
-def _chat(system: str, user: str) -> str:
+def _chat(system: str, user: str, openai_key: Optional[str] = None) -> str:
+    """Call GPT-4o with a system+user message pair.
+
+    ``openai_key`` is resolved in this order:
+      1. Passed-in key (from DB via llm_key_service)
+      2. Config / environment variable
+    """
     from openai import OpenAI
-    client = OpenAI(api_key=get_settings().openai_api_key)
+    key = openai_key or get_settings().openai_api_key
+    client = OpenAI(api_key=key)
     resp = client.chat.completions.create(
         model="gpt-4o",
         messages=[
@@ -212,6 +224,12 @@ def _sources_note(sources: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _get_openai_key(supabase: Client) -> str:
+    """Resolve the active OpenAI key from DB → env."""
+    from app.services.llm_key_service import get_api_key
+    return get_api_key("openai", supabase) or get_settings().openai_api_key
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/{course_id}/generate/summary")
@@ -219,7 +237,7 @@ def gen_summary(
     course_id: str,
     body: GenerateRequest,
     current_user: dict = Depends(get_current_user),
-    supabase: Client = Depends(get_db),
+    supabase: Client  = Depends(get_db),
 ) -> dict[str, Any]:
     """Generate a structured knowledge summary from cleaned course chunks."""
     get_course(supabase, course_id)
@@ -228,12 +246,13 @@ def gen_summary(
     if not ctx.strip():
         raise AppError("No content found — please wait for files to be indexed or upload approved files")
 
+    openai_key = _get_openai_key(supabase)
     system = (
         "You are a study assistant. Summarize the course materials into clear, structured notes. "
         "Use markdown with ## headings and bullet points. "
         "Cover all major topics. Respond in the same language as the content."
     )
-    content = _chat(system, f"Course materials:\n\n{ctx}")
+    content = _chat(system, f"Course materials:\n\n{ctx}", openai_key)
     content += _sources_note(sources)
 
     return create_output(
@@ -247,7 +266,7 @@ def gen_quiz(
     course_id: str,
     body: GenerateRequest,
     current_user: dict = Depends(get_current_user),
-    supabase: Client = Depends(get_db),
+    supabase: Client  = Depends(get_db),
 ) -> dict[str, Any]:
     """Generate multiple-choice exam questions from cleaned course chunks."""
     get_course(supabase, course_id)
@@ -256,6 +275,7 @@ def gen_quiz(
     if not ctx.strip():
         raise AppError("No content found — please wait for files to be indexed")
 
+    openai_key = _get_openai_key(supabase)
     n = min(max(body.num_questions, 3), 20)
     source_names = ", ".join(s["file_name"] for s in sources) if sources else "course material"
     system = f"""You are an exam question generator.
@@ -270,10 +290,10 @@ IMPORTANT rules:
 
 Format:
 [{{"question":"...","options":["option text","option text","option text","option text"],"answer":"A","explanation":"...","source_file":"filename.pdf"}}]"""
-    raw = _chat(system, f"Course content:\n\n{ctx}")
+
+    raw = _chat(system, f"Course content:\n\n{ctx}", openai_key)
     content_str = _extract_json(raw)
 
-    # Validate and repair JSON
     try:
         questions = json.loads(content_str)
         if not isinstance(questions, list):
@@ -281,7 +301,6 @@ Format:
     except Exception:
         questions = []
 
-    # Enrich sources: attach storage_url by matching source_file names
     source_map = {s["file_name"]: s for s in sources}
     for q in questions:
         sf = q.get("source_file", "")
@@ -291,9 +310,8 @@ Format:
         if match:
             q["source_artifact_id"] = match.get("artifact_id")
             q["source_url"] = match.get("storage_url", "")
-        q.pop("source_file", None)  # remove raw field
+        q.pop("source_file", None)
 
-    # Store structured JSON: {questions, sources}
     content = json.dumps({"questions": questions, "sources": sources}, ensure_ascii=False)
 
     return create_output(
@@ -307,7 +325,7 @@ def gen_outline(
     course_id: str,
     body: GenerateRequest,
     current_user: dict = Depends(get_current_user),
-    supabase: Client = Depends(get_db),
+    supabase: Client  = Depends(get_db),
 ) -> dict[str, Any]:
     """Generate a hierarchical course outline from cleaned course chunks."""
     get_course(supabase, course_id)
@@ -316,12 +334,13 @@ def gen_outline(
     if not ctx.strip():
         raise AppError("No content found — please wait for files to be indexed")
 
+    openai_key = _get_openai_key(supabase)
     system = (
         "You are a curriculum designer. Create a comprehensive study outline with topics, "
         "subtopics, and key concepts. Use nested markdown bullet points. "
         "Respond in the same language as the content."
     )
-    content = _chat(system, f"Course content:\n\n{ctx}")
+    content = _chat(system, f"Course content:\n\n{ctx}", openai_key)
     content += _sources_note(sources)
 
     return create_output(
@@ -335,7 +354,7 @@ def gen_flashcards(
     course_id: str,
     body: GenerateRequest,
     current_user: dict = Depends(get_current_user),
-    supabase: Client = Depends(get_db),
+    supabase: Client  = Depends(get_db),
 ) -> dict[str, Any]:
     """Generate flashcards from cleaned course chunks."""
     get_course(supabase, course_id)
@@ -344,6 +363,7 @@ def gen_flashcards(
     if not ctx.strip():
         raise AppError("No content found — please wait for files to be indexed")
 
+    openai_key = _get_openai_key(supabase)
     system = """You are a flashcard generator.
 Generate 15 flashcards from the course content. Mix vocabulary cards and MCQ cards.
 
@@ -357,10 +377,9 @@ Format:
   {"type":"vocab","front":"term or concept","back":"definition or explanation"},
   {"type":"mcq","question":"...","options":["text","text","text","text"],"answer":"A","explanation":"..."}
 ]"""
-    raw = _chat(system, f"Course content:\n\n{ctx}")
+    raw = _chat(system, f"Course content:\n\n{ctx}", openai_key)
     content = _extract_json(raw)
 
-    # Validate
     try:
         cards = json.loads(content)
         if not isinstance(cards, list):
@@ -380,45 +399,49 @@ def ask_question(
     course_id: str,
     body: AskRequest,
     current_user: dict = Depends(get_current_user),
-    supabase: Client = Depends(get_db),
+    supabase: Client  = Depends(get_db),
 ) -> dict[str, Any]:
-    """
-    RAG-powered Q&A with source citations.
-    - Searches cleaned chunks (bilingual: Chinese → also translated to English)
-    - Returns answer + source file list with links
-    - Falls back to GPT-4o with full context if no chunks found
+    """4-stage multi-model RAG Q&A with optional visual aid.
+
+    Pipeline:
+      Stage 1 — Supabase pgvector / ChromaDB : retrieve top-8 chunks (bilingual)
+      Stage 2 — GPT-4o-mini (judge)          : filter irrelevant chunks
+      Stage 3 — Gemini 2.0 Flash             : generate grounded answer
+                 └→ GPT-4o fallback if Gemini key missing or call fails
+      Stage 4 — Imagen 3 (optional)          : diagram for complex/abstract topics
+
+    Returns:
+      {question, answer, sources, image_url, model_used}
     """
     get_course(supabase, course_id)
 
-    art_ids = None
+    # Resolve scope → artifact IDs
+    art_ids: list[int] | None = None
     if body.scope_set_id:
         scope = get_scope_set(supabase, current_user["id"], body.scope_set_id)
         ids = scope.get("artifact_ids") or []
         art_ids = ids if ids else None
 
-    # RAG: retrieve relevant chunks (bilingual)
+    # Resolve API keys (DB priority → env fallback)
+    from app.services.llm_key_service import get_api_key
+    openai_key: str  = get_api_key("openai", supabase) or get_settings().openai_api_key
+    gemini_key: Optional[str] = get_api_key("gemini", supabase)
+
+    from app.services.gemini_service import (
+        gpt_filter_chunks,
+        gemini_generate_answer,
+        should_generate_image,
+        gemini_generate_image,
+    )
+
+    # ── Stage 1: Vector retrieval ──────────────────────────────────────────────
     from app.services.rag_service import search_chunks
-    chunks = search_chunks(supabase, course_id, body.question, top_k=6, artifact_ids=art_ids)
+    chunks = search_chunks(supabase, course_id, body.question, top_k=8, artifact_ids=art_ids)
 
+    # Deduplicate sources from retrieved chunks
+    sources: list[dict] = []
     if chunks:
-        # Build context from retrieved chunks
-        context_parts = [
-            f"[来源：{c['file_name']} — 片段 {c['chunk_index']+1}]\n{c['content']}"
-            for c in chunks
-        ]
-        context = "\n\n---\n\n".join(context_parts)
-
-        system = """You are a knowledgeable course tutor.
-Answer the student's question based on the course material excerpts provided below.
-Be clear and educational. If the answer spans multiple sources, synthesize them.
-Respond in the same language as the question (Chinese question → Chinese answer).
-Do NOT add a sources section — that will be added separately."""
-
-        answer = _chat(system, f"Course material excerpts:\n\n{context}\n\n---\n\nQuestion: {body.question}")
-
-        # Deduplicate sources (by artifact_id)
         seen: set[int] = set()
-        sources: list[dict] = []
         for c in chunks:
             aid = c["artifact_id"]
             if aid not in seen:
@@ -429,29 +452,71 @@ Do NOT add a sources section — that will be added separately."""
                     "storage_url": c.get("storage_url", ""),
                 })
 
+    # ── Stage 2: GPT filters chunks ────────────────────────────────────────────
+    if chunks:
+        filtered_context = gpt_filter_chunks(body.question, chunks, openai_key)
     else:
-        # Fallback: use full context when no chunks are indexed yet
-        ctx, sources = _fallback_extract(supabase, current_user["id"], course_id, art_ids, max_chars=60_000)
-
+        # No indexed chunks — fall back to full document extraction
+        logger.info("No indexed chunks found, falling back to direct extraction")
+        ctx, sources = _fallback_extract(
+            supabase, current_user["id"], course_id, art_ids, max_chars=60_000
+        )
         if not ctx.strip():
             return {
-                "question": body.question,
-                "answer":   "暂无可用的课程材料，请等待文件审核通过或联系管理员建立索引。",
-                "sources":  [],
+                "question":   body.question,
+                "answer":     "暂无可用的课程材料，请等待文件审核通过或联系管理员建立索引。",
+                "sources":    [],
+                "image_url":  None,
+                "model_used": "none",
             }
+        filtered_context = ctx
 
-        system = f"""You are a knowledgeable course tutor.
-Answer based strictly on the course materials below.
-Respond in the same language as the question.
+    # ── Stage 3: Generate answer ───────────────────────────────────────────────
+    answer = ""
+    model_used = "gpt-4o"
 
-Course materials:
-{ctx}"""
-        answer = _chat(system, body.question)
+    if gemini_key:
+        answer = gemini_generate_answer(body.question, filtered_context, gemini_key)
+        if answer:
+            model_used = "gemini-2.5-pro"
+
+    # GPT-4o fallback when Gemini is unavailable or fails
+    if not answer:
+        system = (
+            "You are a knowledgeable course tutor. "
+            "Answer the student's question based on the course material excerpts provided. "
+            "Be clear and educational. Synthesize information across multiple sources. "
+            "Respond in the same language as the question. "
+            "Do NOT add a sources section."
+        )
+        context_msg = (
+            f"Course material:\n\n{filtered_context}\n\n---\n\nQuestion: {body.question}"
+            if filtered_context.strip()
+            else body.question
+        )
+        answer = _chat(system, context_msg, openai_key)
+        model_used = "gpt-4o"
+
+    # ── Stage 4: Optional image generation ────────────────────────────────────
+    image_url: Optional[str] = None
+    if gemini_key and should_generate_image(body.question, answer):
+        logger.info("Generating visual aid for query=%r", body.question[:60])
+        image_url = gemini_generate_image(
+            query=body.question,
+            answer=answer,
+            gemini_key=gemini_key,
+            supabase=supabase,
+            bucket=get_settings().supabase_storage_bucket,
+        )
+        if image_url:
+            answer += f"\n\n---\n\n![辅助图解]({image_url})"
 
     return {
-        "question": body.question,
-        "answer":   answer,
-        "sources":  sources,
+        "question":   body.question,
+        "answer":     answer,
+        "sources":    sources,
+        "image_url":  image_url,
+        "model_used": model_used,
     }
 
 
@@ -460,7 +525,7 @@ def translate_texts(
     course_id: str,
     body: TranslateRequest,
     current_user: dict = Depends(get_current_user),
-    supabase: Client = Depends(get_db),
+    supabase: Client  = Depends(get_db),
 ) -> dict[str, Any]:
     """Translate a batch of texts using GPT-4o-mini. Used for bilingual content display."""
     get_course(supabase, course_id)
@@ -468,15 +533,15 @@ def translate_texts(
     if not body.texts:
         return {"translations": []}
 
+    openai_key = _get_openai_key(supabase)
     target = "English" if body.target_lang == "en" else "Simplified Chinese (简体中文)"
     source = "Chinese" if body.target_lang == "en" else "English"
-
     numbered = "\n---\n".join(f"[{i+1}] {t}" for i, t in enumerate(body.texts))
 
     from openai import OpenAI
-    client = OpenAI(api_key=get_settings().openai_api_key)
+    client = OpenAI(api_key=openai_key)
     resp = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-4o",
         messages=[
             {
                 "role": "system",
@@ -491,17 +556,15 @@ def translate_texts(
         ],
         temperature=0.1,
     )
-    raw = resp.choices[0].message.content or "[]"
-    raw = _extract_json(raw)
+    raw = _extract_json(resp.choices[0].message.content or "[]")
 
     try:
         translations = json.loads(raw)
         if not isinstance(translations, list):
             translations = body.texts
     except Exception:
-        translations = body.texts  # fallback: return originals
+        translations = body.texts
 
-    # Ensure same length as input
     while len(translations) < len(body.texts):
         translations.append(body.texts[len(translations)])
 

@@ -1,5 +1,6 @@
 import type {
-  TokenResponse, User, Course, Artifact, ScopeSet, Output, Flashcard, Mistake, GenerateBody
+  TokenResponse, User, Course, Artifact, ScopeSet, Output, Flashcard, Mistake,
+  GenerateBody, AskResponse, ExplainImageResponse,
 } from './types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -27,6 +28,28 @@ async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   // 204 No Content
+  if (res.status === 204) return undefined as T
+  return res.json() as Promise<T>
+}
+
+/** 调用 Next.js 内部 API route（相对路径，自动附带 token）。 */
+async function nextReq<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = getToken()
+  const isFormData = options.body instanceof FormData
+
+  const headers: Record<string, string> = {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
+    ...(options.headers as Record<string, string> | undefined),
+  }
+
+  const res = await fetch(path, { ...options, headers })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || err.error || `HTTP ${res.status}`)
+  }
+
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
 }
@@ -95,11 +118,32 @@ export const api = {
       req<Output>(`/courses/${courseId}/generate/outline`, { method: 'POST', body: JSON.stringify(body) }),
     flashcards: (courseId: string, body: GenerateBody) =>
       req<Output>(`/courses/${courseId}/generate/flashcards`, { method: 'POST', body: JSON.stringify(body) }),
-    ask:        (courseId: string, question: string, scope_set_id?: number) =>
-      req<{ question: string; answer: string; sources: { artifact_id: number; file_name: string; storage_url: string }[] }>(
+    /**
+     * 发送问题到 Ask API。
+     * - 无图片 → 直接调用 FastAPI 后端 RAG 流水线
+     * - 有图片 → 经 Next.js /api/generate/ask 路由，走 Gemini 1.5 Pro VQA
+     */
+    ask: (courseId: string, question: string, scope_set_id?: number, imageFile?: File) => {
+      if (imageFile) {
+        const fd = new FormData()
+        fd.append('query_text', question)
+        fd.append('course_id', courseId)
+        fd.append('image_file', imageFile)
+        if (scope_set_id != null) fd.append('scope_set_id', String(scope_set_id))
+        return nextReq<AskResponse>('/api/generate/ask', { method: 'POST', body: fd })
+      }
+      return req<AskResponse>(
         `/courses/${courseId}/generate/ask`,
         { method: 'POST', body: JSON.stringify({ question, scope_set_id }) },
-      ),
+      )
+    },
+
+    /** 根据问题和 AI 回答，调用 Imagen 3 生成讲解配图。 */
+    explainWithImage: (question: string, answer: string) =>
+      nextReq<ExplainImageResponse>('/api/explain-with-image', {
+        method: 'POST',
+        body: JSON.stringify({ question, answer }),
+      }),
     translate:  (courseId: string, texts: string[], target_lang: 'en' | 'zh' = 'en') =>
       req<{ translations: string[] }>(
         `/courses/${courseId}/generate/translate`,

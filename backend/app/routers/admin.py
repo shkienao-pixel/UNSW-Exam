@@ -1,15 +1,16 @@
 """Admin-only routes.
 
 Protected by X-Admin-Secret header (compared against ADMIN_SECRET env var).
-Used by the Streamlit admin panel — never exposed to end users.
-# reload trigger: 1
+Used by the Next.js admin panel — never exposed to end users.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Header, HTTPException, UploadFile
+from pydantic import BaseModel
 from supabase import Client
 
 from app.core.config import get_settings
@@ -159,29 +160,36 @@ def reindex_course(
 def admin_list_users(
     _: None = Depends(_require_admin),
 ) -> list[dict[str, Any]]:
-    """List all registered users via Supabase Admin API."""
-    supabase = get_supabase()
+    """List all registered users via Supabase REST admin API."""
+    import httpx
+    cfg = get_settings()
     try:
-        resp = supabase.auth.admin.list_users()
-        # supabase-py v2 may return a list or a response object with .users
-        user_list = resp.users if hasattr(resp, "users") else list(resp or [])
+        r = httpx.get(
+            f"{cfg.supabase_url}/auth/v1/admin/users",
+            headers={
+                "apikey": cfg.supabase_service_role_key,
+                "Authorization": f"Bearer {cfg.supabase_service_role_key}",
+            },
+            timeout=10,
+        )
+        r.raise_for_status()
+        data = r.json()
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=500, detail=f"Supabase HTTP {exc.response.status_code}: {exc.response.text[:200]}") from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Supabase admin API error: {exc}") from exc
+        raise HTTPException(status_code=500, detail=f"Supabase admin API error [{type(exc).__name__}]: {exc}") from exc
 
-    users: list[dict[str, Any]] = []
-    for u in user_list:
-        try:
-            users.append({
-                "id":             u.id,
-                "email":          u.email or "",
-                "created_at":     str(u.created_at) if u.created_at else "",
-                "last_sign_in_at": str(u.last_sign_in_at) if getattr(u, "last_sign_in_at", None) else None,
-                "email_confirmed": getattr(u, "email_confirmed_at", None) is not None,
-            })
-        except Exception:
-            continue  # skip malformed user objects
-
-    return users
+    raw_users = data.get("users", data) if isinstance(data, dict) else data
+    return [
+        {
+            "id":              u.get("id", ""),
+            "email":           u.get("email", ""),
+            "created_at":      u.get("created_at", ""),
+            "last_sign_in_at": u.get("last_sign_in_at"),
+            "email_confirmed": bool(u.get("email_confirmed_at")),
+        }
+        for u in raw_users
+    ]
 
 
 # ── Course Management (admin only) ────────────────────────────────────────────
@@ -278,3 +286,151 @@ def delete_invite(
     """Delete an invite code."""
     supabase.table("invites").delete().eq("id", invite_id).execute()
     return {"ok": True, "id": invite_id}
+
+
+# ── API Key Management ─────────────────────────────────────────────────────────
+
+_VALID_PROVIDERS = {"openai", "gemini", "deepseek"}
+
+
+class ApiKeyCreate(BaseModel):
+    provider: str          # 'openai' | 'gemini' | 'deepseek'
+    api_key:  str
+    label:    Optional[str] = None
+
+
+@router.get("/api-keys")
+def list_api_keys(
+    _: None = Depends(_require_admin),
+    supabase: Client = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """List all stored API keys (keys are masked — never returned in full).
+
+    Returns an empty list if the api_keys table does not yet exist in the DB.
+    Run migrations/008_api_keys.sql in the Supabase Dashboard to create it.
+    """
+    try:
+        rows = (
+            supabase.table("api_keys")
+            .select("id, provider, label, is_active, created_at, updated_at")
+            .order("provider")
+            .order("updated_at", desc=True)
+            .execute()
+            .data
+        ) or []
+    except Exception:
+        # Table not yet created — return empty list gracefully
+        return []
+
+    return [
+        {
+            "id":         r["id"],
+            "provider":   r["provider"],
+            "label":      r.get("label") or r["provider"],
+            "is_active":  r["is_active"],
+            "created_at": r["created_at"],
+            "updated_at": r["updated_at"],
+        }
+        for r in rows
+    ]
+
+
+@router.post("/api-keys", status_code=201)
+def create_api_key(
+    body: ApiKeyCreate,
+    _: None = Depends(_require_admin),
+    supabase: Client = Depends(get_db),
+) -> dict[str, Any]:
+    """Add a new API key. The new key becomes the active key for its provider."""
+    if body.provider not in _VALID_PROVIDERS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"provider must be one of: {', '.join(sorted(_VALID_PROVIDERS))}",
+        )
+    if not body.api_key.strip():
+        raise HTTPException(status_code=400, detail="api_key must not be empty")
+
+    try:
+        # Deactivate any existing keys for this provider first
+        supabase.table("api_keys").update({"is_active": False}).eq("provider", body.provider).execute()
+
+        row = supabase.table("api_keys").insert({
+            "provider": body.provider,
+            "api_key":  body.api_key.strip(),
+            "label":    body.label or body.provider,
+            "is_active": True,
+        }).execute()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "api_keys table not found. Please run migrations/008_api_keys.sql "
+                f"in your Supabase Dashboard SQL editor first. ({exc})"
+            ),
+        ) from exc
+
+    # Invalidate in-process key cache
+    from app.services.llm_key_service import invalidate_cache
+    invalidate_cache(body.provider)
+
+    r = row.data[0]
+    return {
+        "id":        r["id"],
+        "provider":  r["provider"],
+        "label":     r.get("label"),
+        "is_active": r["is_active"],
+    }
+
+
+@router.patch("/api-keys/{key_id}/activate", status_code=200)
+def activate_api_key(
+    key_id: int,
+    _: None = Depends(_require_admin),
+    supabase: Client = Depends(get_db),
+) -> dict[str, Any]:
+    """Switch the active key for a provider to the given key_id.
+
+    All other keys for the same provider are deactivated automatically.
+    """
+    try:
+        existing = supabase.table("api_keys").select("provider").eq("id", key_id).execute()
+    except Exception:
+        raise HTTPException(status_code=503, detail="api_keys table not found. Run migrations/008_api_keys.sql first.")
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="API key not found")
+    provider = existing.data[0]["provider"]
+
+    # Deactivate all, then activate the target
+    supabase.table("api_keys").update({"is_active": False}).eq("provider", provider).execute()
+    supabase.table("api_keys").update({
+        "is_active":  True,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", key_id).execute()
+
+    from app.services.llm_key_service import invalidate_cache
+    invalidate_cache(provider)
+
+    return {"ok": True, "activated_id": key_id, "provider": provider}
+
+
+@router.delete("/api-keys/{key_id}", status_code=200)
+def delete_api_key(
+    key_id: int,
+    _: None = Depends(_require_admin),
+    supabase: Client = Depends(get_db),
+) -> dict[str, Any]:
+    """Permanently delete an API key record."""
+    try:
+        existing = supabase.table("api_keys").select("provider").eq("id", key_id).execute()
+    except Exception:
+        raise HTTPException(status_code=503, detail="api_keys table not found. Run migrations/008_api_keys.sql first.")
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="API key not found")
+    provider = existing.data[0]["provider"]
+
+    supabase.table("api_keys").delete().eq("id", key_id).execute()
+
+    from app.services.llm_key_service import invalidate_cache
+    invalidate_cache(provider)
+
+    return {"ok": True, "deleted_id": key_id, "provider": provider}
