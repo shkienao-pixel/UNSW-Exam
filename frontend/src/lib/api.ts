@@ -2,6 +2,7 @@ import type {
   TokenResponse, User, Course, Artifact, ScopeSet, Output, Flashcard, Mistake,
   GenerateBody, AskResponse, ExplainImageResponse,
   ReviewSettings, ReviewNodeProgress, ReviewNodeUpdate, TodayPlanResult,
+  KnowledgeOutline, KnowledgeGraph, KnowledgeOutlineNode, KnowledgeResult,
 } from './types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -189,6 +190,23 @@ export const api = {
           allow_spacing: allowSpacing,
         }),
       }),
+  },
+
+  knowledge: {
+    build: (courseId: string, allowAiFill: boolean, scopeSetId?: number) =>
+      nextReq<KnowledgeResult>('/api/knowledge/build', {
+        method: 'POST',
+        body: JSON.stringify({ course_id: courseId, allow_ai_fill: allowAiFill, scope_set_id: scopeSetId }),
+      }),
+
+    getOutline: (courseId: string) =>
+      nextReq<KnowledgeOutline>(`/api/knowledge/outline?courseId=${courseId}`),
+
+    getGraph: (courseId: string) =>
+      nextReq<KnowledgeGraph>(`/api/knowledge/graph?courseId=${courseId}`),
+
+    getNode: (courseId: string, nodeId: string) =>
+      nextReq<KnowledgeOutlineNode>(`/api/knowledge/node?courseId=${courseId}&nodeId=${nodeId}`),
   },
 
   flashcards: {

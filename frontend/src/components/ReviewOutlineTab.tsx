@@ -919,7 +919,7 @@ export default function ReviewOutlineTab({ courseId }: Props) {
   return (
     <div className="flex gap-4 h-full min-h-0">
       {/* ── Left: outline tree + controls ── */}
-      <div className="flex-1 min-w-0 flex flex-col gap-0 overflow-y-auto">
+      <div className="flex-1 min-w-0 flex flex-col gap-0 overflow-y-auto min-h-0">
         {/* Review plan bar */}
         <ReviewPlanBar
           courseId={courseId}
@@ -950,7 +950,7 @@ export default function ReviewOutlineTab({ courseId }: Props) {
         </div>
 
         {/* Tree */}
-        <div className="glass rounded-xl overflow-hidden"
+        <div className="glass rounded-xl"
           style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
           <div className="p-2">
             {roots.map(renderNode)}

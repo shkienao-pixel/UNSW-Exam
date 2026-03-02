@@ -15,6 +15,7 @@ import { addMistake } from '@/lib/mistakes-store'
 import MistakesView from '@/components/MistakesView'
 import ReactMarkdown from 'react-markdown'
 import ReviewOutlineTab from '@/components/ReviewOutlineTab'
+import KnowledgeTab from '@/components/KnowledgeTab'
 
 // ── View routing ──────────────────────────────────────────────────────────────
 
@@ -61,6 +62,15 @@ function CoursePageInner() {
     return <AskTab courseId={courseId} scopeSets={scopeSets} artifacts={artifacts} />
   }
 
+  // 摘要→知识图谱视图：flex 布局，高度撑满（内部分栏+滚动）
+  if (view === 'summary') {
+    return (
+      <div className="p-6 overflow-hidden flex-1 flex flex-col min-h-0">
+        <KnowledgeTab courseId={courseId} />
+      </div>
+    )
+  }
+
   // 复习大纲视图：flex 布局，高度撑满（内部分栏+滚动）
   if (view === 'outline') {
     return (
@@ -75,7 +85,6 @@ function CoursePageInner() {
       {view === 'flashcards' && <FlashcardsTab courseId={courseId} />}
       {view === 'mistakes'   && <MistakesTab courseId={courseId} />}
       {view === 'quiz'       && <QuizTab courseId={courseId} />}
-      {view === 'summary'    && <SummaryTab courseId={courseId} />}
       {view === 'generate'   && (
         <GenerateTab courseId={courseId} scopeSets={scopeSets} setScopeSets={setScopeSets}
           artifacts={artifacts} setOutputs={setOutputs} />

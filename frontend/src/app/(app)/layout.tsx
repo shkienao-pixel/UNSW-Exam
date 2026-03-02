@@ -10,7 +10,7 @@ import { LangProvider, useLang } from '@/lib/i18n'
 import { GenerationProvider } from '@/lib/generation-context'
 import FloatingProgress from '@/components/FloatingProgress'
 import {
-  LayoutDashboard, LogOut, ArrowLeft, Loader2, BookOpen, ChevronLeft,
+  LayoutDashboard, LogOut, ArrowLeft, Loader2, BookOpen, ChevronLeft, Menu, X,
 } from 'lucide-react'
 
 // ── Feature navigation config ─────────────────────────────────────────────────
@@ -30,12 +30,13 @@ const FEATURES = [
 // ── Hover-scale link wrapper ──────────────────────────────────────────────────
 
 function HoverLink({
-  href, children, style, className,
+  href, children, style, className, onClick,
 }: {
   href: string
   children: React.ReactNode
   style?: React.CSSProperties
   className?: string
+  onClick?: () => void
 }) {
   const [hovered, setHovered] = useState(false)
   return (
@@ -51,20 +52,22 @@ function HoverLink({
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onClick={onClick}
     >
       {children}
     </Link>
   )
 }
 
-// ── Course sidebar (shown when inside a course) ───────────────────────────────
+// ── Course sidebar nav ────────────────────────────────────────────────────────
 
 function CourseSidebar({
-  courseId, course, collapsed,
+  courseId, course, collapsed, onNavClick,
 }: {
   courseId: string
   course: Course | undefined
   collapsed: boolean
+  onNavClick?: () => void
 }) {
   const searchParams = useSearchParams()
   const { lang, t } = useLang()
@@ -77,6 +80,7 @@ function CourseSidebar({
         href="/dashboard"
         className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs mb-2"
         style={{ color: '#555' }}
+        onClick={onNavClick}
       >
         <ArrowLeft size={13} className="flex-shrink-0" />
         {!collapsed && <span>{t('all_courses')}</span>}
@@ -112,7 +116,7 @@ function CourseSidebar({
 
         if (f.featured) {
           return (
-            <HoverLink key={f.view} href={href}
+            <HoverLink key={f.view} href={href} onClick={onNavClick}
               className={`items-center gap-2.5 rounded-xl text-sm font-semibold ${collapsed ? 'justify-center px-2 py-3' : 'px-3 py-3'}`}
               style={{
                 background: isActive
@@ -133,7 +137,7 @@ function CourseSidebar({
         }
 
         return (
-          <HoverLink key={f.view} href={href}
+          <HoverLink key={f.view} href={href} onClick={onNavClick}
             className={`items-center gap-2.5 rounded-lg text-sm ${collapsed ? 'justify-center px-2 py-2' : 'px-3 py-2'}`}
             style={{
               color: isActive ? '#FFD700' : '#666',
@@ -150,14 +154,15 @@ function CourseSidebar({
   )
 }
 
-// ── Default sidebar (dashboard / non-course pages) ────────────────────────────
+// ── Default sidebar (dashboard) ───────────────────────────────────────────────
 
 function DefaultSidebar({
-  courses, pathname, collapsed,
+  courses, pathname, collapsed, onNavClick,
 }: {
   courses: Course[]
   pathname: string
   collapsed: boolean
+  onNavClick?: () => void
 }) {
   const [coursesOpen, setCoursesOpen] = useState(true)
   const { t } = useLang()
@@ -165,7 +170,7 @@ function DefaultSidebar({
   function navItem(href: string, icon: React.ReactNode, label: string) {
     const active = pathname === href
     return (
-      <HoverLink href={href}
+      <HoverLink href={href} onClick={onNavClick}
         className={`items-center rounded-lg text-sm ${collapsed ? 'justify-center px-2 py-2' : 'gap-3 px-3 py-2'}`}
         style={{
           color: active ? '#FFD700' : '#999',
@@ -198,7 +203,7 @@ function DefaultSidebar({
                 const href = `/courses/${c.id}?view=flashcards`
                 const active = pathname.startsWith(`/courses/${c.id}`)
                 return (
-                  <HoverLink key={c.id} href={href}
+                  <HoverLink key={c.id} href={href} onClick={onNavClick}
                     className="items-center gap-2 px-3 py-1.5 rounded-lg text-xs truncate"
                     style={{
                       color: active ? '#FFD700' : '#666',
@@ -228,7 +233,7 @@ function DefaultSidebar({
   )
 }
 
-// ── Sidebar footer with language toggle ───────────────────────────────────────
+// ── Sidebar footer ────────────────────────────────────────────────────────────
 
 function SidebarFooter({
   logout, collapsed,
@@ -276,14 +281,63 @@ function SidebarFooter({
   )
 }
 
+// ── Sidebar shell (shared by mobile drawer and desktop) ───────────────────────
+
+function SidebarShell({
+  courseId, currentCourse, courses, pathname, collapsed, user, logout, onNavClick,
+}: {
+  courseId: string | null
+  currentCourse: Course | undefined
+  courses: Course[]
+  pathname: string
+  collapsed: boolean
+  user: { email: string } | null
+  logout: () => void
+  onNavClick?: () => void
+}) {
+  return (
+    <>
+      {/* Logo strip */}
+      <div className="border-b flex items-center"
+        style={{
+          borderColor: 'rgba(255,215,0,0.06)',
+          padding: collapsed ? '16px 0' : '16px',
+          justifyContent: collapsed ? 'center' : 'space-between',
+          minHeight: 64,
+          transition: 'padding 0.25s ease',
+        }}>
+        {!collapsed && (
+          <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
+            <div className="text-lg font-bold" style={{ color: '#FFD700' }}>✦ Exam Master</div>
+            <div className="text-xs mt-0.5 truncate" style={{ color: '#555', maxWidth: 150 }}>{user?.email}</div>
+          </div>
+        )}
+      </div>
+
+      {courseId
+        ? (
+          <Suspense fallback={<div className="flex-1" />}>
+            <CourseSidebar courseId={courseId} course={currentCourse} collapsed={collapsed} onNavClick={onNavClick} />
+          </Suspense>
+        )
+        : <DefaultSidebar courses={courses} pathname={pathname} collapsed={collapsed} onNavClick={onNavClick} />
+      }
+
+      <SidebarFooter logout={logout} collapsed={collapsed} />
+    </>
+  )
+}
+
 // ── Root layout (inner — inside LangProvider) ─────────────────────────────────
 
 function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const { user, loading, logout } = useAuth()
-  const [courses, setCourses] = useState<Course[]>([])
+  const [courses, setCourses]   = useState<Course[]>([])
   const [collapsed, setCollapsed] = useState(false)
+  // Mobile drawer state
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   useEffect(() => {
     if (!loading && !user) router.replace('/login')
@@ -293,6 +347,9 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
     if (user) api.courses.list().then(setCourses).catch(() => {})
   }, [user])
 
+  // Close drawer on route change
+  useEffect(() => { setDrawerOpen(false) }, [pathname])
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: '#08080f' }}>
       <Loader2 className="animate-spin" style={{ color: '#FFD700' }} size={32} />
@@ -300,23 +357,24 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   )
   if (!user) return null
 
-  // Detect course context
   const courseMatch = pathname.match(/^\/courses\/([^/]+)/)
   const courseId = courseMatch?.[1] ?? null
   const currentCourse = courseId ? courses.find(c => c.id === courseId) : undefined
 
   const sidebarWidth = collapsed ? 56 : 240
 
+  const sidebarProps = {
+    courseId, currentCourse, courses, pathname, collapsed, user, logout,
+  }
+
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: '#08080f' }}>
-      {/* ── Sidebar ── */}
-      <aside
+
+      {/* ── Desktop Sidebar (hidden on mobile) ── */}
+      <aside className="hidden md:flex flex-col flex-shrink-0"
         style={{
           width: sidebarWidth,
           minWidth: sidebarWidth,
-          flexShrink: 0,
-          display: 'flex',
-          flexDirection: 'column',
           borderRight: '1px solid rgba(255,215,0,0.06)',
           background: 'rgba(6,6,14,0.92)',
           backdropFilter: 'blur(20px)',
@@ -326,7 +384,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
           position: 'relative',
         }}>
 
-        {/* Logo + collapse toggle */}
+        {/* Logo + collapse toggle (desktop only) */}
         <div className="border-b flex items-center"
           style={{
             borderColor: 'rgba(255,215,0,0.06)',
@@ -359,20 +417,90 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
-        {courseId ? (
-          <Suspense fallback={<div className="flex-1" />}>
-            <CourseSidebar courseId={courseId} course={currentCourse} collapsed={collapsed} />
-          </Suspense>
-        ) : (
-          <DefaultSidebar courses={courses} pathname={pathname} collapsed={collapsed} />
-        )}
-
+        {courseId
+          ? (
+            <Suspense fallback={<div className="flex-1" />}>
+              <CourseSidebar courseId={courseId} course={currentCourse} collapsed={collapsed} />
+            </Suspense>
+          )
+          : <DefaultSidebar courses={courses} pathname={pathname} collapsed={collapsed} />
+        }
         <SidebarFooter logout={logout} collapsed={collapsed} />
+      </aside>
+
+      {/* ── Mobile Drawer Overlay ── */}
+      {drawerOpen && (
+        <div
+          className="fixed inset-0 z-40 md:hidden"
+          style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(2px)' }}
+          onClick={() => setDrawerOpen(false)}
+        />
+      )}
+
+      {/* ── Mobile Drawer ── */}
+      <aside
+        className="fixed inset-y-0 left-0 z-50 flex flex-col md:hidden"
+        style={{
+          width: 260,
+          background: 'rgba(6,6,14,0.98)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderRight: '1px solid rgba(255,215,0,0.08)',
+          transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
+          transition: 'transform 0.28s cubic-bezier(0.4,0,0.2,1)',
+        }}>
+        <SidebarShell
+          {...sidebarProps}
+          collapsed={false}
+          onNavClick={() => setDrawerOpen(false)}
+        />
       </aside>
 
       {/* ── Main content ── */}
       <main className="flex-1 flex flex-col overflow-hidden" style={{ transition: 'margin 0.25s ease' }}>
-        {children}
+
+        {/* Mobile top header (hidden on md+) */}
+        <header
+          className="flex md:hidden items-center px-4 shrink-0"
+          style={{
+            height: 60,
+            borderBottom: '1px solid rgba(255,215,0,0.06)',
+            background: 'rgba(6,6,14,0.92)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+          }}>
+          {/* Hamburger */}
+          <button
+            onClick={() => setDrawerOpen(v => !v)}
+            className="flex items-center justify-center rounded-lg mr-3"
+            style={{
+              width: 36, height: 36,
+              color: '#FFD700',
+              background: 'rgba(255,215,0,0.08)',
+              border: '1px solid rgba(255,215,0,0.18)',
+              flexShrink: 0,
+            }}
+            aria-label="打开菜单">
+            {drawerOpen ? <X size={18} /> : <Menu size={18} />}
+          </button>
+
+          {/* Logo */}
+          <span className="text-sm font-bold" style={{ color: '#FFD700' }}>✦ Exam Master</span>
+
+          {/* Course code badge (if in a course) */}
+          {currentCourse && (
+            <span className="ml-2 text-xs font-bold px-2 py-0.5 rounded"
+              style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700' }}>
+              {currentCourse.code}
+            </span>
+          )}
+        </header>
+
+        {/* Page content — with iOS safe-area bottom padding */}
+        <div className="flex-1 flex flex-col overflow-hidden"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+          {children}
+        </div>
       </main>
 
       {/* Floating generation progress — always on top */}
