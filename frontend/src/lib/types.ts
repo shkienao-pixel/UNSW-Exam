@@ -109,3 +109,55 @@ export interface AskResponse {
 export interface ExplainImageResponse {
   image_data_url: string | null
 }
+
+// ── Review Plan ───────────────────────────────────────────────────────────────
+
+export interface ReviewSettings {
+  id: string | null
+  user_id: string
+  course_id: string
+  review_start_at: string | null   // ISO datetime
+  exam_at: string | null           // ISO datetime
+}
+
+export type ReviewPriority = 'high' | 'medium' | 'low'
+export type ReviewStatus = 'not_started' | 'learned' | 'review_due' | 'mastered'
+
+export interface ReviewNodeProgress {
+  id?: string
+  user_id?: string
+  course_id: string
+  node_id: string
+  done: boolean
+  priority: ReviewPriority | null
+  estimate_minutes: number | null
+  status: ReviewStatus
+  last_reviewed_at: string | null
+  next_review_at: string | null
+  updated_at?: string
+}
+
+export interface ReviewNodeUpdate {
+  node_id: string
+  done?: boolean
+  priority?: ReviewPriority | null
+  estimate_minutes?: number | null
+  status?: ReviewStatus
+  last_reviewed_at?: string | null
+  next_review_at?: string | null
+}
+
+export interface OutlineNodeData {
+  id: string
+  title: string
+  level: number
+  parent_id: string | null
+  children: OutlineNodeData[]
+}
+
+export interface TodayPlanResult {
+  node_ids: string[]
+  target_count: number
+  remaining_days: number
+  total_undone: number
+}

@@ -14,6 +14,7 @@ import {
 import { addMistake } from '@/lib/mistakes-store'
 import MistakesView from '@/components/MistakesView'
 import ReactMarkdown from 'react-markdown'
+import ReviewOutlineTab from '@/components/ReviewOutlineTab'
 
 // ── View routing ──────────────────────────────────────────────────────────────
 
@@ -60,13 +61,21 @@ function CoursePageInner() {
     return <AskTab courseId={courseId} scopeSets={scopeSets} artifacts={artifacts} />
   }
 
+  // 复习大纲视图：flex 布局，高度撑满（内部分栏+滚动）
+  if (view === 'outline') {
+    return (
+      <div className="p-6 overflow-hidden flex-1 flex flex-col min-h-0">
+        <OutlineTab courseId={courseId} />
+      </div>
+    )
+  }
+
   return (
     <div className="p-8 max-w-5xl mx-auto overflow-y-auto flex-1">
       {view === 'flashcards' && <FlashcardsTab courseId={courseId} />}
       {view === 'mistakes'   && <MistakesTab courseId={courseId} />}
       {view === 'quiz'       && <QuizTab courseId={courseId} />}
       {view === 'summary'    && <SummaryTab courseId={courseId} />}
-      {view === 'outline'    && <OutlineTab courseId={courseId} />}
       {view === 'generate'   && (
         <GenerateTab courseId={courseId} scopeSets={scopeSets} setScopeSets={setScopeSets}
           artifacts={artifacts} setOutputs={setOutputs} />
@@ -352,20 +361,10 @@ function SummaryTab({ courseId }: { courseId: string }) {
   )
 }
 
-// ── Outline Tab ───────────────────────────────────────────────────────────────
+// ── Outline Tab (复习大纲) ────────────────────────────────────────────────────
 
 function OutlineTab({ courseId }: { courseId: string }) {
-  const { t } = useLang()
-  return (
-    <TypedOutputsView
-      courseId={courseId} outputType="outline"
-      icon={<span>📋</span>} title={t('outline_title')} subtitle={t('outline_sub')}
-      emptyTitle={t('empty_outline')} emptyLinkLabel={t('empty_outline_btn')}
-      renderContent={output => (
-        <ContentTranslationPanel content={output.content || ''} courseId={courseId} />
-      )}
-    />
-  )
+  return <ReviewOutlineTab courseId={courseId} />
 }
 
 // ── Quiz Tab ──────────────────────────────────────────────────────────────────

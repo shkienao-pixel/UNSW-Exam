@@ -1,6 +1,7 @@
 import type {
   TokenResponse, User, Course, Artifact, ScopeSet, Output, Flashcard, Mistake,
   GenerateBody, AskResponse, ExplainImageResponse,
+  ReviewSettings, ReviewNodeProgress, ReviewNodeUpdate, TodayPlanResult,
 } from './types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -149,6 +150,45 @@ export const api = {
         `/courses/${courseId}/generate/translate`,
         { method: 'POST', body: JSON.stringify({ texts, target_lang }) },
       ),
+  },
+
+  review: {
+    getSettings: (courseId: string) =>
+      nextReq<ReviewSettings>(`/api/review/settings?courseId=${courseId}`),
+
+    saveSettings: (courseId: string, reviewStartAt: string | null, examAt: string | null) =>
+      nextReq<ReviewSettings>('/api/review/settings', {
+        method: 'POST',
+        body: JSON.stringify({ course_id: courseId, review_start_at: reviewStartAt, exam_at: examAt }),
+      }),
+
+    getProgress: (courseId: string) =>
+      nextReq<ReviewNodeProgress[]>(`/api/review/progress?courseId=${courseId}`),
+
+    saveProgress: (courseId: string, updates: ReviewNodeUpdate[]) =>
+      nextReq<{ ok: boolean; updated: number }>('/api/review/progress', {
+        method: 'POST',
+        body: JSON.stringify({ course_id: courseId, updates }),
+      }),
+
+    getTodayPlan: (
+      courseId: string,
+      outlineNodes: Array<{
+        node_id: string; title: string; level: number
+        done: boolean; priority?: string | null; estimate_minutes?: number | null; status?: string | null
+      }>,
+      budgetMinutes = 60,
+      allowSpacing = true,
+    ) =>
+      nextReq<TodayPlanResult>('/api/review/today-plan', {
+        method: 'POST',
+        body: JSON.stringify({
+          course_id: courseId,
+          outline_nodes: outlineNodes,
+          budget_minutes: budgetMinutes,
+          allow_spacing: allowSpacing,
+        }),
+      }),
   },
 
   flashcards: {
