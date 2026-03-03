@@ -84,8 +84,8 @@ def approve_artifact(
 @router.patch("/artifacts/{artifact_id}/doc-type", response_model=ArtifactOut)
 def update_artifact_doc_type(
     artifact_id: int,
-    doc_type: str = Body(embed=True),
     background_tasks: BackgroundTasks,
+    doc_type: str = Body(embed=True),
     _: None = Depends(_require_admin),
     supabase: Client = Depends(get_db),
 ) -> dict[str, Any]:
