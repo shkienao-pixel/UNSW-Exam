@@ -31,7 +31,7 @@ router = APIRouter()
 
 def _require_admin(x_admin_secret: str = Header(default="")) -> None:
     cfg = get_settings()
-    if not cfg.admin_secret or x_admin_secret != cfg.admin_secret:
+    if not x_admin_secret or x_admin_secret not in cfg.admin_secrets_set:
         raise HTTPException(status_code=403, detail="Admin access required")
 
 

@@ -38,6 +38,18 @@ class Settings(BaseSettings):
 
     # Admin secret (Streamlit uses this to bypass review)
     admin_secret: str = "change-me-in-production"
+    # Optional second admin secret (comma-separated or a single extra value)
+    admin_secret_extra: str = ""
+
+    @property
+    def admin_secrets_set(self) -> set[str]:
+        """Return all valid admin secrets as a set."""
+        secrets = {self.admin_secret} if self.admin_secret else set()
+        for s in self.admin_secret_extra.split(","):
+            s = s.strip()
+            if s:
+                secrets.add(s)
+        return secrets
 
     # App
     app_env: str = "development"
