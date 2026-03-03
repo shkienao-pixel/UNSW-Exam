@@ -254,6 +254,16 @@ function ArtifactsTab({ secret }: { secret: string }) {
     } catch (e: unknown) { setError(String(e)) }
   }
 
+  async function deleteArtifact(id: number, fileName: string) {
+    if (!selectedCourse) return
+    if (!confirm(`确认删除「${fileName}」？\n此操作不可恢复，相关向量索引也将一并清除。`)) return
+    try {
+      await adminReq(secret, `/admin/artifacts/${id}?course_id=${selectedCourse.id}`, { method: 'DELETE' })
+      setArtifacts(prev => prev.filter(a => a.id !== id))
+      showToast('🗑️ 文件已删除')
+    } catch (e: unknown) { setError(String(e)) }
+  }
+
   const statusColors: Record<string, string> = {
     pending: '#FFD700', approved: '#4ade80', rejected: '#ff6b6b',
   }
@@ -440,6 +450,7 @@ function ArtifactsTab({ secret }: { secret: string }) {
                   </button>
                 </div>
               )}
+              <DeleteBtn onClick={() => deleteArtifact(a.id, a.file_name)} />
             </div>
           ))}
           {artifacts.length === 0 && (
