@@ -180,14 +180,18 @@ def update_feedback_status(
     supabase: Client = Depends(get_db),
 ) -> dict[str, Any]:
     """Update feedback status. Returns updated row."""
-    resp = (
+    (
         supabase.table("user_feedback")
         .update({"status": body.status})
         .eq("id", feedback_id)
-        .select()
         .execute()
     )
-    rows = resp.data or []
+    rows = (
+        supabase.table("user_feedback")
+        .select("*")
+        .eq("id", feedback_id)
+        .execute()
+    ).data or []
     if not rows:
         raise HTTPException(status_code=404, detail="Feedback not found")
     return {"ok": True, **rows[0]}

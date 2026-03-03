@@ -106,18 +106,24 @@ def update_artifact_doc_type(
         raise HTTPException(status_code=422, detail=f"Invalid doc_type '{doc_type}'. Must be one of: {sorted(_VALID_DOC_TYPES)}")
 
     # Step 1: 更新关系型数据库（同步）
-    # supabase-py v2 需要 .select() 才能拿到修改后的行
-    resp = (
+    # supabase-py 在某些版本 update().eq() 返回 SyncFilterRequestBuilder，不支持 .select()
+    # 改为先 update 再单独 select 取回完整行
+    (
         supabase.table("artifacts")
         .update({"doc_type": doc_type})
         .eq("id", artifact_id)
-        .select()
         .execute()
     )
-    if not resp.data:
+    fetch = (
+        supabase.table("artifacts")
+        .select("*")
+        .eq("id", artifact_id)
+        .execute()
+    )
+    if not fetch.data:
         raise HTTPException(status_code=404, detail="Artifact not found")
 
-    artifact = resp.data[0]
+    artifact = fetch.data[0]
 
     # Step 2: 同步 ChromaDB 向量元数据（后台非阻塞，失败不影响响应）
     if _sync_doc_type is not None:
