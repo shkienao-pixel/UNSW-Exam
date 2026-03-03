@@ -3,6 +3,7 @@ import type {
   GenerateBody, AskResponse, ExplainImageResponse,
   ReviewSettings, ReviewNodeProgress, ReviewNodeUpdate, TodayPlanResult,
   KnowledgeOutline, KnowledgeGraph, KnowledgeOutlineNode, KnowledgeResult,
+  DocType, Feedback, FeedbackStatus,
 } from './types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -10,6 +11,24 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 function getToken(): string | null {
   if (typeof window === 'undefined') return null
   return localStorage.getItem('access_token')
+}
+
+/** 将原始错误信息转换为用户友好的中文提示 */
+function humanizeError(raw: string, status?: number): string {
+  const s = raw.toLowerCase()
+  if (s.includes('server disconnected') || s.includes('network') || s.includes('disconnected'))
+    return '网络连接中断，请检查网络后重试'
+  if (s.includes('token expired') || s.includes('expired'))
+    return '登录已过期，请重新登录'
+  if (s.includes('token validation failed') || s.includes('invalid') || status === 401)
+    return '身份验证失败，请重新登录'
+  if (s.includes('timeout') || s.includes('timed out'))
+    return 'AI 处理超时，请稍后重试（内容较多时正常）'
+  if (status === 500 || s.includes('internal server error'))
+    return '服务器内部错误，请稍后重试'
+  if (status === 503)
+    return '服务暂时不可用，请稍后重试'
+  return raw || `请求失败 (HTTP ${status ?? '?'})`
 }
 
 async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -22,11 +41,26 @@ async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
     ...(options.headers as Record<string, string> | undefined),
   }
 
-  const res = await fetch(API_URL + path, { ...options, headers })
+  let res: Response
+  try {
+    res = await fetch(API_URL + path, { ...options, headers })
+  } catch (networkErr) {
+    // fetch() 本身抛出意味着连接失败（DNS、CORS、Server disconnected）
+    console.error('[api] network error:', networkErr)
+    throw new Error('网络连接失败，请检查后端服务是否运行')
+  }
 
   if (!res.ok) {
+    // Token expired or missing — clear storage and redirect to login
+    if (res.status === 401) {
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('refresh_token')
+      window.location.href = '/login'
+      throw new Error('登录已过期，请重新登录')
+    }
     const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || `HTTP ${res.status}`)
+    const raw = err.detail || err.message || `HTTP ${res.status}`
+    throw new Error(humanizeError(raw, res.status))
   }
 
   // 204 No Content
@@ -45,11 +79,18 @@ async function nextReq<T>(path: string, options: RequestInit = {}): Promise<T> {
     ...(options.headers as Record<string, string> | undefined),
   }
 
-  const res = await fetch(path, { ...options, headers })
+  let res: Response
+  try {
+    res = await fetch(path, { ...options, headers })
+  } catch (networkErr) {
+    console.error('[api] nextReq network error:', networkErr)
+    throw new Error('网络连接失败，请检查后端服务是否运行')
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || err.error || `HTTP ${res.status}`)
+    const raw = err.detail || err.error || err.message || `HTTP ${res.status}`
+    throw new Error(humanizeError(raw, res.status))
   }
 
   if (res.status === 204) return undefined as T
@@ -81,9 +122,10 @@ export const api = {
 
   artifacts: {
     list: (courseId: string) => req<Artifact[]>(`/courses/${courseId}/artifacts`),
-    upload: async (courseId: string, file: File): Promise<Artifact> => {
+    upload: async (courseId: string, file: File, docType: DocType = 'lecture'): Promise<Artifact> => {
       const fd = new FormData()
       fd.append('file', file)
+      fd.append('doc_type', docType)
       return req<Artifact>(`/courses/${courseId}/artifacts`, { method: 'POST', body: fd })
     },
     delete: (courseId: string, artifactId: number) =>
@@ -125,18 +167,25 @@ export const api = {
      * - 无图片 → 直接调用 FastAPI 后端 RAG 流水线
      * - 有图片 → 经 Next.js /api/generate/ask 路由，走 Gemini 1.5 Pro VQA
      */
-    ask: (courseId: string, question: string, scope_set_id?: number, imageFile?: File) => {
+    ask: (
+      courseId: string,
+      question: string,
+      scope_set_id?: number,
+      imageFile?: File,
+      contextMode: 'all' | 'revision' = 'all',
+    ) => {
       if (imageFile) {
         const fd = new FormData()
         fd.append('query_text', question)
         fd.append('course_id', courseId)
         fd.append('image_file', imageFile)
         if (scope_set_id != null) fd.append('scope_set_id', String(scope_set_id))
+        fd.append('context_mode', contextMode)
         return nextReq<AskResponse>('/api/generate/ask', { method: 'POST', body: fd })
       }
       return req<AskResponse>(
         `/courses/${courseId}/generate/ask`,
-        { method: 'POST', body: JSON.stringify({ question, scope_set_id }) },
+        { method: 'POST', body: JSON.stringify({ question, scope_set_id, context_mode: contextMode }) },
       )
     },
 
@@ -218,6 +267,14 @@ export const api = {
         `/flashcards/${cardId}/submit`,
         { method: 'POST', body: JSON.stringify({ selected_option }) }
       ),
+  },
+
+  feedback: {
+    submit: (content: string, page_url: string) =>
+      req<{ ok: boolean; id: string }>('/feedback', {
+        method: 'POST',
+        body: JSON.stringify({ content, page_url }),
+      }),
   },
 
   mistakes: {
