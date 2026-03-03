@@ -476,6 +476,37 @@ def sync_artifact_doc_type(course_id: str, artifact_id: int, doc_type: str) -> i
         return 0
 
 
+def purge_artifact_chunks(supabase: Client, course_id: str, artifact_id: int) -> int:
+    """文件被拒绝时，清除 ChromaDB 向量 + Supabase artifact_chunks 表里该文件的所有记录。
+
+    熔断器：确保被拒绝的文件不会污染 RAG 知识库。
+    大多数 pending 文件从未被索引，此函数对空集合安全（直接返回 0）。
+    """
+    deleted = 0
+
+    # 1. 清理 ChromaDB 向量
+    try:
+        col = _chroma_collection(course_id)
+        if col.count() > 0:
+            results = col.get(where={"artifact_id": str(artifact_id)})
+            ids: list[str] = results.get("ids") or []
+            if ids:
+                col.delete(ids=ids)
+                deleted += len(ids)
+                logger.info("ChromaDB purged: artifact_id=%d, chunks=%d", artifact_id, len(ids))
+    except Exception as exc:
+        logger.warning("ChromaDB purge failed artifact_id=%d: %s", artifact_id, exc)
+
+    # 2. 清理 Supabase artifact_chunks 表
+    try:
+        supabase.table("artifact_chunks").delete().eq("artifact_id", artifact_id).execute()
+        logger.info("artifact_chunks purged for artifact_id=%d", artifact_id)
+    except Exception as exc:
+        logger.warning("artifact_chunks purge failed artifact_id=%d: %s", artifact_id, exc)
+
+    return deleted
+
+
 # ── Search (RAG retrieval) ────────────────────────────────────────────────────
 
 def _is_chinese(text: str) -> bool:

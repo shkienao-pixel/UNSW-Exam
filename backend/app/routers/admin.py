@@ -28,8 +28,10 @@ from app.services.course_service import (
 
 try:
     from app.services.rag_service import sync_artifact_doc_type as _sync_doc_type
+    from app.services.rag_service import purge_artifact_chunks as _purge_chunks
 except Exception:
     _sync_doc_type = None  # type: ignore[assignment]
+    _purge_chunks = None   # type: ignore[assignment]
 
 router = APIRouter()
 
@@ -135,14 +137,23 @@ def update_artifact_doc_type(
 @router.patch("/artifacts/{artifact_id}/reject", response_model=ArtifactOut)
 def reject_artifact(
     artifact_id: int,
+    background_tasks: BackgroundTasks,
     reason: str = Body(default="", embed=True),
     _: None = Depends(_require_admin),
     supabase: Client = Depends(get_db),
 ) -> dict[str, Any]:
-    """Reject a user-uploaded file with optional reason."""
-    return update_artifact_status(
+    """Reject a user-uploaded file with optional reason.
+
+    Circuit-breaker: purges ChromaDB vectors + artifact_chunks in background
+    so the rejected file never pollutes the RAG knowledge base.
+    """
+    art = update_artifact_status(
         supabase, artifact_id, status="rejected", reject_reason=reason or None
     )
+    # 熔断：后台清理该文件的所有向量，不阻塞响应
+    if _purge_chunks is not None:
+        background_tasks.add_task(_purge_chunks, supabase, art["course_id"], artifact_id)
+    return art
 
 
 # ── Admin Direct Upload (bypasses review) ─────────────────────────────────────

@@ -438,7 +438,20 @@ function ArtifactsTab({ secret }: { secret: string }) {
                 </p>
               </div>
               {/* doc_type 内联下拉（已批准时可修改；其他状态仅显示） */}
-              {a.status === 'approved' ? (
+              {a.status === 'rejected' ? (
+                <div className="flex flex-col items-end flex-shrink-0 gap-0.5">
+                  <span className="text-xs px-2 py-0.5 rounded font-medium" style={{
+                    background: 'rgba(255,107,107,0.12)', color: '#ff6b6b',
+                    border: '1px solid rgba(255,107,107,0.3)',
+                  }}>已失效</span>
+                  {a.reject_reason && (
+                    <span className="text-xs max-w-32 truncate" style={{ color: '#ff8080' }}
+                      title={a.reject_reason}>
+                      {a.reject_reason}
+                    </span>
+                  )}
+                </div>
+              ) : a.status === 'approved' ? (
                 <div className="relative flex-shrink-0">
                   {updatingDocType === a.id && (
                     <Loader2 size={10} className="animate-spin absolute -top-1 -right-1 z-10" style={{ color: '#FFD700' }} />
