@@ -85,7 +85,7 @@ def approve_artifact(
 def update_artifact_doc_type(
     artifact_id: int,
     doc_type: str = Body(embed=True),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
+    background_tasks: BackgroundTasks,
     _: None = Depends(_require_admin),
     supabase: Client = Depends(get_db),
 ) -> dict[str, Any]:

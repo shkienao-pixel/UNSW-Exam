@@ -20,8 +20,10 @@ function humanizeError(raw: string, status?: number): string {
     return '网络连接中断，请检查网络后重试'
   if (s.includes('token expired') || s.includes('expired'))
     return '登录已过期，请重新登录'
-  if (s.includes('token validation failed') || s.includes('invalid') || status === 401)
+  if (s.includes('token validation failed') || s.includes('invalid token') || s.includes('invalid or expired') || s.includes('missing authorization') || status === 401)
     return '身份验证失败，请重新登录'
+  if (s.includes('storage upload failed') || s.includes('bucket'))
+    return '文件上传失败，请检查存储配置或文件格式'
   if (s.includes('timeout') || s.includes('timed out'))
     return 'AI 处理超时，请稍后重试（内容较多时正常）'
   if (status === 500 || s.includes('internal server error'))
