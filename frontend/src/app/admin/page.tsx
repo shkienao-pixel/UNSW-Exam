@@ -203,7 +203,13 @@ function ArtifactsTab({ secret }: { secret: string }) {
       setArtifacts(prev => prev.map(a => a.id === artifactId ? { ...a, doc_type: newDocType } : a))
       showToast('✅ 标签已更新')
     } catch (e: unknown) {
-      setError(String(e))
+      // 区分网络错误和服务端错误，给出友好提示
+      const msg = String(e)
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+        showToast('⚠️ 分类更新失败，请检查网络或服务端状态')
+      } else {
+        showToast(`⚠️ 分类更新失败：${msg.replace(/^Error:\s*/, '').slice(0, 60)}`)
+      }
     } finally {
       setUpdatingDocType(null)
     }

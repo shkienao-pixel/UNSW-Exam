@@ -20,10 +20,13 @@ Retrieval flow (for generation / Q&A):
 from __future__ import annotations
 
 import io
+import logging
 import random
 import re
 from datetime import datetime, timezone
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from supabase import Client
 
@@ -427,6 +430,50 @@ def get_course_chunks_sampled(
         for aid in art_ids
     ]
     return context, sources
+
+
+# ── Metadata sync (doc_type 变更时同步到 ChromaDB) ───────────────────────────
+
+def sync_artifact_doc_type(course_id: str, artifact_id: int, doc_type: str) -> int:
+    """artifact.doc_type 被修改后，将新值同步写入 ChromaDB chunk metadata。
+
+    Architecture note:
+    - RAG 路由通过 artifacts 表的 doc_type 列拿到 artifact_id 列表，再过滤 chunks。
+      因此更新 artifacts.doc_type 已足够让 RAG 路由生效。
+    - 本函数额外同步 ChromaDB metadata 是为了未来支持向量侧直接按 doc_type 过滤。
+    - 不重新调用 Embedding API，只修改 metadata 字段 — 零向量成本。
+
+    Returns: 更新的 chunk 数量（0 = ChromaDB 无该 artifact 的记录，非错误）
+    """
+    try:
+        col = _chroma_collection(course_id)
+        if col.count() == 0:
+            return 0
+
+        # 查出该 artifact 的全部 chunk ID 及现有 metadata
+        results = col.get(where={"artifact_id": str(artifact_id)})
+        ids: list[str] = results.get("ids") or []
+        if not ids:
+            return 0
+
+        # 在现有 metadata 基础上 patch doc_type，不触碰其他字段
+        existing_metas: list[dict] = results.get("metadatas") or [{}] * len(ids)
+        new_metas = [{**m, "doc_type": doc_type} for m in existing_metas]
+
+        col.update(ids=ids, metadatas=new_metas)
+        logger.info(
+            "ChromaDB doc_type synced: artifact_id=%d, doc_type=%s, chunks=%d",
+            artifact_id, doc_type, len(ids),
+        )
+        return len(ids)
+
+    except Exception as exc:
+        # 非阻塞 — ChromaDB 同步失败不影响主流程（artifacts 表已更新）
+        logger.warning(
+            "ChromaDB doc_type sync failed artifact_id=%d doc_type=%s: %s",
+            artifact_id, doc_type, exc,
+        )
+        return 0
 
 
 # ── Search (RAG retrieval) ────────────────────────────────────────────────────

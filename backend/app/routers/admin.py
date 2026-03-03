@@ -85,13 +85,23 @@ def approve_artifact(
 def update_artifact_doc_type(
     artifact_id: int,
     doc_type: str = Body(embed=True),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     _: None = Depends(_require_admin),
     supabase: Client = Depends(get_db),
 ) -> dict[str, Any]:
-    """Update the semantic doc_type label of an existing artifact (inline tagging)."""
+    """Update the semantic doc_type label of an existing artifact.
+
+    Two-step metadata sync:
+      Step 1 — UPDATE artifacts.doc_type in Supabase (relational DB, synchronous)
+      Step 2 — UPDATE ChromaDB chunk metadata doc_type (vector store, background non-blocking)
+
+    ChromaDB sync patches only the metadata field — no Embedding API calls, zero cost.
+    """
     if doc_type not in _VALID_DOC_TYPES:
         raise HTTPException(status_code=422, detail=f"Invalid doc_type '{doc_type}'. Must be one of: {sorted(_VALID_DOC_TYPES)}")
-    # .select() required in supabase-py v2.x for UPDATE to return modified rows
+
+    # Step 1: 更新关系型数据库（同步）
+    # supabase-py v2 需要 .select() 才能拿到修改后的行
     resp = (
         supabase.table("artifacts")
         .update({"doc_type": doc_type})
@@ -101,7 +111,14 @@ def update_artifact_doc_type(
     )
     if not resp.data:
         raise HTTPException(status_code=404, detail="Artifact not found")
-    return resp.data[0]
+
+    artifact = resp.data[0]
+
+    # Step 2: 同步 ChromaDB 向量元数据（后台非阻塞，失败不影响响应）
+    from app.services.rag_service import sync_artifact_doc_type
+    background_tasks.add_task(sync_artifact_doc_type, artifact["course_id"], artifact_id, doc_type)
+
+    return artifact
 
 
 @router.patch("/artifacts/{artifact_id}/reject", response_model=ArtifactOut)
