@@ -25,9 +25,6 @@ Thumbs.db
 .env.local
 *.pem
 
-# Streamlit
-.streamlit/secrets.toml
-
 # Misc
 *.log
 *.pdf
@@ -35,11 +32,13 @@ Thumbs.db
 
 # Runtime data / backups
 backups/
-data/app.db
-data/chroma/
-src/data/app.db
-src/data/chroma/
-src/app.db
+data/
+
+# Cursor IDE
+.cursor/
+
+# SSH / ops scripts (contain credentials)
+vps_ssh.py
 
 # Claude Code internal
 .claude/

@@ -89,6 +89,37 @@ class TestArtifactOut:
         assert a.status == "pending"
         assert a.storage_url == "https://cdn.example.com/doc.pdf"
 
+    def test_doc_type_defaults_to_lecture(self):
+        now = datetime.utcnow()
+        a = ArtifactOut(id=3, course_id="c1", file_name="f.pdf",
+                        file_hash="h", created_at=now)
+        assert a.doc_type == "lecture"
+
+    def test_doc_type_revision_accepted(self):
+        now = datetime.utcnow()
+        a = ArtifactOut(id=4, course_id="c1", file_name="r.pdf",
+                        file_hash="h", created_at=now, doc_type="revision")
+        assert a.doc_type == "revision"
+
+    def test_doc_type_past_exam_accepted(self):
+        now = datetime.utcnow()
+        a = ArtifactOut(id=5, course_id="c1", file_name="e.pdf",
+                        file_hash="h", created_at=now, doc_type="past_exam")
+        assert a.doc_type == "past_exam"
+
+    def test_doc_type_invalid_rejected(self):
+        now = datetime.utcnow()
+        with pytest.raises(ValidationError):
+            ArtifactOut(id=6, course_id="c1", file_name="x.pdf",
+                        file_hash="h", created_at=now, doc_type="slides")
+
+    def test_doc_type_in_serialization(self):
+        now = datetime.utcnow()
+        a = ArtifactOut(id=7, course_id="c1", file_name="f.pdf",
+                        file_hash="h", created_at=now, doc_type="tutorial")
+        d = a.model_dump()
+        assert d["doc_type"] == "tutorial"
+
 
 # ── ScopeSetCreate ────────────────────────────────────────────────────────────
 
