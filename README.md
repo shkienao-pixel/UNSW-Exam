@@ -1,10 +1,547 @@
 # UNSW Exam Master
 
-> 面向海外留学生的 AI 驱动考试复习平台。上传课程资料，AI 自动生成摘要、测验、闪卡、知识图谱，并提供智能问答。
+**[English](#english) | [中文](#中文)**
 
-**生产地址：** https://exammaster.tech
+**Live:** https://exammaster.tech
 
 ---
+
+<a name="english"></a>
+# English
+
+> An AI-powered exam preparation platform for international students. Upload course materials and let AI generate summaries, quizzes, flashcards, knowledge graphs, and provide intelligent Q&A.
+
+## Table of Contents
+
+- [Product Overview](#product-overview)
+- [Tech Stack](#tech-stack)
+- [System Architecture](#system-architecture)
+- [Directory Structure](#directory-structure)
+- [Database Design](#database-design)
+- [API Routes](#api-routes)
+- [Core Features](#core-features)
+- [Deployment](#deployment)
+- [Local Development](#local-development)
+- [Environment Variables](#environment-variables)
+- [Database Migrations](#database-migrations)
+- [Testing](#testing)
+- [Admin Panel](#admin-panel)
+
+---
+
+## Product Overview
+
+**UNSW Exam Master** is an invite-only AI exam prep web app with the following features:
+
+| Feature | Description |
+|---------|-------------|
+| **AI Q&A (RAG)** | Multi-model retrieval-augmented Q&A grounded in uploaded materials, with citations and optional image generation |
+| **Summary** | GPT-4o distills key knowledge points from course materials |
+| **Quiz** | Generates de-duplicated multiple-choice questions, dynamically excluding previously seen topics |
+| **Flashcards** | MCQ + knowledge card dual mode, with a mistakes book |
+| **Knowledge Outline** | Two-stage build: material extraction + AI gap-filling, produces a tree-structured outline |
+| **Knowledge Graph** | Visualizes concept nodes and relationships (Cytoscape.js) |
+| **Review Plan** | Spaced repetition algorithm with exam countdown and daily task recommendations |
+| **Admin Panel** | Manage courses, files, users, invite codes, API keys, and user feedback |
+
+---
+
+## Tech Stack
+
+### Backend
+
+| Component | Version / Choice |
+|-----------|-----------------|
+| **Framework** | FastAPI 0.111+ |
+| **Runtime** | Python 3.12, Uvicorn |
+| **Database** | Supabase PostgreSQL (managed) |
+| **Vector Store** | ChromaDB (persistent on VPS disk) |
+| **File Storage** | Supabase Storage (signed URLs, 10-year expiry) |
+| **AI — Q&A** | GPT-4o-mini (filter) + Gemini 2.0 Flash (generate) + Imagen 3 (illustration) |
+| **AI — Generation** | GPT-4o (summary / quiz / flashcards / outline) |
+| **AI — Feedback** | DeepSeek Chat |
+| **Embedding** | OpenAI text-embedding-3-small |
+| **PDF parsing** | pypdf |
+| **Word parsing** | python-docx |
+| **Testing** | pytest (175 tests) |
+
+### Frontend
+
+| Component | Version / Choice |
+|-----------|-----------------|
+| **Framework** | Next.js 16 (App Router) |
+| **Language** | TypeScript |
+| **Styling** | Tailwind CSS v4 |
+| **Knowledge Graph** | Cytoscape.js |
+| **Markdown** | react-markdown |
+| **Auth** | Supabase JS SDK (JWT in localStorage) |
+| **Icons** | Lucide React |
+
+### Infrastructure
+
+| Component | Configuration |
+|-----------|--------------|
+| **Frontend** | Vercel (auto CI/CD on push to main) |
+| **Backend** | Hostinger VPS, Ubuntu 22.04, Docker Compose |
+| **Reverse Proxy** | Nginx (SSL termination, Let's Encrypt TLS, 300s timeout) |
+| **Domains** | `exammaster.tech` (frontend), `api.exammaster.tech` (backend) |
+| **Database** | Supabase (PostgreSQL + Auth + Storage) |
+
+---
+
+## System Architecture
+
+```
+Browser
+    │
+    ├── https://exammaster.tech          (Vercel — Next.js)
+    │       ├── /login  /register
+    │       ├── /dashboard               Course list
+    │       ├── /courses/[id]            Main feature page (Q&A / generate / outline / graph / review)
+    │       ├── /mistakes                Mistakes book
+    │       └── /admin                   Admin panel (X-Admin-Secret auth)
+    │
+    └── https://api.exammaster.tech      (Hostinger VPS)
+            │
+            ├── Nginx (80→443 redirect + SSL + 300s timeout)
+            │
+            └── FastAPI (Docker, port 8002)
+                    ├── Supabase PostgreSQL  ← metadata / user data
+                    ├── Supabase Storage     ← PDF / Word files
+                    ├── ChromaDB (VPS disk)  ← vector index
+                    └── AI APIs              ← OpenAI / Gemini / DeepSeek
+```
+
+### RAG Q&A — 4-Stage Pipeline
+
+```
+User question
+  │
+  ▼ Stage 1 — Retrieval
+  ChromaDB cosine similarity → top-6 chunks
+  (Chinese queries: auto bilingual translation → dual-path recall)
+  │
+  ▼ Stage 2 — Filtering
+  GPT-4o-mini: remove chunks irrelevant to the question
+  │
+  ▼ Stage 3 — Generation
+  Gemini 2.0 Flash: produce cited answer grounded in filtered chunks
+  │
+  ▼ Stage 4 — Illustration (optional)
+  Imagen 3: generate visual aid for complex concepts
+```
+
+### File Processing Pipeline
+
+```
+File upload (Admin or user)
+  │
+  ▼
+Supabase Storage upload
+  path: {course_id}/{sha256[:12]}_{filename}
+  │
+  ▼  After admin approval (async background task)
+rag_service.process_artifact()
+  ├── 1. Download file bytes from Storage
+  ├── 2. Extract text (pypdf / python-docx)
+  ├── 3. Clean text (remove page numbers, headers, garbage)
+  ├── 4. Chunk (~800 chars, 100-char overlap)
+  ├── 5. Embed (text-embedding-3-small)
+  ├── 6. Store in ChromaDB (vector index)
+  └── 7. Store in artifact_chunks table (plaintext backup)
+```
+
+---
+
+## Directory Structure
+
+```
+UNSW-Exam/
+├── backend/                        # FastAPI backend
+│   ├── app/
+│   │   ├── main.py                 # App entry, CORS, router registration
+│   │   ├── core/
+│   │   │   ├── config.py           # Environment config (pydantic-settings)
+│   │   │   ├── dependencies.py     # get_db, get_current_user injection
+│   │   │   ├── exceptions.py       # AppError / AuthError / NotFoundError...
+│   │   │   └── supabase_client.py  # Supabase client singleton
+│   │   ├── models/
+│   │   │   ├── auth.py             # RegisterRequest, LoginRequest, TokenResponse
+│   │   │   ├── course.py           # CourseOut, ArtifactOut
+│   │   │   ├── flashcard.py        # Flashcard, FlashcardDeck
+│   │   │   └── generation.py       # GenerateResponse, QuizQuestion
+│   │   ├── routers/
+│   │   │   ├── auth.py             # /auth/* — register/login/refresh/logout
+│   │   │   ├── courses.py          # /courses/* — CRUD
+│   │   │   ├── artifacts.py        # /courses/{id}/artifacts — user uploads
+│   │   │   ├── scope_sets.py       # /courses/{id}/scope-sets
+│   │   │   ├── outputs.py          # /courses/{id}/outputs — generation history
+│   │   │   ├── content.py          # /courses/{id}/content — chunk queries
+│   │   │   ├── generate.py         # /courses/{id}/generate/* — AI generation
+│   │   │   ├── review.py           # /review/* — review plan
+│   │   │   ├── knowledge.py        # /knowledge/* — outline / graph
+│   │   │   ├── feedback.py         # /feedback + /admin/feedback
+│   │   │   └── admin.py            # /admin/* — admin endpoints
+│   │   └── services/
+│   │       ├── rag_service.py      # Full RAG pipeline (extract/chunk/embed/retrieve/purge)
+│   │       ├── artifact_service.py # Supabase Storage upload/download/delete
+│   │       ├── course_service.py   # Course/artifact DB operations
+│   │       ├── llm_adapter.py      # OpenAI client lazy-load wrapper
+│   │       ├── llm_key_service.py  # Dynamic API keys (DB priority + env fallback, 60s TTL)
+│   │       └── gemini_service.py   # Gemini / Imagen3 calls
+│   ├── migrations/                 # All DB migration SQL (001~011, run in order)
+│   ├── tests/                      # pytest tests (175 total)
+│   ├── Dockerfile
+│   └── requirements.txt
+│
+├── frontend/                       # Next.js 16 frontend
+│   └── src/
+│       ├── app/
+│       │   ├── (auth)/             # Route group: no login required
+│       │   │   ├── login/
+│       │   │   └── register/
+│       │   ├── (app)/              # Route group: login required
+│       │   │   ├── dashboard/      # Course list + create course
+│       │   │   ├── courses/[id]/   # Main feature page
+│       │   │   └── mistakes/       # Mistakes book
+│       │   ├── admin/              # Admin panel (single page, multi-tab)
+│       │   └── api/                # Next.js Route Handlers (backend proxy)
+│       ├── components/
+│       │   ├── course/             # Course page components
+│       │   ├── flashcard/          # Flashcard components
+│       │   ├── generation/         # Generation result display
+│       │   ├── KnowledgeTab.tsx    # Knowledge outline + graph tab
+│       │   ├── MistakesView.tsx    # Mistakes book view
+│       │   └── ReviewOutlineTab.tsx # Review outline tab
+│       └── lib/
+│           ├── api.ts              # All backend API calls (with Chinese error messages)
+│           ├── types.ts            # Global TypeScript type definitions
+│           ├── auth-context.tsx    # Global auth state (AuthContext)
+│           ├── i18n.tsx            # Bilingual (Chinese / English)
+│           └── mistakes-store.ts   # Local mistakes state
+│
+├── nginx/
+│   └── nginx.conf                  # HTTP→HTTPS redirect + SSL + reverse proxy
+├── docker-compose.yml              # backend + nginx orchestration
+└── openapi.json                    # OpenAPI 3.1 spec (auto-generated)
+```
+
+---
+
+## Database Design
+
+All tables are in Supabase PostgreSQL `public` schema. **RLS is disabled** — auth is enforced at the code layer.
+
+### Core Tables
+
+| Table | PK | Description |
+|-------|----|-------------|
+| `courses` | UUID | Courses (globally shared, visible to all users) |
+| `artifacts` | BIGSERIAL | Uploaded file metadata (file_type, doc_type, status, storage_path) |
+| `artifact_chunks` | BIGSERIAL | File chunks in plaintext (fallback retrieval) |
+| `scope_sets` | BIGSERIAL | Scope sets (select which files participate in AI generation) |
+| `scope_set_items` | Composite | Scope set ↔ artifact many-to-many |
+| `outputs` | BIGSERIAL | AI generation history (summary/quiz/outline/flashcards/graph) |
+| `flashcards` | UUID | Flashcards (mcq / knowledge dual type) |
+| `mistakes` | BIGSERIAL | Mistakes book (linked to flashcard_id, wrong_count) |
+| `invites` | UUID | Invite codes (code, max_uses, used_count) |
+| `api_keys` | UUID | Dynamic API keys (provider: openai/gemini/deepseek) |
+| `review_settings` | UUID | Review plan config (review_start_at, exam_at) |
+| `review_node_progress` | UUID | Node-level review progress (done, priority, next_review_at) |
+| `knowledge_nodes` | UUID | Knowledge outline nodes (is_ai_generated flag) |
+| `knowledge_edges` | UUID | Knowledge graph edges (source, target, relation, confidence) |
+| `user_feedback` | UUID | User feedback (status: pending/in_progress/resolved) |
+
+### `artifacts.doc_type` Semantic Categories
+
+| Value | Label | RAG Note |
+|-------|-------|----------|
+| `lecture` | Lecture notes | Default |
+| `tutorial` | Tutorial / Lab | — |
+| `revision` | Revision summary | AI prioritizes these |
+| `past_exam` | Past exam papers | AI prioritizes these |
+| `assignment` | Assignment / Project | — |
+| `other` | Other | — |
+
+---
+
+## API Routes
+
+### Auth (`/auth`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/auth/register` | Register (requires invite code) |
+| POST | `/auth/login` | Login, returns JWT |
+| POST | `/auth/refresh` | Refresh access_token |
+| POST | `/auth/logout` | Logout |
+| GET | `/auth/me` | Current user info |
+
+### Courses & Files (`/courses`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET/POST | `/courses` | List / create courses |
+| GET/DELETE | `/courses/{id}` | Get / delete course |
+| GET/POST | `/courses/{id}/artifacts` | List approved files / user upload (status=pending) |
+| DELETE | `/courses/{id}/artifacts/{aid}` | Delete file |
+| GET/POST | `/courses/{id}/scope-sets` | Scope set management |
+| GET | `/courses/{id}/outputs` | AI generation history |
+| GET | `/courses/{id}/content/chunks` | Get chunk plaintext |
+
+### AI Generation (`/courses/{id}/generate`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/generate/summary` | Generate summary (GPT-4o) |
+| POST | `/generate/quiz` | Generate quiz (GPT-4o, supports exclude_topics) |
+| POST | `/generate/outline` | Generate study outline (GPT-4o) |
+| POST | `/generate/flashcards` | Generate flashcards (GPT-4o) |
+| POST | `/generate/ask` | Intelligent Q&A (4-stage RAG pipeline) |
+| POST | `/generate/translate` | Translate content |
+
+### Knowledge Outline & Graph (`/knowledge`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/knowledge/build` | Build outline + graph (two stages) |
+| GET | `/knowledge/outline` | Get outline (`?course_id=`) |
+| GET | `/knowledge/graph` | Get knowledge graph |
+| GET | `/knowledge/node` | Get single node detail |
+
+### Review Plan (`/review`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET/POST | `/review/settings` | Review config (start date / exam date) |
+| GET/POST | `/review/progress` | Node learning progress |
+| POST | `/review/today_plan` | Today's recommended nodes (spaced repetition) |
+
+### Admin (`/admin`, requires `X-Admin-Secret` header)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/admin/courses` | List all courses |
+| POST | `/admin/courses` | Create course |
+| DELETE | `/admin/courses/{id}` | Delete course |
+| GET | `/admin/artifacts` | List all files (including pending) |
+| POST | `/admin/artifacts/upload` | Admin upload (auto-approved + triggers RAG) |
+| POST | `/admin/artifacts/url` | Admin add URL resource |
+| PATCH | `/admin/artifacts/{id}/approve` | Approve file (triggers background RAG) |
+| PATCH | `/admin/artifacts/{id}/reject` | Reject file (purges ChromaDB vectors) |
+| PATCH | `/admin/artifacts/{id}/doc-type` | Update file category (syncs ChromaDB) |
+| GET | `/admin/users` | List all users |
+| GET/POST | `/admin/invites` | Invite code management |
+| GET/POST | `/admin/api-keys` | API key management |
+| PATCH | `/admin/api-keys/{id}/activate` | Activate / deactivate key |
+| DELETE | `/admin/api-keys/{id}` | Delete key |
+| GET | `/admin/feedback` | List user feedback |
+| GET | `/admin/feedback/ai-summary` | DeepSeek analysis → structured PM report |
+| PATCH | `/admin/feedback/{id}` | Update feedback status |
+
+### User Feedback
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/feedback` | Submit feedback (login required) |
+
+---
+
+## Core Features
+
+### Invite-Only Registration
+
+Registration requires an invite code (`invites` table). Admins generate codes via `/admin/invites`. Each code supports a configurable max-use limit.
+
+### File Review Workflow
+
+```
+User upload → status=pending → awaits admin review
+  ├── Approve → status=approved → background RAG processing (chunk + embed)
+  └── Reject  → status=rejected → purge ChromaDB vectors + artifact_chunks
+```
+
+Admin direct uploads skip the review flow and immediately trigger RAG.
+
+### Dynamic API Key Management
+
+Key priority: **DB active record (60s TTL cache) > .env file**
+
+Supported providers: `openai`, `gemini`, `deepseek`
+
+Keys can be hot-swapped from the Admin panel without restarting the service.
+
+### De-duplicated Quiz Generation
+
+Quiz generation accepts `exclude_topics` (list of previously generated topics). The system prompt explicitly instructs the LLM to avoid those topics, preventing repeat questions across multiple generation rounds.
+
+### Two-Stage Knowledge Outline
+
+- **Stage 1 (Grounded)**: Extracts entirely from artifact_chunks text. Nodes marked `is_ai_generated=false`.
+- **Stage 2 (AI Fill, optional)**: AI identifies knowledge gaps and fills them. Nodes marked `is_ai_generated=true` with confidence level.
+
+### Spaced Repetition Review Algorithm
+
+The daily plan (`/review/today_plan`) considers:
+- Exam countdown (days remaining)
+- Node priority (high / medium / low)
+- Time since last review (longer gap = higher priority)
+- Daily time budget (minutes)
+
+---
+
+## Deployment
+
+### VPS Update Workflow
+
+```bash
+ssh root@<VPS_IP>
+cd /opt/exammaster
+git pull
+# Full rebuild (Dockerfile or requirements.txt changed):
+docker compose up -d --build backend
+# Code-only change (no rebuild needed):
+docker compose up -d backend
+```
+
+Diagnostics:
+
+```bash
+docker compose ps                      # Check container health
+docker compose logs -f backend         # Tail live logs
+docker compose logs --tail=50 backend  # Last 50 lines
+```
+
+### Frontend Deployment
+
+Push to `main` → Vercel auto-builds. Required env var:
+
+```
+NEXT_PUBLIC_API_URL=https://api.exammaster.tech
+```
+
+---
+
+## Local Development
+
+### Backend
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate       # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env            # Fill in secrets
+uvicorn app.main:app --reload --port 8000
+# Swagger UI: http://localhost:8000/docs
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+# Create frontend/.env.local:
+# NEXT_PUBLIC_API_URL=http://localhost:8000
+# NEXT_PUBLIC_SUPABASE_URL=...
+# NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+npm run dev
+```
+
+---
+
+## Environment Variables
+
+### Backend (`backend/.env`)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `SUPABASE_URL` | ✅ | Supabase project URL |
+| `SUPABASE_ANON_KEY` | ✅ | Supabase anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Supabase service role key |
+| `OPENAI_API_KEY` | ✅ | OpenAI key (also configurable via Admin panel) |
+| `GEMINI_API_KEY` | — | Google Gemini key (also via Admin panel) |
+| `DEEPSEEK_API_KEY` | — | DeepSeek key (feedback AI analysis) |
+| `ADMIN_SECRET` | ✅ | Admin auth key (`X-Admin-Secret` header) |
+| `ADMIN_SECRET_EXTRA` | — | Extra admin keys (comma-separated) |
+| `APP_ENV` | — | `development` / `production` (affects CORS) |
+| `CORS_ORIGINS` | — | Allowed frontend origins (comma-separated) |
+| `SUPABASE_STORAGE_BUCKET` | — | Storage bucket name, default `artifacts` |
+
+### Frontend (`frontend/.env.local`)
+
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_API_URL` | Backend API URL |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
+
+---
+
+## Database Migrations
+
+SQL files are in `backend/migrations/`. **Run manually in Supabase SQL Editor in order:**
+
+| File | Content |
+|------|---------|
+| `001_schema.sql` | Initial schema (courses, artifacts, scope_sets, outputs, flashcards, mistakes) |
+| `002_indexes_rls.sql` | Indexes + RLS (RLS effectively disabled) |
+| `003_artifacts_v2.sql` | Artifacts extended fields (status, storage_path, storage_url, file_type) |
+| `004_courses_shared.sql` | Courses made globally shared |
+| `005_artifacts_nullable_user.sql` | artifacts.user_id made nullable |
+| `006_artifact_chunks.sql` | artifact_chunks table |
+| `007_invites.sql` | Invite codes table |
+| `008_api_keys.sql` | Dynamic API keys table |
+| `009_review_plan.sql` | review_settings + review_node_progress |
+| `010_artifact_doc_type.sql` | artifacts.doc_type column |
+| `011_user_feedback.sql` | user_feedback table |
+
+---
+
+## Testing
+
+```bash
+cd backend
+pytest tests/ -v
+# 175 passed
+```
+
+| File | Coverage |
+|------|----------|
+| `test_routes.py` | FastAPI routes end-to-end (health check, auth flow) |
+| `test_models.py` | Pydantic model validation (Course, Artifact, DocType) |
+| `test_generate_utils.py` | LLM output JSON parsing utilities |
+| `test_feedback.py` | Feedback CRUD endpoints (with admin auth) |
+| `test_doc_type.py` | doc_type enum, labels, valid value checks |
+| `test_exceptions.py` | Exception class hierarchy |
+| `test_rag_service.py` | RAG text extraction / cleaning / chunking |
+| `test_rag_routing.py` | doc_type routing (file filtering during retrieval) |
+
+---
+
+## Admin Panel
+
+Access `/admin` and enter the `X-Admin-Secret` in the UI.
+
+**7 management tabs:**
+
+| Tab | Functions |
+|-----|-----------|
+| Course Management | Create / delete courses |
+| File Management | Approve/reject uploads, edit doc_type, admin direct upload |
+| User Management | View all registered users |
+| Invite Codes | Generate / view invite codes and usage |
+| API Keys | Hot-swap OpenAI / Gemini / DeepSeek keys |
+| User Feedback | View feedback, update status |
+| AI Feedback Analysis | DeepSeek generates a structured PM report (bugs / UX / requests / action items) |
+
+---
+---
+
+<a name="中文"></a>
+# 中文
+
+> 面向海外留学生的 AI 驱动考试复习平台。上传课程资料，AI 自动生成摘要、测验、闪卡、知识图谱，并提供智能问答。
 
 ## 目录
 
@@ -197,7 +734,7 @@ UNSW-Exam/
 │       │   │   └── register/
 │       │   ├── (app)/              # 路由组：需要登录
 │       │   │   ├── dashboard/      # 课程列表 + 新建课程
-│       │   │   ├── courses/[id]/   # 主功能页（问答/生成/大纲/图谱/复习）
+│       │   │   ├── courses/[id]/   # 主功能页
 │       │   │   └── mistakes/       # 错题本
 │       │   ├── admin/              # 管理后台（单页多 Tab）
 │       │   └── api/                # Next.js Route Handlers（代理到后端）
@@ -278,7 +815,7 @@ UNSW-Exam/
 |--------|------|------|
 | GET/POST | `/courses` | 列出/新建课程 |
 | GET/DELETE | `/courses/{id}` | 获取/删除课程 |
-| GET/POST | `/courses/{id}/artifacts` | 列出已批准文件 / 用户上传（status=pending） |
+| GET/POST | `/courses/{id}/artifacts` | 列出已批准文件 / 用户上传 |
 | DELETE | `/courses/{id}/artifacts/{aid}` | 删除文件 |
 | GET/POST | `/courses/{id}/scope-sets` | 范围集管理 |
 | GET | `/courses/{id}/outputs` | 历史 AI 生成 |
@@ -289,10 +826,10 @@ UNSW-Exam/
 | Method | Path | 说明 |
 |--------|------|------|
 | POST | `/generate/summary` | 生成摘要（GPT-4o） |
-| POST | `/generate/quiz` | 生成测验（GPT-4o，支持 exclude_topics 防重复） |
+| POST | `/generate/quiz` | 生成测验（支持 exclude_topics 防重复） |
 | POST | `/generate/outline` | 生成学习大纲（GPT-4o） |
 | POST | `/generate/flashcards` | 生成闪卡（GPT-4o） |
-| POST | `/generate/ask` | 智能问答（4 阶段 RAG 流水线） |
+| POST | `/generate/ask` | 智能问答（4 阶段 RAG） |
 | POST | `/generate/translate` | 翻译内容 |
 
 ### 知识大纲 & 图谱（`/knowledge`）
@@ -390,7 +927,7 @@ Admin 直接上传跳过审批，立即进入 RAG 处理。
 ### VPS 更新流程
 
 ```bash
-ssh root@76.13.216.86
+ssh root@<VPS_IP>
 cd /opt/exammaster
 git pull
 # Dockerfile 或 requirements.txt 有改动时（完整重建）：
@@ -428,16 +965,15 @@ source .venv/bin/activate       # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env            # 填写各项密钥
 uvicorn app.main:app --reload --port 8000
+# API 文档：http://localhost:8000/docs
 ```
-
-API 文档访问：http://localhost:8000/docs
 
 ### 前端
 
 ```bash
 cd frontend
 npm install
-# 创建 .env.local，填写：
+# 创建 frontend/.env.local，填写：
 # NEXT_PUBLIC_API_URL=http://localhost:8000
 # NEXT_PUBLIC_SUPABASE_URL=...
 # NEXT_PUBLIC_SUPABASE_ANON_KEY=...
