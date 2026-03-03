@@ -26,6 +26,11 @@ from app.services.course_service import (
     update_artifact_status,
 )
 
+try:
+    from app.services.rag_service import sync_artifact_doc_type as _sync_doc_type
+except Exception:
+    _sync_doc_type = None  # type: ignore[assignment]
+
 router = APIRouter()
 
 
@@ -115,8 +120,8 @@ def update_artifact_doc_type(
     artifact = resp.data[0]
 
     # Step 2: 同步 ChromaDB 向量元数据（后台非阻塞，失败不影响响应）
-    from app.services.rag_service import sync_artifact_doc_type
-    background_tasks.add_task(sync_artifact_doc_type, artifact["course_id"], artifact_id, doc_type)
+    if _sync_doc_type is not None:
+        background_tasks.add_task(_sync_doc_type, artifact["course_id"], artifact_id, doc_type)
 
     return artifact
 
