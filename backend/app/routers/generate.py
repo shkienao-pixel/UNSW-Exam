@@ -40,6 +40,7 @@ from app.services.course_service import (
     list_artifacts,
     list_artifacts_by_ids,
 )
+from app.services.rag_service import get_artifact_ids_by_doc_type
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -56,6 +57,7 @@ class GenerateRequest(BaseModel):
 class AskRequest(BaseModel):
     question:     str
     scope_set_id: int | None = None
+    context_mode: str = "all"  # "all" | "revision" — controls RAG scope for Q&A
 
 
 class TranslateRequest(BaseModel):
@@ -71,14 +73,31 @@ def _resolve_artifact_ids(
     course_id: str,
     scope_set_id: int | None,
     artifact_ids: list[int] | None,
+    priority_doc_types: list[str] | None = None,
+    fallback_doc_types: list[str] | None = None,
 ) -> list[int] | None:
-    """Return an explicit artifact_id filter list, or None (= all approved)."""
+    """Return an explicit artifact_id filter list, or None (= all approved).
+
+    Resolution order:
+      1. Explicit artifact_ids from request body
+      2. Scope-set artifact list
+      3. Doc-type routing (priority → fallback)
+      4. None  →  full-corpus search
+    """
     if artifact_ids:
         return artifact_ids
     if scope_set_id:
         scope = get_scope_set(supabase, user_id, scope_set_id)
         ids = scope.get("artifact_ids") or []
         return ids if ids else None
+    if priority_doc_types:
+        ids = get_artifact_ids_by_doc_type(supabase, course_id, priority_doc_types)
+        if ids:
+            return ids
+        if fallback_doc_types:
+            ids = get_artifact_ids_by_doc_type(supabase, course_id, fallback_doc_types)
+            if ids:
+                return ids
     return None
 
 
@@ -198,10 +217,12 @@ def _chat(system: str, user: str, openai_key: Optional[str] = None) -> str:
     ``openai_key`` is resolved in this order:
       1. Passed-in key (from DB via llm_key_service)
       2. Config / environment variable
+
+    Issue 1 fix: Added 120s timeout to prevent worker disconnects on slow LLM calls.
     """
     from openai import OpenAI
     key = openai_key or get_settings().openai_api_key
-    client = OpenAI(api_key=key)
+    client = OpenAI(api_key=key, timeout=120.0)
     resp = client.chat.completions.create(
         model="gpt-4o",
         messages=[
@@ -241,19 +262,36 @@ def gen_summary(
 ) -> dict[str, Any]:
     """Generate a structured knowledge summary from cleaned course chunks."""
     get_course(supabase, course_id)
-    art_ids = _resolve_artifact_ids(supabase, current_user["id"], course_id, body.scope_set_id, body.artifact_ids)
+    # summary → lecture (authoritative source), fallback tutorial
+    art_ids = _resolve_artifact_ids(
+        supabase, current_user["id"], course_id,
+        body.scope_set_id, body.artifact_ids,
+        priority_doc_types=["lecture"],
+        fallback_doc_types=["tutorial"],
+    )
     ctx, sources = _get_context(supabase, current_user["id"], course_id, art_ids)
     if not ctx.strip():
         raise AppError("No content found — please wait for files to be indexed or upload approved files")
 
     openai_key = _get_openai_key(supabase)
+    # Issue 2+3 fix: try-catch prevents 500; strict prompt filters administrative content
     system = (
-        "You are a study assistant. Summarize the course materials into clear, structured notes. "
-        "Use markdown with ## headings and bullet points. "
-        "Cover all major topics. Respond in the same language as the content."
+        "You are a rigorous academic knowledge extractor and study assistant. "
+        "Summarize the course materials into clear, structured study notes using ## headings and bullet points. "
+        "CRITICAL FILTERING RULES — you MUST exclude the following from the output:\n"
+        "  - Course duration, class hours, or timetable information (e.g. '2 hours', '3 units')\n"
+        "  - Instructor, tutor, or lecturer names (e.g. 'Tutor: Plum', 'Lecturer: Dr. Smith')\n"
+        "  - Administrative details: exam dates, grading schemes, submission deadlines, attendance policies\n"
+        "  - Course introduction or overview slides that describe what the course IS rather than what it TEACHES\n"
+        "Only extract core concepts, algorithms, formulas, definitions, and theoretical knowledge. "
+        "Respond in the same language as the content."
     )
-    content = _chat(system, f"Course materials:\n\n{ctx}", openai_key)
-    content += _sources_note(sources)
+    try:
+        content = _chat(system, f"Course materials:\n\n{ctx}", openai_key)
+        content += _sources_note(sources)
+    except Exception as exc:
+        logger.error("gen_summary LLM failed: %s", exc, exc_info=True)
+        raise AppError(f"摘要生成失败：{str(exc)[:120]}，请稍后重试")
 
     return create_output(
         supabase, current_user["id"], course_id, "summary", content,
@@ -270,19 +308,29 @@ def gen_quiz(
 ) -> dict[str, Any]:
     """Generate multiple-choice exam questions from cleaned course chunks."""
     get_course(supabase, course_id)
-    art_ids = _resolve_artifact_ids(supabase, current_user["id"], course_id, body.scope_set_id, body.artifact_ids)
+    # quiz → past_exam STRICT (往年真题唯一来源，无降级)
+    art_ids = _resolve_artifact_ids(
+        supabase, current_user["id"], course_id,
+        body.scope_set_id, body.artifact_ids,
+        priority_doc_types=["past_exam"],
+        fallback_doc_types=None,
+    )
     ctx, sources = _get_context(supabase, current_user["id"], course_id, art_ids)
     if not ctx.strip():
-        raise AppError("No content found — please wait for files to be indexed")
+        raise AppError("未找到「往年考题」类型的文件。请在管理后台上传往年试卷并将 doc_type 设为「往年考题 (past_exam)」后重试。")
 
     openai_key = _get_openai_key(supabase)
     n = min(max(body.num_questions, 3), 20)
     source_names = ", ".join(s["file_name"] for s in sources) if sources else "course material"
+    # Bug 7 fix: 明确禁止使用课程材料之外的内容，防止幻觉题目
     system = f"""You are an exam question generator.
-Generate exactly {n} multiple-choice questions from the course content.
+Generate exactly {n} multiple-choice questions STRICTLY from the provided course content.
 Available source files: {source_names}
 
-IMPORTANT rules:
+CRITICAL rules:
+- ONLY generate questions based on facts explicitly stated in the provided course content below.
+- Do NOT invent, extrapolate, or use knowledge from outside the provided materials.
+- Every question MUST be answerable from the provided text.
 - Return ONLY a raw JSON array — absolutely no markdown fences, no ```json, no extra text before or after
 - Each option must be the answer text ONLY (no "A.", "B." prefix — the frontend adds that)
 - answer field must be a single uppercase letter: "A", "B", "C", or "D"
@@ -291,7 +339,12 @@ IMPORTANT rules:
 Format:
 [{{"question":"...","options":["option text","option text","option text","option text"],"answer":"A","explanation":"...","source_file":"filename.pdf"}}]"""
 
-    raw = _chat(system, f"Course content:\n\n{ctx}", openai_key)
+    # Issue 2 fix: wrap LLM call in try-catch to prevent unhandled 500
+    try:
+        raw = _chat(system, f"Course content:\n\n{ctx}", openai_key)
+    except Exception as exc:
+        logger.error("gen_quiz LLM failed: %s", exc, exc_info=True)
+        raise AppError(f"题目生成失败：{str(exc)[:120]}，请稍后重试")
     content_str = _extract_json(raw)
 
     try:
@@ -329,19 +382,41 @@ def gen_outline(
 ) -> dict[str, Any]:
     """Generate a hierarchical course outline from cleaned course chunks."""
     get_course(supabase, course_id)
-    art_ids = _resolve_artifact_ids(supabase, current_user["id"], course_id, body.scope_set_id, body.artifact_ids)
+    # outline → revision STRICT (复习资料唯一来源，无降级)
+    art_ids = _resolve_artifact_ids(
+        supabase, current_user["id"], course_id,
+        body.scope_set_id, body.artifact_ids,
+        priority_doc_types=["revision"],
+        fallback_doc_types=None,
+    )
     ctx, sources = _get_context(supabase, current_user["id"], course_id, art_ids)
     if not ctx.strip():
-        raise AppError("No content found — please wait for files to be indexed")
+        raise AppError("未找到「复习总结」类型的文件。请在管理后台上传复习资料并将 doc_type 设为「复习总结 (revision)」后重试。")
 
     openai_key = _get_openai_key(supabase)
+    # Issue 2+3 fix: strict admin-content filter + try-catch + NO sources appended to outline
+    # (Issue 4 fix: _sources_note removed — outline content is parsed as tree by frontend;
+    #  Markdown links in outline break the tree renderer and show as raw text)
     system = (
-        "You are a curriculum designer. Create a comprehensive study outline with topics, "
-        "subtopics, and key concepts. Use nested markdown bullet points. "
+        "You are a strict academic knowledge extractor for computer science courses. "
+        "Create a hierarchical study outline using nested markdown (## headings, ### subheadings, bullet points). "
+        "CRITICAL FILTERING RULES — you MUST NEVER include:\n"
+        "  - Course duration, hours, or scheduling (e.g. '2 hours', '3 weeks')\n"
+        "  - Instructor, tutor, or lecturer names (e.g. 'Tutor: Plum', 'Lecturer: Dr. Smith')\n"
+        "  - Administrative details: exam schedules, grading criteria, attendance, deadlines\n"
+        "  - Course introduction slides describing meta-information about the course itself\n"
+        "ONLY extract: core algorithms, technical concepts, formulas, definitions, theoretical principles. "
+        "Base the outline STRICTLY on the provided course content. "
+        "Do NOT add topics not present in the provided text. "
         "Respond in the same language as the content."
     )
-    content = _chat(system, f"Course content:\n\n{ctx}", openai_key)
-    content += _sources_note(sources)
+    try:
+        content = _chat(system, f"Course content:\n\n{ctx}", openai_key)
+        # NOTE: Do NOT append _sources_note here — outline content is parsed as a tree
+        # by ReviewOutlineTab; Markdown links would render as raw text nodes.
+    except Exception as exc:
+        logger.error("gen_outline LLM failed: %s", exc, exc_info=True)
+        raise AppError(f"大纲生成失败：{str(exc)[:120]}，请稍后重试")
 
     return create_output(
         supabase, current_user["id"], course_id, "outline", content,
@@ -358,7 +433,13 @@ def gen_flashcards(
 ) -> dict[str, Any]:
     """Generate flashcards from cleaned course chunks."""
     get_course(supabase, course_id)
-    art_ids = _resolve_artifact_ids(supabase, current_user["id"], course_id, body.scope_set_id, body.artifact_ids)
+    # flashcards → lecture knowledge points, fallback tutorial
+    art_ids = _resolve_artifact_ids(
+        supabase, current_user["id"], course_id,
+        body.scope_set_id, body.artifact_ids,
+        priority_doc_types=["lecture"],
+        fallback_doc_types=["tutorial"],
+    )
     ctx, _ = _get_context(supabase, current_user["id"], course_id, art_ids)
     if not ctx.strip():
         raise AppError("No content found — please wait for files to be indexed")
@@ -377,7 +458,12 @@ Format:
   {"type":"vocab","front":"term or concept","back":"definition or explanation"},
   {"type":"mcq","question":"...","options":["text","text","text","text"],"answer":"A","explanation":"..."}
 ]"""
-    raw = _chat(system, f"Course content:\n\n{ctx}", openai_key)
+    # Issue 2 fix: wrap LLM call in try-catch
+    try:
+        raw = _chat(system, f"Course content:\n\n{ctx}", openai_key)
+    except Exception as exc:
+        logger.error("gen_flashcards LLM failed: %s", exc, exc_info=True)
+        raise AppError(f"闪卡生成失败：{str(exc)[:120]}，请稍后重试")
     content = _extract_json(raw)
 
     try:
@@ -416,11 +502,15 @@ def ask_question(
     get_course(supabase, course_id)
 
     # Resolve scope → artifact IDs
+    # Priority: explicit scope_set > context_mode routing > full corpus
     art_ids: list[int] | None = None
     if body.scope_set_id:
         scope = get_scope_set(supabase, current_user["id"], body.scope_set_id)
         ids = scope.get("artifact_ids") or []
         art_ids = ids if ids else None
+    elif body.context_mode == "revision":
+        revision_ids = get_artifact_ids_by_doc_type(supabase, course_id, ["revision"])
+        art_ids = revision_ids if revision_ids else None
 
     # Resolve API keys (DB priority → env fallback)
     from app.services.llm_key_service import get_api_key
@@ -534,24 +624,34 @@ def translate_texts(
         return {"translations": []}
 
     openai_key = _get_openai_key(supabase)
-    target = "English" if body.target_lang == "en" else "Simplified Chinese (简体中文)"
-    source = "Chinese" if body.target_lang == "en" else "English"
+
+    # Issue 5 fix: explicit language-enforcement system prompt
+    if body.target_lang == "zh":
+        system_prompt = (
+            "你的唯一任务是将用户输入的英文文本翻译成简体中文（zh-CN）。"
+            "【强制规则】：\n"
+            "1. 所有输出必须是中文，不得保留英文原文。\n"
+            "2. 技术术语必须给出中文译名（例：Convolutional Neural Network → 卷积神经网络）。\n"
+            "3. 专有名词若无通用译名，可在括号内附英文：如 ResNet（残差网络）。\n"
+            "4. 仅输出翻译结果，禁止任何解释或评论。\n"
+            "5. 返回格式：纯 JSON 数组，例：[\"翻译1\",\"翻译2\"]，不带 markdown 代码块。"
+        )
+    else:
+        system_prompt = (
+            "Translate each numbered text to English. "
+            "Keep code identifiers and proper nouns unchanged. "
+            "Return ONLY a raw JSON array of translated strings. "
+            'No markdown fences, no extra text. Example: ["translation1","translation2"]'
+        )
+
     numbered = "\n---\n".join(f"[{i+1}] {t}" for i, t in enumerate(body.texts))
 
     from openai import OpenAI
-    client = OpenAI(api_key=openai_key)
+    client = OpenAI(api_key=openai_key, timeout=60.0)
     resp = client.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {
-                "role": "system",
-                "content": (
-                    f"Translate each numbered text from {source} to {target}. "
-                    "Keep technical terms, proper nouns, and code unchanged. "
-                    "Return ONLY a raw JSON array of translated strings in the same order. "
-                    'No markdown fences, no extra text. Example: ["translation1","translation2"]'
-                ),
-            },
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": numbered},
         ],
         temperature=0.1,

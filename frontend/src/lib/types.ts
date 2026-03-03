@@ -18,6 +18,27 @@ export interface Course {
   updated_at: string
 }
 
+// Semantic document category — drives RAG routing at query time.
+export type DocType = 'lecture' | 'tutorial' | 'revision' | 'past_exam' | 'assignment' | 'other'
+
+export const DOC_TYPE_LABELS: Record<DocType, string> = {
+  lecture:    '讲义',
+  tutorial:   '辅导/Lab',
+  revision:   '复习总结',
+  past_exam:  '往年考题',
+  assignment: '作业/Project',
+  other:      '其他',
+}
+
+export const DOC_TYPE_COLORS: Record<DocType, string> = {
+  lecture:    '#60a5fa',  // blue
+  tutorial:   '#a78bfa',  // purple
+  revision:   '#4ade80',  // green  ← most important
+  past_exam:  '#f97316',  // orange ← second most important
+  assignment: '#facc15',  // yellow
+  other:      '#6b7280',  // gray
+}
+
 export interface Artifact {
   id: number
   course_id: string
@@ -25,6 +46,7 @@ export interface Artifact {
   file_hash: string
   file_path: string
   file_type: string
+  doc_type: DocType
   status: 'pending' | 'approved' | 'rejected'
   storage_url?: string
   created_at: string
@@ -222,4 +244,17 @@ export interface KnowledgeGraph {
 export interface KnowledgeResult {
   outline: KnowledgeOutline
   graph: KnowledgeGraph
+}
+
+// ── User Feedback ──────────────────────────────────────────────────────────────
+
+export type FeedbackStatus = 'pending' | 'in_progress' | 'resolved'
+
+export interface Feedback {
+  id: string
+  user_id: string | null
+  content: string
+  page_url: string
+  status: FeedbackStatus
+  created_at: string
 }

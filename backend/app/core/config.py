@@ -28,6 +28,7 @@ class Settings(BaseSettings):
 
     # DeepSeek (optional — can also be set via admin panel DB)
     deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com"
 
     # Data directory (local files: PDFs, ChromaDB)
     data_dir: str = "../data"

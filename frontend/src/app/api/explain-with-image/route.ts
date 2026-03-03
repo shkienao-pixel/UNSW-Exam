@@ -11,9 +11,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { buildImagenPrompt } from '../generate/_shared'
 
-// Imagen 4 via Generative Language API
-const IMAGEN4_ENDPOINT =
-  'https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-ultra-generate-001:predict'
+/**
+ * Bug 5 fix:
+ *  - 使用 model waterfall 策略：先尝试 imagen-3.0-generate-001（稳定可用），
+ *    再尝试 imagen-4.0-ultra-generate-001（高质量但访问受限），
+ *    避免单个模型不可用时整体失败。
+ *  - 所有错误详细记录，便于排查。
+ */
+
+// Imagen 模型优先级：3.0 最稳定，4.0 ultra 高质量但需特殊权限
+const IMAGEN_MODELS = [
+  'imagen-3.0-generate-001',
+  'imagen-4.0-ultra-generate-001',
+]
+
+const IMAGEN_ENDPOINT_BASE =
+  'https://generativelanguage.googleapis.com/v1beta/models'
 
 export interface ExplainImageResponse {
   image_data_url: string | null
@@ -37,21 +50,36 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     const prompt = buildImagenPrompt(question, answer)
-    const imageDataUrl = await callImagen4(prompt, geminiKey)
+    const imageDataUrl = await callImagenWithFallback(prompt, geminiKey)
 
     return NextResponse.json({ image_data_url: imageDataUrl } satisfies ExplainImageResponse)
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Image generation failed'
-    console.error('[explain-with-image]', msg)
+    console.error('[explain-with-image] all models failed:', msg)
     return NextResponse.json({ image_data_url: null })
   }
 }
 
-// ── Imagen 4 REST call ────────────────────────────────────────────────────────
+// ── Imagen REST call with model waterfall ──────────────────────────────────────
 
-async function callImagen4(prompt: string, apiKey: string): Promise<string | null> {
-  const res = await fetch(`${IMAGEN4_ENDPOINT}?key=${apiKey}`, {
+async function callImagenWithFallback(prompt: string, apiKey: string): Promise<string | null> {
+  for (const model of IMAGEN_MODELS) {
+    try {
+      const result = await callImagenModel(model, prompt, apiKey)
+      if (result) return result
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn(`[explain-with-image] model ${model} failed: ${msg.slice(0, 120)}`)
+      // 继续尝试下一个模型
+    }
+  }
+  return null
+}
+
+async function callImagenModel(model: string, prompt: string, apiKey: string): Promise<string | null> {
+  const endpoint = `${IMAGEN_ENDPOINT_BASE}/${model}:predict?key=${apiKey}`
+  const res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -62,7 +90,7 @@ async function callImagen4(prompt: string, apiKey: string): Promise<string | nul
 
   if (!res.ok) {
     const errBody = await res.text()
-    throw new Error(`Imagen 4 API ${res.status}: ${errBody.slice(0, 200)}`)
+    throw new Error(`Imagen API (${model}) ${res.status}: ${errBody.slice(0, 200)}`)
   }
 
   const data = await res.json() as {

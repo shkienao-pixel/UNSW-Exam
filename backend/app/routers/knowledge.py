@@ -31,6 +31,7 @@ from app.services.course_service import (
     get_scope_set,
     list_outputs,
 )
+from app.services.rag_service import get_artifact_ids_by_doc_type
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -183,7 +184,8 @@ def _extract_json(text: str) -> str:
 
 def _chat(system: str, user: str, key: str) -> str:
     from openai import OpenAI
-    client = OpenAI(api_key=key)
+    # Issue 1 fix: 120s timeout prevents worker disconnects on slow LLM calls
+    client = OpenAI(api_key=key, timeout=120.0)
     resp = client.chat.completions.create(
         model="gpt-4o",
         messages=[
@@ -400,19 +402,35 @@ def build_knowledge(
         _save_knowledge(supabase, current_user["id"], body.course_id, result, body.scope_set_id)
         return result
 
-    # Resolve artifact scope
+    # ── Resolve artifact scope ─────────────────────────────────────────────────
+    # Priority: explicit artifact_ids > scope_set > doc_type routing > full corpus
+
     artifact_ids: list[int] | None = None
+    doc_type_hint: str | None = None   # for user-facing warning
+
     if body.artifact_ids:
+        # Caller supplied explicit IDs — use them directly
         artifact_ids = body.artifact_ids
     elif body.scope_set_id:
         scope        = get_scope_set(supabase, current_user["id"], body.scope_set_id)
         artifact_ids = scope.get("artifact_ids") or None
-
-    ctx, _ = _get_context(supabase, body.course_id, artifact_ids)
-    if not ctx.strip():
-        raise AppError("No content found — please upload and index files first")
+    else:
+        # Data-centric routing: revision STRICT (知识大纲/图谱只用复习资料，无降级)
+        revision_ids = get_artifact_ids_by_doc_type(supabase, body.course_id, ["revision"])
+        if revision_ids:
+            artifact_ids = revision_ids
+            doc_type_hint = "revision"
+        # else: artifact_ids stays None → will trigger error below
 
     try:
+        ctx, _ = _get_context(supabase, body.course_id, artifact_ids)
+        if not ctx.strip():
+            raise AppError(
+                "未找到「复习总结」类型的文件。"
+                "请在管理后台上传复习资料并将 doc_type 设为「复习总结 (revision)」，"
+                "然后执行「重新索引」后重试。"
+            )
+
         result = _stage_extract(ctx, openai_key)
         result["outline"]["course_id"]     = body.course_id
         result["outline"]["generated_at"]  = datetime.now(timezone.utc).isoformat()

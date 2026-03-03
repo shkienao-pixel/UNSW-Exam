@@ -3,8 +3,27 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+# Semantic document category — drives RAG routing at query time.
+# lecture    → 讲义 / Lecture slides
+# tutorial   → 辅导课 / Lab notes
+# revision   → 复习总结 (priority source for knowledge outline/graph)
+# past_exam  → 往年考题 (priority source for quiz generation)
+# assignment → 作业 / Project specs
+# other      → 其他
+DocType = Literal["lecture", "tutorial", "revision", "past_exam", "assignment", "other"]
+
+_DOC_TYPE_LABELS: dict[str, str] = {
+    "lecture":    "讲义",
+    "tutorial":   "辅导/Lab",
+    "revision":   "复习总结",
+    "past_exam":  "往年考题",
+    "assignment": "作业/Project",
+    "other":      "其他",
+}
 
 
 class CourseCreate(BaseModel):
@@ -27,6 +46,7 @@ class ArtifactOut(BaseModel):
     file_hash: str
     file_path: str | None = None
     file_type: str = "pdf"
+    doc_type: DocType = "lecture"
     status: str = "approved"
     storage_path: str | None = None
     storage_url: str | None = None

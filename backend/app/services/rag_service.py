@@ -81,6 +81,17 @@ _GARBAGE: list[tuple[str, str]] = [
     # Empty page markers from extraction
     (r'\[Page \d+\]\n(?=\[Page \d+\])', ''),
     (r'\[Page \d+\]\n\s*$', ''),
+    # Issue 3 fix: strip administrative/intro content common in lecture slides
+    # Tutor / Lecturer / Instructor lines
+    (r'(?mi)^\s*(tutor|lecturer|instructor|demonstrator|coordinator)\s*[:\-–]\s*.{0,80}$', ''),
+    # Duration / Hours lines (e.g. "Duration: 2 hours", "时长：2小时")
+    (r'(?mi)^\s*(duration|时长|class\s+hours?|lecture\s+hours?)\s*[:\-–]\s*.{0,60}$', ''),
+    # "Credits:", "Units:", "UoC:" lines
+    (r'(?mi)^\s*(credits?|units?\s*of\s*credit|uoc)\s*[:\-–]\s*.{0,40}$', ''),
+    # Exam/assessment schedule lines
+    (r'(?mi)^\s*(final\s+exam|mid.?term|quiz|assignment|assessment)\s*(date|due|schedule|worth)\s*[:\-–]?.{0,80}$', ''),
+    # "Welcome to / Introduction to COMPXXXX" slide titles
+    (r'(?mi)^(welcome\s+to|introduction\s+to)\s+(comp|math|elec|engg)\d{4}.*$', ''),
 ]
 
 def _clean(text: str) -> str:
@@ -261,6 +272,29 @@ def reindex_course(supabase: Client, course_id: str) -> dict[str, int]:
             errors += 1
 
     return {"processed": processed, "chunks": total_chunks, "errors": errors}
+
+
+# ── Doc-type–aware artifact ID resolution ─────────────────────────────────────
+
+def get_artifact_ids_by_doc_type(
+    supabase: Client,
+    course_id: str,
+    doc_types: list[str],
+) -> list[int]:
+    """Return IDs of approved artifacts matching any of the given doc_types.
+
+    Used by RAG routing to build a focused context from semantically-tagged docs.
+    Returns an empty list if no matching artifacts exist.
+    """
+    rows = (
+        supabase.table("artifacts")
+        .select("id")
+        .eq("course_id", course_id)
+        .eq("status", "approved")
+        .in_("doc_type", doc_types)
+        .execute()
+    ).data or []
+    return [r["id"] for r in rows]
 
 
 # ── Get all chunks (for full-doc generation) ─────────────────────────────────

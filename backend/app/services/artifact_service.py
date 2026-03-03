@@ -99,6 +99,7 @@ def store_file(
     file_bytes: bytes,
     status: str = "pending",
     uploaded_by: str | None = None,
+    doc_type: str = "lecture",
 ) -> dict:
     """Upload a file to Supabase Storage and record metadata.
 
@@ -139,6 +140,7 @@ def store_file(
         file_name=safe_name,
         file_hash=file_hash,
         file_type=file_type,
+        doc_type=doc_type,
         status=status,
         storage_path=storage_path,
         storage_url=storage_url,
@@ -153,6 +155,7 @@ def store_url(
     url: str,
     display_name: str = "",
     status: str = "pending",
+    doc_type: str = "other",
 ) -> dict:
     """Record a URL reference (no file upload, just metadata)."""
     import hashlib
@@ -166,6 +169,7 @@ def store_url(
         file_name=name,
         file_hash=url_hash,
         file_type="url",
+        doc_type=doc_type,
         status=status,
         storage_path=None,
         storage_url=url,

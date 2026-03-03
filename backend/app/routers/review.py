@@ -101,25 +101,50 @@ def save_settings(
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_db),
 ) -> dict[str, Any]:
-    """Upsert review settings for the current user + course."""
+    """Upsert review settings for the current user + course.
+
+    Bug 4 fix: wrapped in try/except — Supabase upsert failures (e.g. migration not
+    yet applied, network error) now return a proper 422 instead of an unhandled 500.
+    Reminder: run backend/migrations/009_review_plan.sql in Supabase dashboard first.
+    """
+    from fastapi import HTTPException
     user_id = current_user["id"]
     now = datetime.now(timezone.utc).isoformat()
 
-    resp = (
-        supabase.table("course_review_settings")
-        .upsert(
-            {
-                "user_id": user_id,
-                "course_id": body.course_id,
-                "review_start_at": body.review_start_at,
-                "exam_at": body.exam_at,
-                "updated_at": now,
-            },
-            on_conflict="user_id,course_id",
+    try:
+        resp = (
+            supabase.table("course_review_settings")
+            .upsert(
+                {
+                    "user_id":          user_id,
+                    "course_id":        body.course_id,
+                    "review_start_at":  body.review_start_at,
+                    "exam_at":          body.exam_at,
+                    "updated_at":       now,
+                },
+                on_conflict="user_id,course_id",
+            )
+            .execute()
         )
-        .execute()
-    )
-    return (resp.data or [{}])[0]
+        rows = resp.data or []
+        if rows:
+            return rows[0]
+        # Upsert succeeded but returned no rows — re-fetch the record
+        fetch = (
+            supabase.table("course_review_settings")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("course_id", body.course_id)
+            .limit(1)
+            .execute()
+        )
+        return (fetch.data or [{}])[0]
+    except Exception as exc:
+        logger.error("save_settings failed (check migration 009): %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=422,
+            detail=f"保存失败：{str(exc)[:200]}。请确认 migrations/009_review_plan.sql 已在 Supabase 中执行。",
+        )
 
 
 @router.get("/review/progress")

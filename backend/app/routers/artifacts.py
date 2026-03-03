@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, UploadFile, Body
+from fastapi import APIRouter, Depends, File, Form, UploadFile, Body
 from supabase import Client
 
 from app.core.dependencies import get_current_user, get_db
@@ -28,14 +28,20 @@ def get_artifacts(
     return freshen_artifact_urls(supabase, arts)
 
 
+_VALID_DOC_TYPES = {"lecture", "tutorial", "revision", "past_exam", "assignment", "other"}
+
+
 @router.post("/{course_id}/artifacts", response_model=ArtifactOut, status_code=201)
 def upload_artifact(
     course_id: str,
     file: UploadFile = File(...),
+    doc_type: str = Form("lecture"),
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_db),
 ) -> dict[str, Any]:
     """User upload — goes to pending review queue."""
+    if doc_type not in _VALID_DOC_TYPES:
+        doc_type = "lecture"
     get_course(supabase, course_id)
     file_bytes = file.file.read()
     return store_file(
@@ -46,6 +52,7 @@ def upload_artifact(
         file_bytes=file_bytes,
         status="pending",
         uploaded_by=current_user["id"],
+        doc_type=doc_type,
     )
 
 

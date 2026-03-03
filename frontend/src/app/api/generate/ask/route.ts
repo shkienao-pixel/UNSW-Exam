@@ -35,6 +35,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       const queryText   = (fd.get('query_text')   as string | null) ?? ''
       const courseId    = (fd.get('course_id')     as string | null) ?? ''
       const scopeSetId  = fd.get('scope_set_id')
+      const contextMode = (fd.get('context_mode')  as string | null) ?? 'all'
       const imageFile   = fd.get('image_file') as File | null
 
       if (!queryText) return NextResponse.json({ error: 'query_text is required' }, { status: 400 })
@@ -48,18 +49,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         courseId, queryText,
         scopeSetId ? Number(scopeSetId) : undefined,
         token,
+        contextMode,
       )
     }
 
     // JSON body — text-only path
     const body = await req.json()
-    const { question, course_id, scope_set_id } = body as {
-      question: string; course_id: string; scope_set_id?: number
+    const { question, course_id, scope_set_id, context_mode } = body as {
+      question: string; course_id: string; scope_set_id?: number; context_mode?: string
     }
     if (!question)  return NextResponse.json({ error: 'question is required' },   { status: 400 })
     if (!course_id) return NextResponse.json({ error: 'course_id is required' },  { status: 400 })
 
-    return forwardToFastAPI(course_id, question, scope_set_id, token)
+    return forwardToFastAPI(course_id, question, scope_set_id, token, context_mode ?? 'all')
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Ask failed'
@@ -110,6 +112,7 @@ async function forwardToFastAPI(
   question: string,
   scopeSetId: number | undefined,
   token: string,
+  contextMode: string = 'all',
 ): Promise<NextResponse> {
   const res = await fetch(`${BACKEND}/courses/${courseId}/generate/ask`, {
     method: 'POST',
@@ -117,7 +120,7 @@ async function forwardToFastAPI(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ question, scope_set_id: scopeSetId }),
+    body: JSON.stringify({ question, scope_set_id: scopeSetId, context_mode: contextMode }),
   })
 
   if (!res.ok) {
