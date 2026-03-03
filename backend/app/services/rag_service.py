@@ -20,6 +20,7 @@ Retrieval flow (for generation / Q&A):
 from __future__ import annotations
 
 import io
+import random
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -356,6 +357,75 @@ def get_course_chunks(
         for aid in art_ids
     ]
 
+    return context, sources
+
+
+# ── Sampled context (anti-repetition generation) ─────────────────────────────
+
+def get_course_chunks_sampled(
+    supabase: Client,
+    course_id: str,
+    artifact_ids: list[int] | None = None,
+    sample_n: int = 12,
+    fetch_limit: int = 200,
+    max_chars: int = 60_000,
+) -> tuple[str, list[dict[str, Any]]]:
+    """带随机采样的上下文构建，专为防重复生成设计。
+
+    流程：
+      1. 从 DB 检索最多 fetch_limit 个 chunks（覆盖课程全部知识面）
+      2. random.shuffle() 随机打乱顺序
+      3. 取前 sample_n 个，按 max_chars 上限拼接上下文
+
+    每次生成时 LLM 看到不同的"原材料"切片，从根本上避免重复题目。
+    返回 (context_text, sources)，格式与 get_course_chunks() 相同。
+    """
+    q = (
+        supabase.table("artifact_chunks")
+        .select("id, artifact_id, chunk_index, content")
+        .eq("course_id", course_id)
+        .limit(fetch_limit)
+    )
+    if artifact_ids:
+        q = q.in_("artifact_id", artifact_ids)
+
+    chunks = q.execute().data or []
+    if not chunks:
+        return "", []
+
+    # 随机打乱 — 确保每次传给 LLM 的知识面切片不同
+    random.shuffle(chunks)
+    sampled = chunks[:sample_n]
+
+    # 获取来源文件元数据
+    art_ids = list({c["artifact_id"] for c in sampled})
+    arts = (
+        supabase.table("artifacts")
+        .select("id, file_name, storage_url")
+        .in_("id", art_ids)
+        .execute()
+    ).data or []
+    art_map: dict[int, dict] = {a["id"]: a for a in arts}
+
+    # 拼接上下文（respect max_chars）
+    parts: list[str] = []
+    total = 0
+    for c in sampled:
+        content = c["content"]
+        if total + len(content) > max_chars:
+            break
+        parts.append(content)
+        total += len(content)
+
+    context = "\n\n".join(parts)
+    sources = [
+        {
+            "artifact_id": aid,
+            "file_name":   art_map[aid]["file_name"] if aid in art_map else "unknown",
+            "storage_url": art_map[aid].get("storage_url", "") if aid in art_map else "",
+        }
+        for aid in art_ids
+    ]
     return context, sources
 
 

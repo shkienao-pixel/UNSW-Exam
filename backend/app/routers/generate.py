@@ -40,7 +40,7 @@ from app.services.course_service import (
     list_artifacts,
     list_artifacts_by_ids,
 )
-from app.services.rag_service import get_artifact_ids_by_doc_type
+from app.services.rag_service import get_artifact_ids_by_doc_type, get_course_chunks_sampled
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -49,9 +49,10 @@ logger = logging.getLogger(__name__)
 # ── Request schemas ───────────────────────────────────────────────────────────
 
 class GenerateRequest(BaseModel):
-    scope_set_id:  int | None       = None
-    artifact_ids:  list[int] | None = None
-    num_questions: int               = 10
+    scope_set_id:   int | None       = None
+    artifact_ids:   list[int] | None = None
+    num_questions:  int               = 10
+    exclude_topics: list[str]         = []  # Step 4: 历史题目主题，生成时回避
 
 
 class AskRequest(BaseModel):
@@ -211,7 +212,13 @@ def _extract_json(text: str) -> str:
     return text
 
 
-def _chat(system: str, user: str, openai_key: Optional[str] = None) -> str:
+def _chat(
+    system: str,
+    user: str,
+    openai_key: Optional[str] = None,
+    temperature: float = 0.3,
+    top_p: float = 1.0,
+) -> str:
     """Call GPT-4o with a system+user message pair.
 
     ``openai_key`` is resolved in this order:
@@ -219,6 +226,7 @@ def _chat(system: str, user: str, openai_key: Optional[str] = None) -> str:
       2. Config / environment variable
 
     Issue 1 fix: Added 120s timeout to prevent worker disconnects on slow LLM calls.
+    temperature / top_p 可调，用于闪卡/题目生成时提升多样性。
     """
     from openai import OpenAI
     key = openai_key or get_settings().openai_api_key
@@ -229,7 +237,8 @@ def _chat(system: str, user: str, openai_key: Optional[str] = None) -> str:
             {"role": "system", "content": system},
             {"role": "user",   "content": user},
         ],
-        temperature=0.3,
+        temperature=temperature,
+        top_p=top_p,
     )
     return resp.choices[0].message.content or ""
 
@@ -306,7 +315,14 @@ def gen_quiz(
     current_user: dict = Depends(get_current_user),
     supabase: Client  = Depends(get_db),
 ) -> dict[str, Any]:
-    """Generate multiple-choice exam questions from cleaned course chunks."""
+    """Generate multiple-choice exam questions from cleaned course chunks.
+
+    Step 1 — 向量检索随机化: 从最多 200 个 chunks 中随机采样 15 个作为本次上下文，
+              确保每次生成覆盖不同知识点。
+    Step 2 — Temperature 调高至 0.7 + top_p=0.9，最大化题目形态多样性。
+    Step 3 — Prompt 加入防重复指令，要求挖掘细节、对比、应用等多种角度。
+    Step 4 — 支持 exclude_topics 字段，回避已存在的题目主题。
+    """
     get_course(supabase, course_id)
     # quiz → past_exam STRICT (往年真题唯一来源，无降级)
     art_ids = _resolve_artifact_ids(
@@ -315,19 +331,40 @@ def gen_quiz(
         priority_doc_types=["past_exam"],
         fallback_doc_types=None,
     )
-    ctx, sources = _get_context(supabase, current_user["id"], course_id, art_ids)
+
+    # Step 1: 随机采样 chunks — 每次生成的原材料不同
+    ctx, sources = get_course_chunks_sampled(
+        supabase, course_id, art_ids,
+        sample_n=15, fetch_limit=200,
+    )
     if not ctx.strip():
         raise AppError("未找到「往年考题」类型的文件。请在管理后台上传往年试卷并将 doc_type 设为「往年考题 (past_exam)」后重试。")
 
     openai_key = _get_openai_key(supabase)
     n = min(max(body.num_questions, 3), 20)
     source_names = ", ".join(s["file_name"] for s in sources) if sources else "course material"
-    # Bug 7 fix: 明确禁止使用课程材料之外的内容，防止幻觉题目
-    system = f"""You are an exam question generator.
+
+    # Step 4: 已存在题目主题排除指令
+    exclude_clause = ""
+    if body.exclude_topics:
+        topics_str = ", ".join(body.exclude_topics[:20])
+        exclude_clause = (
+            f"\n\nCRITICAL — Topic exclusion: The following topics already have questions. "
+            f"Do NOT generate any questions on these topics: {topics_str}"
+        )
+
+    # Step 3: 防重复出题 Prompt
+    system = f"""You are a creative exam question generator with a talent for finding non-obvious angles.
 Generate exactly {n} multiple-choice questions STRICTLY from the provided course content.
 Available source files: {source_names}
 
-CRITICAL rules:
+【Anti-repetition rules — MUST follow】
+- Dig into underappreciated details, common misconceptions, boundary conditions, and deep reasoning.
+- Vary question types across: application, comparison, error-analysis, multi-step reasoning, "what-if" scenarios.
+- Do NOT focus only on basic definitions — challenge students to apply and analyse.
+- Each question must test a DIFFERENT concept or angle from the others.{exclude_clause}
+
+Strict content rules:
 - ONLY generate questions based on facts explicitly stated in the provided course content below.
 - Do NOT invent, extrapolate, or use knowledge from outside the provided materials.
 - Every question MUST be answerable from the provided text.
@@ -339,9 +376,9 @@ CRITICAL rules:
 Format:
 [{{"question":"...","options":["option text","option text","option text","option text"],"answer":"A","explanation":"...","source_file":"filename.pdf"}}]"""
 
-    # Issue 2 fix: wrap LLM call in try-catch to prevent unhandled 500
     try:
-        raw = _chat(system, f"Course content:\n\n{ctx}", openai_key)
+        # Step 2: 提高 temperature 增加多样性
+        raw = _chat(system, f"Course content:\n\n{ctx}", openai_key, temperature=0.7, top_p=0.9)
     except Exception as exc:
         logger.error("gen_quiz LLM failed: %s", exc, exc_info=True)
         raise AppError(f"题目生成失败：{str(exc)[:120]}，请稍后重试")
@@ -431,7 +468,14 @@ def gen_flashcards(
     current_user: dict = Depends(get_current_user),
     supabase: Client  = Depends(get_db),
 ) -> dict[str, Any]:
-    """Generate flashcards from cleaned course chunks."""
+    """Generate flashcards from cleaned course chunks.
+
+    Step 1 — 向量检索随机化: 从最多 200 个 chunks 中随机采样 12 个，
+              确保每次闪卡覆盖课程不同章节。
+    Step 2 — Temperature 调高至 0.75 + top_p=0.9，最大化闪卡形态多样性。
+    Step 3 — Prompt 要求挖掘细节、易错点、应用场景，不只出基础定义。
+    Step 4 — 支持 exclude_topics 字段，回避已存在的闪卡主题。
+    """
     get_course(supabase, course_id)
     # flashcards → lecture knowledge points, fallback tutorial
     art_ids = _resolve_artifact_ids(
@@ -440,27 +484,51 @@ def gen_flashcards(
         priority_doc_types=["lecture"],
         fallback_doc_types=["tutorial"],
     )
-    ctx, _ = _get_context(supabase, current_user["id"], course_id, art_ids)
+
+    # Step 1: 随机采样 chunks — 每次生成覆盖不同章节
+    ctx, _ = get_course_chunks_sampled(
+        supabase, course_id, art_ids,
+        sample_n=12, fetch_limit=200,
+    )
+    if not ctx.strip():
+        # 回退到完整顺序上下文（兜底，防止 sampled 为空）
+        ctx, _ = _get_context(supabase, current_user["id"], course_id, art_ids)
     if not ctx.strip():
         raise AppError("No content found — please wait for files to be indexed")
 
     openai_key = _get_openai_key(supabase)
-    system = """You are a flashcard generator.
-Generate 15 flashcards from the course content. Mix vocabulary cards and MCQ cards.
 
-IMPORTANT rules:
-- Return ONLY a raw JSON array — absolutely no markdown fences, no ```json, no extra text
-- For MCQ cards: each option is answer text ONLY (no "A.", "B." prefix)
-- answer field must be a single uppercase letter: "A", "B", "C", or "D"
+    # Step 4: 已存在闪卡主题排除指令
+    exclude_clause = ""
+    if body.exclude_topics:
+        topics_str = "、".join(body.exclude_topics[:20])
+        exclude_clause = (
+            f"\n\n⚠️ 以下主题已有闪卡覆盖，本次生成必须完全回避，不得重复：{topics_str}"
+        )
 
-Format:
+    # Step 3: 防重复出题 Prompt（中文，匹配课程语境）
+    system = f"""你是一个富有创造力的出题专家。请根据提供的课程资料生成 15 张闪卡（flashcard）。
+
+【出题原则 — 必须严格遵守】
+1. 挖掘容易被忽略的细节、易混淆概念、边界条件和深层原理进行出题。
+2. 每次生成的题目必须在角度和考点上具有高度的随机性和差异性。
+3. 不要只盯着最基础的定义出题，要覆盖：应用题、对比题、推理题、错误排查题等多种题型。
+4. 词汇卡（vocab）侧重隐含含义、典型使用场景或易混淆点，而非字面定义。{exclude_clause}
+
+【格式要求】
+- 仅返回原始 JSON 数组，绝对不加 markdown 代码块或其他文字
+- MCQ 选项只写答案文本，不加"A."前缀
+- answer 字段只用单个大写字母："A"、"B"、"C" 或 "D"
+
+格式示例：
 [
-  {"type":"vocab","front":"term or concept","back":"definition or explanation"},
-  {"type":"mcq","question":"...","options":["text","text","text","text"],"answer":"A","explanation":"..."}
+  {{"type":"vocab","front":"概念名称","back":"深层含义或典型使用场景"}},
+  {{"type":"mcq","question":"...","options":["文本","文本","文本","文本"],"answer":"A","explanation":"..."}}
 ]"""
-    # Issue 2 fix: wrap LLM call in try-catch
+
     try:
-        raw = _chat(system, f"Course content:\n\n{ctx}", openai_key)
+        # Step 2: 提高 temperature 增加多样性
+        raw = _chat(system, f"课程资料：\n\n{ctx}", openai_key, temperature=0.75, top_p=0.9)
     except Exception as exc:
         logger.error("gen_flashcards LLM failed: %s", exc, exc_info=True)
         raise AppError(f"闪卡生成失败：{str(exc)[:120]}，请稍后重试")
