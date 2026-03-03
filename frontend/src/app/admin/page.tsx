@@ -159,6 +159,10 @@ function ArtifactsTab({ secret }: { secret: string }) {
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
   const [updatingDocType, setUpdatingDocType] = useState<number | null>(null)
+  const [docTypeFilter, setDocTypeFilter] = useState<DocType | 'all'>('all')
+
+  // 切换 status 时重置分类子过滤
+  useEffect(() => { setDocTypeFilter('all') }, [statusFilter])
 
   // 加载课程列表
   useEffect(() => {
@@ -383,9 +387,34 @@ function ArtifactsTab({ secret }: { secret: string }) {
         </div>
       </div>
 
-      {loadingFiles ? <Spinner /> : (
+      {/* 已批准时显示 doc_type 横向子过滤 */}
+      {statusFilter === 'approved' && (
+        <div className="flex gap-2 flex-wrap">
+          {([{ value: 'all', label: '全部' }, ...DOC_TYPE_OPTIONS] as { value: DocType | 'all'; label: string }[]).map(o => {
+            const isActive = docTypeFilter === o.value
+            const color = o.value === 'all' ? '#FFD700' : DOC_TYPE_COLORS[o.value as DocType]
+            return (
+              <button key={o.value} onClick={() => setDocTypeFilter(o.value)}
+                className="px-3 py-1 rounded-full text-xs font-medium transition-all"
+                style={{
+                  background: isActive ? `${color}22` : 'rgba(255,255,255,0.04)',
+                  color: isActive ? color : '#555',
+                  border: `1px solid ${isActive ? `${color}55` : 'rgba(255,255,255,0.08)'}`,
+                }}>
+                {o.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {loadingFiles ? <Spinner /> : (() => {
+        const displayedArtifacts = statusFilter === 'approved' && docTypeFilter !== 'all'
+          ? artifacts.filter(a => a.doc_type === docTypeFilter)
+          : artifacts
+        return (
         <div className="space-y-2">
-          {artifacts.map(a => (
+          {displayedArtifacts.map(a => (
             <div key={a.id} className="flex items-center gap-3 px-4 py-3 rounded-xl" style={rowStyle}>
               <span className="text-lg">{a.file_type === 'pdf' ? '📄' : '🔗'}</span>
               <div className="flex-1 min-w-0">
@@ -459,11 +488,16 @@ function ArtifactsTab({ secret }: { secret: string }) {
               <DeleteBtn onClick={() => deleteArtifact(a.id, a.file_name)} />
             </div>
           ))}
-          {artifacts.length === 0 && (
-            <Empty text={`${selectedCourse.code} 暂无${statusFilter === 'pending' ? '待审核' : statusFilter === 'approved' ? '已批准' : '已拒绝'}文件`} />
+          {displayedArtifacts.length === 0 && (
+            <Empty text={
+              statusFilter === 'approved' && docTypeFilter !== 'all'
+                ? `${selectedCourse.code} 暂无「${DOC_TYPE_LABELS[docTypeFilter as DocType]}」类文件`
+                : `${selectedCourse.code} 暂无${statusFilter === 'pending' ? '待审核' : statusFilter === 'approved' ? '已批准' : '已拒绝'}文件`
+            } />
           )}
         </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

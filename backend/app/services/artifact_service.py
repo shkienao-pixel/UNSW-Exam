@@ -19,7 +19,7 @@ from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.services.course_service import delete_artifact, save_artifact
 
-_UNSAFE_CHARS = re.compile(r"[^\w.\-]")
+_UNSAFE_CHARS = re.compile(r"[^a-zA-Z0-9.\-]")
 
 # Signed URL validity — 10 years (effectively permanent for this app)
 _SIGNED_URL_EXPIRY = 10 * 365 * 24 * 3600
