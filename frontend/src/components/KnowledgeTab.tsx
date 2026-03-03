@@ -511,14 +511,22 @@ export default function KnowledgeTab({ courseId }: { courseId: string }) {
   async function handleBuild() {
     setBuilding(true)
     setError(null)
+
+    // Client-side safety net: 5 min timeout in case the server never responds
+    const safetyTimer = setTimeout(() => {
+      setBuilding(false)
+      setError('知识图谱生成超时（超过 5 分钟），请检查网络或减少资料数量后重试')
+    }, 5 * 60 * 1000)
+
     try {
       const result = await api.knowledge.build(courseId, allowAiFill)
       setOutline(result.outline)
       setGraph(result.graph)
       setSelectedNode(null)
     } catch (e: any) {
-      setError(e.message || '生成失败')
+      setError(e.message || '生成失败，请稍后重试')
     } finally {
+      clearTimeout(safetyTimer)
       setBuilding(false)
     }
   }

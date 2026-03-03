@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Header, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 from supabase import Client
 
@@ -81,6 +81,29 @@ def approve_artifact(
     return art
 
 
+@router.patch("/artifacts/{artifact_id}/doc-type", response_model=ArtifactOut)
+def update_artifact_doc_type(
+    artifact_id: int,
+    doc_type: str = Body(embed=True),
+    _: None = Depends(_require_admin),
+    supabase: Client = Depends(get_db),
+) -> dict[str, Any]:
+    """Update the semantic doc_type label of an existing artifact (inline tagging)."""
+    if doc_type not in _VALID_DOC_TYPES:
+        raise HTTPException(status_code=422, detail=f"Invalid doc_type '{doc_type}'. Must be one of: {sorted(_VALID_DOC_TYPES)}")
+    # .select() required in supabase-py v2.x for UPDATE to return modified rows
+    resp = (
+        supabase.table("artifacts")
+        .update({"doc_type": doc_type})
+        .eq("id", artifact_id)
+        .select()
+        .execute()
+    )
+    if not resp.data:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    return resp.data[0]
+
+
 @router.patch("/artifacts/{artifact_id}/reject", response_model=ArtifactOut)
 def reject_artifact(
     artifact_id: int,
@@ -96,15 +119,21 @@ def reject_artifact(
 
 # ── Admin Direct Upload (bypasses review) ─────────────────────────────────────
 
+_VALID_DOC_TYPES = {"lecture", "tutorial", "revision", "past_exam", "assignment", "other"}
+
+
 @router.post("/courses/{course_id}/artifacts", response_model=ArtifactOut, status_code=201)
 def admin_upload_file(
     course_id: str,
     file: UploadFile = File(...),
+    doc_type: str = Form("lecture"),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     _: None = Depends(_require_admin),
     supabase: Client = Depends(get_db),
 ) -> dict[str, Any]:
     """Admin uploads a file directly — immediately approved, triggers RAG indexing."""
+    if doc_type not in _VALID_DOC_TYPES:
+        doc_type = "lecture"
     file_bytes = file.file.read()
     art = store_file(
         supabase=supabase,
@@ -114,6 +143,7 @@ def admin_upload_file(
         file_bytes=file_bytes,
         status="approved",
         uploaded_by=None,
+        doc_type=doc_type,
     )
     background_tasks.add_task(_bg_process, supabase, art)
     return art
@@ -124,10 +154,13 @@ def admin_add_url(
     course_id: str,
     url: str = Body(..., embed=True),
     display_name: str = Body(default="", embed=True),
+    doc_type: str = Body(default="other", embed=True),
     _: None = Depends(_require_admin),
     supabase: Client = Depends(get_db),
 ) -> dict[str, Any]:
     """Admin adds a URL reference — immediately approved (no text to index)."""
+    if doc_type not in _VALID_DOC_TYPES:
+        doc_type = "other"
     return store_url(
         supabase=supabase,
         user_id=None,
@@ -135,6 +168,7 @@ def admin_add_url(
         url=url,
         display_name=display_name,
         status="approved",
+        doc_type=doc_type,
     )
 
 

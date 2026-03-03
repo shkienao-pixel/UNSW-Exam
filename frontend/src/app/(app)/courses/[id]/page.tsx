@@ -5,7 +5,8 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
 import { useLang } from '@/lib/i18n'
 import { useGeneration } from '@/lib/generation-context'
-import type { Course, Artifact, ScopeSet, Output } from '@/lib/types'
+import type { Course, Artifact, ScopeSet, Output, DocType } from '@/lib/types'
+import { DOC_TYPE_LABELS, DOC_TYPE_COLORS } from '@/lib/types'
 import {
   FileText, Upload, Loader2, Zap, History, Settings2,
   CheckSquare, ChevronDown, MessageSquare, BookOpen, Send, RotateCcw,
@@ -177,13 +178,17 @@ function TranslatablePanel({ texts, courseId }: TranslatablePanelProps) {
   const [error, setError] = useState(false)
   const { lang } = useLang()
 
+  // Bug 6 fix: 题目来自英文课程材料，中文界面应翻译 EN→ZH，而非 ZH→EN
+  // 按当前 UI 语言决定目标语言：中文 UI → 译成中文；英文 UI → 译成中文（供参考）
+  const targetLang: 'en' | 'zh' = lang === 'zh' ? 'zh' : 'zh'
+
   async function toggle() {
     if (visible) { setVisible(false); return }
     setVisible(true)
     if (translated) return
     setLoading(true); setError(false)
     try {
-      const res = await api.generate.translate(courseId, texts, 'en')
+      const res = await api.generate.translate(courseId, texts, targetLang)
       setTranslated(res.translations)
     } catch {
       setError(true)
@@ -199,8 +204,8 @@ function TranslatablePanel({ texts, courseId }: TranslatablePanelProps) {
         style={{ color: '#555', opacity: 0.8 }}>
         <Languages size={12} />
         {visible
-          ? (lang === 'zh' ? '隐藏翻译' : 'Hide translation')
-          : (lang === 'zh' ? '显示英文翻译' : 'Show Chinese translation')
+          ? (lang === 'zh' ? '隐藏中文翻译' : 'Hide translation')
+          : (lang === 'zh' ? '显示中文翻译' : 'Show Chinese translation')
         }
       </button>
 
@@ -689,6 +694,7 @@ type Message = {
   explainImage?: string        // Gemini 生成的讲解图（data URL）
   explainFailed?: boolean      // 生成失败标记
   loadingExplain?: boolean
+  contextMode?: 'all' | 'revision'  // 生成该回答时的检索范围
 }
 
 // ── 图片灯箱 ─────────────────────────────────────────────────────────────────
@@ -734,6 +740,7 @@ function AskTab({ courseId, scopeSets, artifacts }: {
   const [imageFile, setImageFile]       = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [lightboxSrc, setLightboxSrc]   = useState<string | null>(null)
+  const [contextMode, setContextMode]   = useState<'all' | 'revision'>('all')
   const bottomRef     = useRef<HTMLDivElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const autoSentRef   = useRef(false)
@@ -741,6 +748,7 @@ function AskTab({ courseId, scopeSets, artifacts }: {
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
   const approvedCount = artifacts.filter(a => a.status === 'approved').length
+  const revisionCount = artifacts.filter(a => a.status === 'approved' && a.doc_type === 'revision').length
 
   function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -773,11 +781,12 @@ function AskTab({ courseId, scopeSets, artifacts }: {
     setLoading(true)
 
     try {
-      const res = await api.generate.ask(courseId, q, scopeSetId, imageFile ?? undefined)
+      const res = await api.generate.ask(courseId, q, scopeSetId, imageFile ?? undefined, contextMode)
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: res.answer,
         sources: res.sources,
+        contextMode,
       }])
     } catch (err: unknown) {
       setMessages(prev => [...prev, {
@@ -885,9 +894,44 @@ function AskTab({ courseId, scopeSets, artifacts }: {
                   border: `1px solid ${m.role === 'user' ? 'rgba(255,215,0,0.3)' : 'rgba(255,255,255,0.08)'}`,
                 }}>
                 {m.role === 'assistant'
-                  ? <div className="prose prose-invert prose-sm max-w-none"><ReactMarkdown>{m.content}</ReactMarkdown></div>
+                  ? (
+                    <div className="prose prose-invert prose-sm max-w-none">
+                      <ReactMarkdown
+                        components={{
+                          // 移动端响应式图片：强制 max-width 100%，防止溢出聊天气泡
+                          img: ({ src, alt }) => {
+                            const imgSrc = typeof src === 'string' ? src : ''
+                            return (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={imgSrc}
+                                alt={alt ?? 'AI 生成图'}
+                                style={{
+                                  maxWidth: '100%',
+                                  height: 'auto',
+                                  borderRadius: '0.75rem',
+                                  display: 'block',
+                                  marginTop: '0.75rem',
+                                  cursor: imgSrc ? 'zoom-in' : undefined,
+                                }}
+                                onClick={() => imgSrc && setLightboxSrc(imgSrc)}
+                              />
+                            )
+                          },
+                        }}
+                      >{m.content}</ReactMarkdown>
+                    </div>
+                  )
                   : m.content}
               </div>
+
+              {/* 检索范围徽章（仅复习资料模式显示） */}
+              {m.role === 'assistant' && m.contextMode === 'revision' && (
+                <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px]"
+                  style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)', color: '#a5b4fc' }}>
+                  📚 仅复习资料检索
+                </div>
+              )}
 
               {/* 来源引用 */}
               {m.role === 'assistant' && m.sources && m.sources.length > 0 && (
@@ -959,8 +1003,60 @@ function AskTab({ courseId, scopeSets, artifacts }: {
       </div>
 
       {/* 底部输入区（固定在底部，永远可见） */}
-      <div className="flex-shrink-0 px-8 pb-6 pt-3 border-t"
-        style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+      {/* Bug 2 fix: paddingBottom 叠加 safe-area-inset-bottom，防止 iOS Home Indicator 遮挡 */}
+      <div className="flex-shrink-0 px-8 pt-3 border-t"
+        style={{
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1.5rem)',
+          borderColor: 'rgba(255,255,255,0.05)',
+        }}>
+
+      {/* Context Mode 切换 */}
+      <div className="flex items-center gap-1.5 mb-2">
+        <span className="text-xs mr-1" style={{ color: '#555' }}>检索范围：</span>
+        {(
+          [
+            { mode: 'all'      as const, label: '🌐 全库提问', title: '在所有已上传资料中检索' },
+            { mode: 'revision' as const, label: '📚 仅复习资料', title: '仅在「复习总结」类型文件中检索' },
+          ] as const
+        ).map(({ mode, label, title }) => {
+          const active = contextMode === mode
+          const disabled = mode === 'revision' && revisionCount === 0
+          return (
+            <button
+              key={mode}
+              title={disabled ? '该课程暂无「复习总结」类型文件' : title}
+              disabled={disabled}
+              onClick={() => setContextMode(mode)}
+              className="text-xs px-2.5 py-1 rounded-full transition-all"
+              style={{
+                background: active
+                  ? (mode === 'revision' ? 'rgba(99,102,241,0.25)' : 'rgba(255,215,0,0.18)')
+                  : 'rgba(255,255,255,0.04)',
+                border: active
+                  ? (mode === 'revision' ? '1px solid rgba(99,102,241,0.5)' : '1px solid rgba(255,215,0,0.4)')
+                  : '1px solid rgba(255,255,255,0.08)',
+                color: active
+                  ? (mode === 'revision' ? '#a5b4fc' : '#FFD700')
+                  : '#555',
+                opacity: disabled ? 0.35 : 1,
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                fontWeight: active ? 600 : 400,
+              }}>
+              {label}
+            </button>
+          )
+        })}
+        {contextMode === 'revision' && revisionCount === 0 && (
+          <span className="text-xs" style={{ color: '#F87171' }}>
+            ⚠️ 暂无复习资料，请先上传
+          </span>
+        )}
+        {contextMode === 'revision' && revisionCount > 0 && (
+          <span className="text-xs" style={{ color: '#6366F1', opacity: 0.7 }}>
+            · {revisionCount} 份复习资料
+          </span>
+        )}
+      </div>
 
       {/* 图片预览 */}
       {imagePreview && (
@@ -1350,6 +1446,15 @@ function OutputsTab({ courseId, outputs, setOutputs }: {
 
 // ── 文件上传 Tab ──────────────────────────────────────────────────────────────
 
+const DOC_TYPE_OPTIONS: { value: DocType; label: string }[] = [
+  { value: 'lecture',    label: '📖 讲义 (Lecture)' },
+  { value: 'tutorial',   label: '🔬 辅导/Lab (Tutorial)' },
+  { value: 'revision',   label: '✅ 复习总结 (Revision)' },
+  { value: 'past_exam',  label: '📝 往年考题 (Past Exam)' },
+  { value: 'assignment', label: '📋 作业/Project (Assignment)' },
+  { value: 'other',      label: '📎 其他 (Other)' },
+]
+
 function FilesTab({ courseId, artifacts, setArtifacts, fileInputRef }: {
   courseId: string; artifacts: Artifact[]
   setArtifacts: React.Dispatch<React.SetStateAction<Artifact[]>>
@@ -1358,13 +1463,22 @@ function FilesTab({ courseId, artifacts, setArtifacts, fileInputRef }: {
   const { t } = useLang()
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+  const [pendingDocType, setPendingDocType] = useState<DocType>('lecture')
+  const [filterDocType, setFilterDocType] = useState<DocType | 'all'>('all')
 
   async function uploadFile(file: File) {
     setUploading(true)
-    try { const art = await api.artifacts.upload(courseId, file); setArtifacts(prev => [art, ...prev]) }
+    try {
+      const art = await api.artifacts.upload(courseId, file, pendingDocType)
+      setArtifacts(prev => [art, ...prev])
+    }
     catch (err: unknown) { alert(err instanceof Error ? err.message : t('upload_err')) }
     finally { setUploading(false) }
   }
+
+  const displayed = filterDocType === 'all'
+    ? artifacts
+    : artifacts.filter(a => a.doc_type === filterDocType)
 
   return (
     <div className="space-y-5">
@@ -1374,41 +1488,103 @@ function FilesTab({ courseId, artifacts, setArtifacts, fileInputRef }: {
         </h2>
         <p className="text-sm mt-0.5" style={{ color: '#555' }}>{t('files_sub')}</p>
       </div>
-      <div className="glass rounded-xl border-2 border-dashed flex flex-col items-center justify-center py-10 cursor-pointer transition-all"
-        style={{ borderColor: dragOver ? '#FFD700' : 'rgba(255,215,0,0.2)' }}
-        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) uploadFile(f) }}
-        onClick={() => fileInputRef.current?.click()}>
-        {uploading ? <Loader2 className="animate-spin mb-3" style={{ color: '#FFD700' }} size={28} /> : <Upload size={28} className="mb-3" style={{ color: dragOver ? '#FFD700' : '#444' }} />}
-        <p className="text-sm font-medium" style={{ color: dragOver ? '#FFD700' : '#888' }}>
-          {uploading ? t('files_uploading') : t('files_drag')}
-        </p>
-        <p className="text-xs mt-1" style={{ color: '#555' }}>{t('files_hint')}</p>
-        <input ref={fileInputRef} type="file" accept=".pdf,.docx,.doc,.py" className="hidden"
-          onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = '' }} />
+
+      {/* 文件类型选择 + 上传区 */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <label className="text-xs font-medium flex-shrink-0" style={{ color: '#888' }}>上传为：</label>
+          <select
+            value={pendingDocType}
+            onChange={e => setPendingDocType(e.target.value as DocType)}
+            className="flex-1 text-sm rounded-lg px-3 py-1.5 outline-none"
+            style={{
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,215,0,0.25)',
+              color: DOC_TYPE_COLORS[pendingDocType],
+            }}>
+            {DOC_TYPE_OPTIONS.map(o => (
+              <option key={o.value} value={o.value} style={{ background: '#0d0d1a', color: '#fff' }}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="glass rounded-xl border-2 border-dashed flex flex-col items-center justify-center py-8 cursor-pointer transition-all"
+          style={{ borderColor: dragOver ? '#FFD700' : 'rgba(255,215,0,0.2)' }}
+          onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) uploadFile(f) }}
+          onClick={() => fileInputRef.current?.click()}>
+          {uploading
+            ? <Loader2 className="animate-spin mb-2" style={{ color: '#FFD700' }} size={24} />
+            : <Upload size={24} className="mb-2" style={{ color: dragOver ? '#FFD700' : '#444' }} />}
+          <p className="text-sm font-medium" style={{ color: dragOver ? '#FFD700' : '#888' }}>
+            {uploading ? t('files_uploading') : t('files_drag')}
+          </p>
+          <p className="text-xs mt-1" style={{ color: '#555' }}>{t('files_hint')}</p>
+          <input ref={fileInputRef} type="file" accept=".pdf,.docx,.doc,.py" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = '' }} />
+        </div>
       </div>
+
+      {/* 过滤器 */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs" style={{ color: '#555' }}>筛选：</span>
+        {(['all', ...Object.keys(DOC_TYPE_LABELS)] as const).map(dt => (
+          <button key={dt} onClick={() => setFilterDocType(dt as DocType | 'all')}
+            className="px-2.5 py-0.5 rounded-lg text-xs font-medium transition-all"
+            style={{
+              background: filterDocType === dt
+                ? dt === 'all' ? 'rgba(255,215,0,0.15)' : `${DOC_TYPE_COLORS[dt as DocType]}22`
+                : 'rgba(255,255,255,0.04)',
+              color: filterDocType === dt
+                ? dt === 'all' ? '#FFD700' : DOC_TYPE_COLORS[dt as DocType]
+                : '#555',
+              border: `1px solid ${filterDocType === dt
+                ? dt === 'all' ? 'rgba(255,215,0,0.3)' : `${DOC_TYPE_COLORS[dt as DocType]}44`
+                : 'rgba(255,255,255,0.07)'}`,
+            }}>
+            {dt === 'all' ? '全部' : DOC_TYPE_LABELS[dt as DocType]}
+          </button>
+        ))}
+      </div>
+
+      {/* 文件列表 */}
       <div className="space-y-2">
-        {artifacts.map(a => (
+        {displayed.map(a => (
           <div key={a.id} className="glass flex items-center gap-3 px-4 py-3">
             <FileText size={16} style={{ color: '#FFD700', flexShrink: 0 }} />
             <span className="flex-1 text-sm text-white truncate">{a.file_name}</span>
-            <span className="text-xs px-2 py-0.5 rounded" style={{
+            {/* doc_type 标签 */}
+            <span className="text-xs px-2 py-0.5 rounded flex-shrink-0" style={{
+              background: `${DOC_TYPE_COLORS[a.doc_type]}1a`,
+              color: DOC_TYPE_COLORS[a.doc_type],
+              border: `1px solid ${DOC_TYPE_COLORS[a.doc_type]}44`,
+            }}>
+              {DOC_TYPE_LABELS[a.doc_type]}
+            </span>
+            {/* 审核状态 */}
+            <span className="text-xs px-2 py-0.5 rounded flex-shrink-0" style={{
               background: a.status === 'approved' ? 'rgba(0,200,100,0.1)' : a.status === 'rejected' ? 'rgba(255,68,68,0.1)' : 'rgba(255,165,0,0.1)',
               color: a.status === 'approved' ? '#00C864' : a.status === 'rejected' ? '#FF4444' : '#FFA500',
             }}>
               {a.status === 'approved' ? t('files_approved') : a.status === 'rejected' ? t('files_rejected') : t('files_pending')}
             </span>
-            <span className="text-xs" style={{ color: '#555' }}>{new Date(a.created_at).toLocaleDateString('zh-CN')}</span>
+            <span className="text-xs flex-shrink-0" style={{ color: '#555' }}>{new Date(a.created_at).toLocaleDateString('zh-CN')}</span>
             {a.storage_url && (
               <a href={a.storage_url} target="_blank" rel="noopener noreferrer" title={t('view_file')}
-                style={{ color: '#FFD700', opacity: 0.7 }} className="hover:opacity-100 transition-opacity">
+                style={{ color: '#FFD700', opacity: 0.7 }} className="hover:opacity-100 transition-opacity flex-shrink-0">
                 <ExternalLink size={14} />
               </a>
             )}
           </div>
         ))}
-        {artifacts.length === 0 && <p className="text-center py-8 text-sm" style={{ color: '#444' }}>{t('files_empty')}</p>}
+        {displayed.length === 0 && (
+          <p className="text-center py-8 text-sm" style={{ color: '#444' }}>
+            {filterDocType === 'all' ? t('files_empty') : `暂无「${DOC_TYPE_LABELS[filterDocType as DocType]}」类型文件`}
+          </p>
+        )}
       </div>
     </div>
   )

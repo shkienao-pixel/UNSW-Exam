@@ -87,7 +87,7 @@ def delete_course(supabase: Client, course_id: str) -> None:
 
 
 _ARTIFACT_COLS = (
-    "id, course_id, file_name, file_hash, file_path, file_type, status, "
+    "id, course_id, file_name, file_hash, file_path, file_type, doc_type, status, "
     "storage_path, storage_url, reject_reason, uploaded_by, created_at"
 )
 
@@ -148,6 +148,7 @@ def save_artifact(
     file_name: str,
     file_hash: str,
     file_type: str = "pdf",
+    doc_type: str = "lecture",
     status: str = "approved",
     storage_path: str | None = None,
     storage_url: str | None = None,
@@ -160,6 +161,7 @@ def save_artifact(
         "file_name": file_name,
         "file_hash": file_hash,
         "file_type": file_type,
+        "doc_type":  doc_type,
         "status": status,
         "created_at": now,
     }
@@ -197,10 +199,12 @@ def update_artifact_status(
     payload: dict[str, Any] = {"status": status}
     if reject_reason is not None:
         payload["reject_reason"] = reject_reason
+    # .select() required in supabase-py v2.x for UPDATE to return modified rows
     resp = (
         supabase.table("artifacts")
         .update(payload)
         .eq("id", artifact_id)
+        .select()
         .execute()
     )
     if not resp.data:
