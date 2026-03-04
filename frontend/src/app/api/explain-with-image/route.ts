@@ -9,7 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { buildImagenPrompt } from '../generate/_shared'
+import { buildImagenPrompt, verifyAndDeduct } from '../generate/_shared'
 
 /**
  * Bug 5 fix:
@@ -40,6 +40,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!geminiKey) {
     return NextResponse.json({ image_data_url: null, error: 'Gemini API key not configured' }, { status: 503 })
   }
+
+  // Verify token + deduct credit before calling Imagen (fixes #3)
+  const authErr = await verifyAndDeduct(token, 'gen_ask')
+  if (authErr) return authErr
 
   try {
     const body = await req.json() as { question?: string; answer?: string }

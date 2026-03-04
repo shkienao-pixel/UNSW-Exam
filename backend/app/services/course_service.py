@@ -176,12 +176,22 @@ def save_artifact(
     if uploaded_by is not None:
         payload["uploaded_by"] = uploaded_by
 
+    # Check for an existing record with the same (course_id, file_hash).
+    # Using upsert would silently overwrite status/user_id/doc_type when a
+    # different user uploads the same file — instead, return the existing row.
+    existing = (
+        supabase.table("artifacts")
+        .select("*")
+        .eq("course_id", course_id)
+        .eq("file_hash", file_hash)
+        .limit(1)
+        .execute()
+    )
+    if existing.data:
+        return existing.data[0]
+
     try:
-        resp = (
-            supabase.table("artifacts")
-            .upsert(payload, on_conflict="course_id,file_hash")
-            .execute()
-        )
+        resp = supabase.table("artifacts").insert(payload).execute()
     except Exception as exc:
         raise AppError(f"Failed to save artifact: {exc}") from exc
 
@@ -209,11 +219,22 @@ def update_artifact_status(
 
 
 def delete_artifact(
-    supabase: Client, user_id: str, course_id: str, artifact_id: int
+    supabase: Client, user_id: str | None, course_id: str, artifact_id: int
 ) -> None:
-    supabase.table("artifacts").delete().eq("id", artifact_id).eq(
-        "course_id", course_id
-    ).eq("user_id", user_id).execute()
+    """Delete an artifact DB record.
+
+    user_id may be None for admin-uploaded files — in that case we skip the
+    user_id filter and rely on id+course_id uniqueness (fixes #8).
+    """
+    q = (
+        supabase.table("artifacts")
+        .delete()
+        .eq("id", artifact_id)
+        .eq("course_id", course_id)
+    )
+    if user_id is not None:
+        q = q.eq("user_id", user_id)
+    q.execute()
 
 
 # ── Scope Sets ────────────────────────────────────────────────────────────────

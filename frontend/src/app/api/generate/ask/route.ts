@@ -13,7 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getGeminiClient, MULTIMODAL_VQA_SYSTEM, BACKEND } from '../_shared'
+import { getGeminiClient, MULTIMODAL_VQA_SYSTEM, BACKEND, verifyAndDeduct } from '../_shared'
 
 export interface AskResponse {
   question: string
@@ -42,6 +42,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       if (!courseId)  return NextResponse.json({ error: 'course_id is required' },  { status: 400 })
 
       if (imageFile && imageFile.size > 0) {
+        // Verify token + deduct credit before calling Gemini (fixes #3 + #4)
+        const authErr = await verifyAndDeduct(token, 'gen_ask')
+        if (authErr) return authErr
         return handleVQA(queryText, imageFile)
       }
 

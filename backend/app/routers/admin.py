@@ -188,6 +188,9 @@ def admin_upload_file(
     if doc_type not in _VALID_DOC_TYPES:
         doc_type = "lecture"
     file_bytes = file.file.read()
+    _MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+    if len(file_bytes) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File too large. Maximum upload size is 50 MB.")
     art = store_file(
         supabase=supabase,
         user_id=None,

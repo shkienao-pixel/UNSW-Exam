@@ -22,6 +22,11 @@ class BalanceOut(BaseModel):
     balance: int
 
 
+class DeductRequest(BaseModel):
+    """用于 Next.js 服务端路由代扣积分（如带图问答 VQA）。"""
+    type_: str  # 与 COSTS 表一致，如 'gen_ask'
+
+
 class GrantRequest(BaseModel):
     user_id: str
     amount: int
@@ -40,6 +45,25 @@ def get_balance(
     current_user: dict = Depends(get_current_user),
     db: Client = Depends(get_db),
 ) -> BalanceOut:
+    balance = credit_service.get_balance(db, current_user["id"])
+    return BalanceOut(balance=balance)
+
+
+@router.post("/deduct", response_model=BalanceOut)
+def deduct_credits(
+    body: DeductRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Client = Depends(get_db),
+) -> BalanceOut:
+    """Next.js 服务端路由调用：扣积分后返回新余额。
+
+    用于带图问答（VQA）等无法在 FastAPI 内部走 credit_guard 的场景。
+    token 合法性通过 get_current_user 验证，余额不足抛 402。
+    """
+    valid_types = set(credit_service.COSTS.keys())
+    if body.type_ not in valid_types:
+        raise HTTPException(status_code=422, detail=f"type_ must be one of: {sorted(valid_types)}")
+    credit_service.spend(db, current_user["id"], credit_service.COSTS[body.type_], body.type_)
     balance = credit_service.get_balance(db, current_user["id"])
     return BalanceOut(balance=balance)
 

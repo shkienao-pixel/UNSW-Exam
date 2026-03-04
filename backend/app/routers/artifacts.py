@@ -85,6 +85,10 @@ def upload_artifact(
         doc_type = "lecture"
     get_course(supabase, course_id)
     file_bytes = file.file.read()
+    # 文件大小限制：50 MB（防止大文件撑爆内存）
+    _MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+    if len(file_bytes) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File too large. Maximum upload size is 50 MB.")
     return store_file(
         supabase=supabase,
         user_id=current_user["id"],
@@ -144,6 +148,14 @@ def unlock_artifact(
 
     if art.get("doc_type") not in _LOCKED_DOC_TYPES:
         raise HTTPException(status_code=400, detail="This file does not require unlocking")
+
+    # 只允许解锁已审核通过的文件（fixes #7: missing status check）
+    if art.get("status") != "approved":
+        raise HTTPException(status_code=400, detail="Only approved files can be unlocked")
+
+    # 自己上传的文件无需解锁（免费放行，fixes #7: self-upload bypass）
+    if art.get("user_id") == user_id:
+        return {"ok": True, "already_unlocked": True, "storage_url": art.get("storage_url")}
 
     # 扣 1 积分（余额不足抛 InsufficientCreditsError → main.py 统一处理为 402）
     credit_service.spend(supabase, user_id, 1, "unlock_upload", ref_id=str(artifact_id), note=f"解锁文件 {art['file_name']}")

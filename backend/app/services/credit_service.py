@@ -83,15 +83,28 @@ def spend(
     ref_id: str | None = None,
     note: str | None = None,
 ) -> dict[str, Any]:
-    """扣除积分，余额不足时抛 InsufficientCreditsError。返回流水记录。"""
-    current = _ensure_row(db, user_id)
-    if current < amount:
-        raise InsufficientCreditsError(balance=current, required=amount)  # type: ignore[call-arg]
-    new_balance = current - amount
-    db.table("user_credits").update(
-        {"balance": new_balance, "updated_at": "now()"}
-    ).eq("user_id", user_id).execute()
-    return _append_txn(db, user_id, -amount, type_, ref_id, note)
+    """扣除积分，余额不足时抛 InsufficientCreditsError。返回流水记录。
+
+    使用乐观锁（WHERE balance = current）避免并发超扣：
+    - 若 UPDATE 影响 0 行（说明并发修改已发生），重试至多 3 次。
+    - 三次均失败则抛错，业务上等同余额不足。
+    """
+    for attempt in range(3):
+        current = _ensure_row(db, user_id)
+        if current < amount:
+            raise InsufficientCreditsError(balance=current, required=amount)  # type: ignore[call-arg]
+        new_balance = current - amount
+        # 乐观锁：WHERE user_id=X AND balance=current，并发修改后 balance 已变则更新失败
+        result = db.table("user_credits").update(
+            {"balance": new_balance, "updated_at": "now()"}
+        ).eq("user_id", user_id).eq("balance", current).execute()
+        if result.data:
+            return _append_txn(db, user_id, -amount, type_, ref_id, note)
+        # 并发冲突 — 重试
+        logger.warning("credit spend optimistic lock miss (attempt %d/3) user=%s", attempt + 1, user_id)
+    # 重试耗尽
+    final = _ensure_row(db, user_id)
+    raise InsufficientCreditsError(balance=final, required=amount)  # type: ignore[call-arg]
 
 
 def list_transactions(db: Client, user_id: str, limit: int = 30) -> list[dict]:

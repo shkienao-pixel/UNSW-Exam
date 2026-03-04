@@ -24,6 +24,34 @@ export function getGeminiClient(): GoogleGenerativeAI {
 
 export const BACKEND = process.env.BACKEND_URL || 'http://localhost:8005'
 
+/**
+ * 验证 Bearer token 并扣除积分。
+ * - 同时解决 #3（Next API 不验证 token 真伪）和 #4（带图问答绕过积分）。
+ * - 返回 null 表示成功；返回 NextResponse 表示需要直接返回给客户端（401/402/500）。
+ */
+export async function verifyAndDeduct(
+  token: string,
+  creditType: string,
+): Promise<import('next/server').NextResponse | null> {
+  const { NextResponse } = await import('next/server')
+  try {
+    const res = await fetch(`${BACKEND}/credits/deduct`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ type_: creditType }),
+    })
+    if (res.ok) return null   // success
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))
+    const detail = (err as { detail?: string }).detail ?? `HTTP ${res.status}`
+    return NextResponse.json({ error: detail }, { status: res.status })
+  } catch {
+    return NextResponse.json({ error: '鉴权服务不可达，请稍后重试' }, { status: 503 })
+  }
+}
+
 // ── System Prompts ────────────────────────────────────────────────────────────
 
 /**

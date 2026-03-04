@@ -51,6 +51,10 @@ class Settings(BaseSettings):
                 secrets.add(s)
         return secrets
 
+    # Supabase JWT secret — used for offline signature verification in fallback auth
+    # Same value as SUPABASE_JWT_SECRET in your Supabase project settings
+    jwt_secret: str = ""
+
     # App
     app_env: str = "development"
     cors_origins: str = "http://localhost:3000,http://localhost:8501"

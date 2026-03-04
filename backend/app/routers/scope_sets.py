@@ -90,5 +90,7 @@ def put_scope_set_items(
     supabase: Client = Depends(get_db),
 ) -> dict[str, Any]:
     get_course(supabase, course_id)
+    # Verify ownership BEFORE writing (fixes #6: write-before-check privilege escalation)
+    get_scope_set(supabase, current_user["id"], scope_set_id)
     replace_scope_set_items(supabase, scope_set_id, body.artifact_ids)
     return get_scope_set(supabase, current_user["id"], scope_set_id)

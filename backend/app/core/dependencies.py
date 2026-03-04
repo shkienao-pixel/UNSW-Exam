@@ -25,16 +25,41 @@ def get_db() -> Client:
 
 
 def _decode_jwt_payload(token: str) -> dict:
-    """Local JWT payload decode (no signature verification).
+    """Local JWT decode with HS256 signature verification.
 
-    Used ONLY as fallback when Supabase Auth API is unreachable.
-    Extracts sub/email/exp from the payload section.
+    Used ONLY as fallback when Supabase Auth API is unreachable (network
+    timeout / "Server disconnected").  Verifies the HMAC-SHA256 signature
+    against jwt_secret from config — rejects tokens with invalid signatures.
+
+    Falls back to unsigned parse ONLY when jwt_secret is not configured
+    (development / missing env var), logging a clear warning.
     """
+    from app.core.config import get_settings
+    secret = get_settings().jwt_secret
+
+    if secret:
+        # Verified path — requires PyJWT
+        try:
+            import jwt as pyjwt
+            payload = pyjwt.decode(
+                token,
+                secret,
+                algorithms=["HS256"],
+                options={"verify_aud": False},  # Supabase doesn't set aud always
+            )
+            return payload
+        except Exception as exc:
+            raise ValueError(f"JWT signature verification failed: {exc}") from exc
+
+    # Unsigned fallback — only reached when jwt_secret is not configured
+    logger.warning(
+        "JWT_SECRET not configured — falling back to UNVERIFIED payload decode. "
+        "Set JWT_SECRET in environment to enable signature verification."
+    )
     parts = token.split(".")
     if len(parts) != 3:
         raise ValueError("Invalid JWT structure")
     payload_b64 = parts[1]
-    # Restore base64 padding
     payload_b64 += "=" * (-len(payload_b64) % 4)
     payload_bytes = base64.urlsafe_b64decode(payload_b64)
     return json.loads(payload_bytes)
