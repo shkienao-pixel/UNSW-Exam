@@ -74,18 +74,22 @@ def _make_signed_url(supabase: Client, storage_path: str) -> str:
 
 
 def freshen_artifact_urls(supabase: Client, artifacts: list[dict]) -> list[dict]:
-    """Refresh signed URLs for a list of artifacts and write updates back to DB.
+    """Ensure every artifact has a signed URL, generating only where missing.
 
-    Called on every GET /artifacts so the stored URL never goes stale.
+    Signed URLs have a 10-year expiry so they are effectively permanent.
+    Regenerating on every request caused N sequential Storage API calls on
+    every page load — now we skip artifacts that already have a URL stored.
     """
     result: list[dict] = []
     for a in artifacts:
         sp = a.get("storage_path")
-        if not sp:
+        # Already has a URL — reuse it (10-year signed URLs don't expire in practice)
+        if not sp or a.get("storage_url"):
             result.append(a)
             continue
+        # URL is missing — generate and persist it
         fresh = _make_signed_url(supabase, sp)
-        if fresh and fresh != a.get("storage_url", ""):
+        if fresh:
             try:
                 supabase.table("artifacts").update({"storage_url": fresh}).eq("id", a["id"]).execute()
             except Exception:

@@ -217,7 +217,7 @@ export default function LandingPage() {
       {/* ── Navbar ── */}
       <nav className="flex items-center justify-between px-6 py-4 border-b"
         style={{ borderColor: 'rgba(255,215,0,0.08)', backdropFilter: 'blur(16px)', position: 'sticky', top: 0, zIndex: 10, background: 'rgba(8,8,15,0.85)' }}>
-        <Image src="/logo.png" alt="Exam Master" width={120} height={40} style={{ objectFit: 'contain' }} priority />
+        <Image src="/EMlogo.png" alt="Exam Master" width={148} height={44} style={{ objectFit: 'contain' }} priority />
         <div className="flex items-center gap-3">
           <Link href="/admin"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
