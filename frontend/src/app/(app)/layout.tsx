@@ -334,9 +334,10 @@ function SidebarShell({
 function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
-  const { user, loading, logout } = useAuth()
+  const { user, loading, logout, role } = useAuth()
   const [courses, setCourses]   = useState<Course[]>([])
   const [collapsed, setCollapsed] = useState(false)
+  const [credits, setCredits] = useState<number | null>(null)
   // Mobile drawer state
   const [drawerOpen, setDrawerOpen] = useState(false)
 
@@ -345,8 +346,13 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   }, [user, loading, router])
 
   useEffect(() => {
-    if (user) api.courses.list().then(setCourses).catch(() => {})
-  }, [user])
+    if (user) {
+      api.courses.list().then(setCourses).catch(() => {})
+      if (role !== 'guest') {
+        api.credits.balance().then(r => setCredits(r.balance)).catch(() => {})
+      }
+    }
+  }, [user, role])
 
   // Close drawer on route change
   useEffect(() => { setDrawerOpen(false) }, [pathname])
@@ -398,6 +404,13 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
             <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
               <div className="text-lg font-bold" style={{ color: '#FFD700' }}>✦ Exam Master</div>
               <div className="text-xs mt-0.5 truncate" style={{ color: '#555', maxWidth: 150 }}>{user.email}</div>
+              {role !== 'guest' && credits !== null && (
+                <div className="flex items-center gap-1 mt-1 text-xs font-semibold"
+                  style={{ color: '#FFD700' }}>
+                  <span>✦</span>
+                  <span>{credits} 积分</span>
+                </div>
+              )}
             </div>
           )}
           <button

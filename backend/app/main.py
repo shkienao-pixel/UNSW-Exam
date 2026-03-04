@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.supabase_client import get_supabase
-from app.routers import auth, courses, artifacts, scope_sets, outputs, admin, content, generate, review, knowledge, feedback
+from app.routers import auth, courses, artifacts, scope_sets, outputs, admin, content, generate, review, knowledge, feedback, credits
 
 settings = get_settings()
 
@@ -40,6 +40,8 @@ app.include_router(admin.router,      prefix="/admin",   tags=["admin"])
 app.include_router(review.router,     prefix="",         tags=["review"])
 app.include_router(knowledge.router,  prefix="",         tags=["knowledge"])
 app.include_router(feedback.router,   prefix="",         tags=["feedback"])
+app.include_router(credits.router,    prefix="/credits", tags=["credits"])
+app.include_router(credits.admin_router, prefix="/admin", tags=["admin"])
 
 
 @app.get("/health", tags=["system"])

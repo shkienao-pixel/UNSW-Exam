@@ -292,4 +292,9 @@ export const api = {
     archive: (id: number) =>
       req<{ ok: boolean }>(`/mistakes/${id}`, { method: 'DELETE' }),
   },
+
+  credits: {
+    balance: () => req<{ balance: number }>('/credits/balance'),
+    transactions: () => req<{ id: string; amount: number; type: string; note: string | null; created_at: string }[]>('/credits/transactions'),
+  },
 }

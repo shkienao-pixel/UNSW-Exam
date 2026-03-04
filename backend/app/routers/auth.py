@@ -11,6 +11,7 @@ from supabase import Client
 from app.core.dependencies import get_current_user, get_db
 from app.core.exceptions import AuthError
 from app.models.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse, UserOut
+from app.services import credit_service
 
 router = APIRouter()
 
@@ -69,6 +70,14 @@ def register(body: RegisterRequest, supabase: Client = Depends(get_db)) -> Token
         raise AuthError(
             "Registration successful. Please check your email to confirm your account."
         )
+
+    # 新用户 welcome bonus +5 积分
+    try:
+        user_id = resp.session.user.id
+        credit_service.earn(supabase, user_id, 5, "welcome_bonus", note="新用户欢迎积分")
+    except Exception:
+        pass  # 积分失败不阻断注册
+
     return _build_token_response(resp.session)
 
 
