@@ -46,6 +46,21 @@
 
 ---
 
+## Changelog
+
+### v0.5.0 (2026-03-04)
+
+**Fixes:**
+- Invite code verification before consumption; registration failure does not consume code
+- Insufficient credits error unified to HTTP 402 with structured response `{detail, balance, required}`
+- InsufficientCreditsModal redirect corrected to `view=resources`
+- Admin backend port fallback unified to port 8000
+- Invite code statistics field `used_count` corrected to `use_count` (matches DB schema)
+- ResourceHubTab `isOwner` check changed from `user_id` to `uploaded_by` (matches ArtifactOut)
+- credits.py admin secret validation changed to use `admin_secrets_set` (matches admin.py)
+
+---
+
 ## Tech Stack
 
 ### Backend
@@ -575,6 +590,21 @@ Access `/admin` and enter the `X-Admin-Secret` in the UI.
 | **知识图谱** | 可视化知识节点及关联关系（Cytoscape.js） |
 | **复习计划** | 间隔重复算法，考试倒计时 + 今日任务推荐 |
 | **Admin 后台** | 课程、文件、用户、邀请码、API 密钥、用户反馈管理 |
+
+---
+
+## 更新日志
+
+### v0.5.0（2026-03-04）
+
+**修复项：**
+- 邀请码先验证再消耗，注册失败不吃码
+- 积分不足错误统一为 HTTP 402 + 结构化响应 `{detail, balance, required}`
+- InsufficientCreditsModal 跳转修正为 `view=resources`
+- admin 后台端口 fallback 统一为 8000
+- 邀请码统计字段 `used_count` 改为 `use_count`（与 DB 一致）
+- ResourceHubTab isOwner 判断从 `user_id` 改为 `uploaded_by`（与 ArtifactOut 一致）
+- credits.py admin secret 改用 `admin_secrets_set`（与 admin.py 一致）
 
 ---
 
