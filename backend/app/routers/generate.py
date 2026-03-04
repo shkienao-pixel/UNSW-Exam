@@ -33,6 +33,7 @@ from supabase import Client
 from app.core.config import get_settings
 from app.core.dependencies import get_current_user, get_db
 from app.core.exceptions import AppError
+from app.services.credit_service import credit_guard
 from app.services.course_service import (
     create_output,
     get_course,
@@ -295,17 +296,18 @@ def gen_summary(
         "Only extract core concepts, algorithms, formulas, definitions, and theoretical knowledge. "
         "Respond in the same language as the content."
     )
-    try:
-        content = _chat(system, f"Course materials:\n\n{ctx}", openai_key)
-        content += _sources_note(sources)
-    except Exception as exc:
-        logger.error("gen_summary LLM failed: %s", exc, exc_info=True)
-        raise AppError(f"摘要生成失败：{str(exc)[:120]}，请稍后重试")
+    with credit_guard(supabase, current_user["id"], "gen_summary"):
+        try:
+            content = _chat(system, f"Course materials:\n\n{ctx}", openai_key)
+            content += _sources_note(sources)
+        except Exception as exc:
+            logger.error("gen_summary LLM failed: %s", exc, exc_info=True)
+            raise AppError(f"摘要生成失败：{str(exc)[:120]}，请稍后重试")
 
-    return create_output(
-        supabase, current_user["id"], course_id, "summary", content,
-        scope_set_id=body.scope_set_id, model_used="gpt-4o",
-    )
+        return create_output(
+            supabase, current_user["id"], course_id, "summary", content,
+            scope_set_id=body.scope_set_id, model_used="gpt-4o",
+        )
 
 
 @router.post("/{course_id}/generate/quiz")
@@ -376,38 +378,39 @@ Strict content rules:
 Format:
 [{{"question":"...","options":["option text","option text","option text","option text"],"answer":"A","explanation":"...","source_file":"filename.pdf"}}]"""
 
-    try:
-        # Step 2: 提高 temperature 增加多样性
-        raw = _chat(system, f"Course content:\n\n{ctx}", openai_key, temperature=0.7, top_p=0.9)
-    except Exception as exc:
-        logger.error("gen_quiz LLM failed: %s", exc, exc_info=True)
-        raise AppError(f"题目生成失败：{str(exc)[:120]}，请稍后重试")
-    content_str = _extract_json(raw)
+    with credit_guard(supabase, current_user["id"], "gen_quiz"):
+        try:
+            # Step 2: 提高 temperature 增加多样性
+            raw = _chat(system, f"Course content:\n\n{ctx}", openai_key, temperature=0.7, top_p=0.9)
+        except Exception as exc:
+            logger.error("gen_quiz LLM failed: %s", exc, exc_info=True)
+            raise AppError(f"题目生成失败：{str(exc)[:120]}，请稍后重试")
+        content_str = _extract_json(raw)
 
-    try:
-        questions = json.loads(content_str)
-        if not isinstance(questions, list):
+        try:
+            questions = json.loads(content_str)
+            if not isinstance(questions, list):
+                questions = []
+        except Exception:
             questions = []
-    except Exception:
-        questions = []
 
-    source_map = {s["file_name"]: s for s in sources}
-    for q in questions:
-        sf = q.get("source_file", "")
-        match = source_map.get(sf) or next(
-            (v for k, v in source_map.items() if sf and sf.lower() in k.lower()), None
+        source_map = {s["file_name"]: s for s in sources}
+        for q in questions:
+            sf = q.get("source_file", "")
+            match = source_map.get(sf) or next(
+                (v for k, v in source_map.items() if sf and sf.lower() in k.lower()), None
+            )
+            if match:
+                q["source_artifact_id"] = match.get("artifact_id")
+                q["source_url"] = match.get("storage_url", "")
+            q.pop("source_file", None)
+
+        content = json.dumps({"questions": questions, "sources": sources}, ensure_ascii=False)
+
+        return create_output(
+            supabase, current_user["id"], course_id, "quiz", content,
+            scope_set_id=body.scope_set_id, model_used="gpt-4o",
         )
-        if match:
-            q["source_artifact_id"] = match.get("artifact_id")
-            q["source_url"] = match.get("storage_url", "")
-        q.pop("source_file", None)
-
-    content = json.dumps({"questions": questions, "sources": sources}, ensure_ascii=False)
-
-    return create_output(
-        supabase, current_user["id"], course_id, "quiz", content,
-        scope_set_id=body.scope_set_id, model_used="gpt-4o",
-    )
 
 
 @router.post("/{course_id}/generate/outline")
@@ -447,18 +450,19 @@ def gen_outline(
         "Do NOT add topics not present in the provided text. "
         "Respond in the same language as the content."
     )
-    try:
-        content = _chat(system, f"Course content:\n\n{ctx}", openai_key)
-        # NOTE: Do NOT append _sources_note here — outline content is parsed as a tree
-        # by ReviewOutlineTab; Markdown links would render as raw text nodes.
-    except Exception as exc:
-        logger.error("gen_outline LLM failed: %s", exc, exc_info=True)
-        raise AppError(f"大纲生成失败：{str(exc)[:120]}，请稍后重试")
+    with credit_guard(supabase, current_user["id"], "gen_outline"):
+        try:
+            content = _chat(system, f"Course content:\n\n{ctx}", openai_key)
+            # NOTE: Do NOT append _sources_note here — outline content is parsed as a tree
+            # by ReviewOutlineTab; Markdown links would render as raw text nodes.
+        except Exception as exc:
+            logger.error("gen_outline LLM failed: %s", exc, exc_info=True)
+            raise AppError(f"大纲生成失败：{str(exc)[:120]}，请稍后重试")
 
-    return create_output(
-        supabase, current_user["id"], course_id, "outline", content,
-        scope_set_id=body.scope_set_id, model_used="gpt-4o",
-    )
+        return create_output(
+            supabase, current_user["id"], course_id, "outline", content,
+            scope_set_id=body.scope_set_id, model_used="gpt-4o",
+        )
 
 
 @router.post("/{course_id}/generate/flashcards")
@@ -526,26 +530,27 @@ def gen_flashcards(
   {{"type":"mcq","question":"...","options":["文本","文本","文本","文本"],"answer":"A","explanation":"..."}}
 ]"""
 
-    try:
-        # Step 2: 提高 temperature 增加多样性
-        raw = _chat(system, f"课程资料：\n\n{ctx}", openai_key, temperature=0.75, top_p=0.9)
-    except Exception as exc:
-        logger.error("gen_flashcards LLM failed: %s", exc, exc_info=True)
-        raise AppError(f"闪卡生成失败：{str(exc)[:120]}，请稍后重试")
-    content = _extract_json(raw)
+    with credit_guard(supabase, current_user["id"], "gen_flashcards"):
+        try:
+            # Step 2: 提高 temperature 增加多样性
+            raw = _chat(system, f"课程资料：\n\n{ctx}", openai_key, temperature=0.75, top_p=0.9)
+        except Exception as exc:
+            logger.error("gen_flashcards LLM failed: %s", exc, exc_info=True)
+            raise AppError(f"闪卡生成失败：{str(exc)[:120]}，请稍后重试")
+        content = _extract_json(raw)
 
-    try:
-        cards = json.loads(content)
-        if not isinstance(cards, list):
-            cards = []
-        content = json.dumps(cards, ensure_ascii=False)
-    except Exception:
-        content = "[]"
+        try:
+            cards = json.loads(content)
+            if not isinstance(cards, list):
+                cards = []
+            content = json.dumps(cards, ensure_ascii=False)
+        except Exception:
+            content = "[]"
 
-    return create_output(
-        supabase, current_user["id"], course_id, "flashcards", content,
-        scope_set_id=body.scope_set_id, model_used="gpt-4o",
-    )
+        return create_output(
+            supabase, current_user["id"], course_id, "flashcards", content,
+            scope_set_id=body.scope_set_id, model_used="gpt-4o",
+        )
 
 
 @router.post("/{course_id}/generate/ask")
@@ -610,72 +615,73 @@ def ask_question(
                     "storage_url": c.get("storage_url", ""),
                 })
 
-    # ── Stage 2: GPT filters chunks ────────────────────────────────────────────
-    if chunks:
-        filtered_context = gpt_filter_chunks(body.question, chunks, openai_key)
-    else:
-        # No indexed chunks — fall back to full document extraction
-        logger.info("No indexed chunks found, falling back to direct extraction")
-        ctx, sources = _fallback_extract(
-            supabase, current_user["id"], course_id, art_ids, max_chars=60_000
-        )
-        if not ctx.strip():
-            return {
-                "question":   body.question,
-                "answer":     "暂无可用的课程材料，请等待文件审核通过或联系管理员建立索引。",
-                "sources":    [],
-                "image_url":  None,
-                "model_used": "none",
-            }
-        filtered_context = ctx
+    with credit_guard(supabase, current_user["id"], "gen_ask"):
+        # ── Stage 2: GPT filters chunks ────────────────────────────────────────────
+        if chunks:
+            filtered_context = gpt_filter_chunks(body.question, chunks, openai_key)
+        else:
+            # No indexed chunks — fall back to full document extraction
+            logger.info("No indexed chunks found, falling back to direct extraction")
+            ctx, sources = _fallback_extract(
+                supabase, current_user["id"], course_id, art_ids, max_chars=60_000
+            )
+            if not ctx.strip():
+                return {
+                    "question":   body.question,
+                    "answer":     "暂无可用的课程材料，请等待文件审核通过或联系管理员建立索引。",
+                    "sources":    [],
+                    "image_url":  None,
+                    "model_used": "none",
+                }
+            filtered_context = ctx
 
-    # ── Stage 3: Generate answer ───────────────────────────────────────────────
-    answer = ""
-    model_used = "gpt-4o"
-
-    if gemini_key:
-        answer = gemini_generate_answer(body.question, filtered_context, gemini_key)
-        if answer:
-            model_used = "gemini-2.5-pro"
-
-    # GPT-4o fallback when Gemini is unavailable or fails
-    if not answer:
-        system = (
-            "You are a knowledgeable course tutor. "
-            "Answer the student's question based on the course material excerpts provided. "
-            "Be clear and educational. Synthesize information across multiple sources. "
-            "Respond in the same language as the question. "
-            "Do NOT add a sources section."
-        )
-        context_msg = (
-            f"Course material:\n\n{filtered_context}\n\n---\n\nQuestion: {body.question}"
-            if filtered_context.strip()
-            else body.question
-        )
-        answer = _chat(system, context_msg, openai_key)
+        # ── Stage 3: Generate answer ───────────────────────────────────────────────
+        answer = ""
         model_used = "gpt-4o"
 
-    # ── Stage 4: Optional image generation ────────────────────────────────────
-    image_url: Optional[str] = None
-    if gemini_key and should_generate_image(body.question, answer):
-        logger.info("Generating visual aid for query=%r", body.question[:60])
-        image_url = gemini_generate_image(
-            query=body.question,
-            answer=answer,
-            gemini_key=gemini_key,
-            supabase=supabase,
-            bucket=get_settings().supabase_storage_bucket,
-        )
-        if image_url:
-            answer += f"\n\n---\n\n![辅助图解]({image_url})"
+        if gemini_key:
+            answer = gemini_generate_answer(body.question, filtered_context, gemini_key)
+            if answer:
+                model_used = "gemini-2.5-pro"
 
-    return {
-        "question":   body.question,
-        "answer":     answer,
-        "sources":    sources,
-        "image_url":  image_url,
-        "model_used": model_used,
-    }
+        # GPT-4o fallback when Gemini is unavailable or fails
+        if not answer:
+            system = (
+                "You are a knowledgeable course tutor. "
+                "Answer the student's question based the course material excerpts provided. "
+                "Be clear and educational. Synthesize information across multiple sources. "
+                "Respond in the same language as the question. "
+                "Do NOT add a sources section."
+            )
+            context_msg = (
+                f"Course material:\n\n{filtered_context}\n\n---\n\nQuestion: {body.question}"
+                if filtered_context.strip()
+                else body.question
+            )
+            answer = _chat(system, context_msg, openai_key)
+            model_used = "gpt-4o"
+
+        # ── Stage 4: Optional image generation ────────────────────────────────────
+        image_url: Optional[str] = None
+        if gemini_key and should_generate_image(body.question, answer):
+            logger.info("Generating visual aid for query=%r", body.question[:60])
+            image_url = gemini_generate_image(
+                query=body.question,
+                answer=answer,
+                gemini_key=gemini_key,
+                supabase=supabase,
+                bucket=get_settings().supabase_storage_bucket,
+            )
+            if image_url:
+                answer += f"\n\n---\n\n![辅助图解]({image_url})"
+
+        return {
+            "question":   body.question,
+            "answer":     answer,
+            "sources":    sources,
+            "image_url":  image_url,
+            "model_used": model_used,
+        }
 
 
 @router.post("/{course_id}/generate/translate")

@@ -28,3 +28,13 @@ class ForbiddenError(AppError):
 class RateLimitError(AppError):
     def __init__(self, detail: str = "Rate limit exceeded") -> None:
         super().__init__(detail, status.HTTP_429_TOO_MANY_REQUESTS)
+
+
+class InsufficientCreditsError(AppError):
+    def __init__(self, balance: int, required: int) -> None:
+        super().__init__(
+            f"积分不足：当前 {balance} ✦，此操作需要 {required} ✦",
+            status.HTTP_402_PAYMENT_REQUIRED,
+        )
+        self.balance = balance
+        self.required = required

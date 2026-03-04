@@ -6,10 +6,14 @@
 """
 from __future__ import annotations
 
-from typing import Any
+import logging
+from contextlib import contextmanager
+from typing import Any, Generator
 from supabase import Client
 
-from app.core.exceptions import AppError
+from app.core.exceptions import InsufficientCreditsError
+
+logger = logging.getLogger(__name__)
 
 
 # ── 消费定价表 ────────────────────────────────────────────────
@@ -24,11 +28,6 @@ COSTS: dict[str, int] = {
 }
 
 
-class InsufficientCreditsError(AppError):
-    def __init__(self, balance: int, required: int) -> None:
-        super().__init__(f"积分不足：当前 {balance} ✦，需要 {required} ✦")
-        self.balance = balance
-        self.required = required
 
 
 # ── 内部工具 ──────────────────────────────────────────────────
@@ -87,7 +86,7 @@ def spend(
     """扣除积分，余额不足时抛 InsufficientCreditsError。返回流水记录。"""
     current = _ensure_row(db, user_id)
     if current < amount:
-        raise InsufficientCreditsError(balance=current, required=amount)
+        raise InsufficientCreditsError(balance=current, required=amount)  # type: ignore[call-arg]
     new_balance = current - amount
     db.table("user_credits").update(
         {"balance": new_balance, "updated_at": "now()"}
@@ -105,6 +104,31 @@ def list_transactions(db: Client, user_id: str, limit: int = 30) -> list[dict]:
         .execute()
     )
     return result.data
+
+
+@contextmanager
+def credit_guard(
+    db: Client,
+    user_id: str,
+    type_: str,
+    ref_id: str | None = None,
+) -> Generator[None, None, None]:
+    """扣除积分 Context Manager：进入时扣，异常时自动退款。
+
+    用法：
+        with credit_guard(db, user_id, "gen_summary"):
+            result = call_llm(...)   # 失败自动退款
+    """
+    cost = COSTS.get(type_, 1)
+    spend(db, user_id, cost, type_, ref_id)
+    try:
+        yield
+    except Exception:
+        try:
+            earn(db, user_id, cost, "refund", ref_id, note=f"{type_} 失败退款")
+        except Exception as refund_err:
+            logger.error("credit refund failed for %s/%s: %s", user_id, type_, refund_err)
+        raise
 
 
 def admin_grant(db: Client, user_id: str, amount: int, note: str | None = None) -> dict:

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { addMistake } from '@/lib/mistakes-store'
 import MistakesView from '@/components/MistakesView'
+import InsufficientCreditsModal from '@/components/InsufficientCreditsModal'
 import ReactMarkdown from 'react-markdown'
 import ReviewOutlineTab from '@/components/ReviewOutlineTab'
 import KnowledgeTab from '@/components/KnowledgeTab'
@@ -1147,6 +1148,7 @@ function GenerateTab({ courseId, scopeSets, setScopeSets, artifacts, setOutputs 
   const [generating, setGenerating] = useState(false)
   const [genSuccess, setGenSuccess] = useState<GenType | null>(null)
   const [error, setError] = useState('')
+  const [creditsModal, setCreditsModal] = useState<{ balance: number; required: number } | null>(null)
 
   const [showCreateScope, setShowCreateScope] = useState(false)
   const [newScopeName, setNewScopeName] = useState('')
@@ -1204,7 +1206,11 @@ function GenerateTab({ courseId, scopeSets, setScopeSets, artifacts, setOutputs 
       },
       onError: err => {
         if (isMounted.current) {
-          setError(err?.message || t('gen_err'))
+          if ((err as any)?.code === 'INSUFFICIENT_CREDITS') {
+            setCreditsModal({ balance: (err as any).balance ?? 0, required: (err as any).required ?? 1 })
+          } else {
+            setError(err?.message || t('gen_err'))
+          }
           setGenerating(false)
         }
       },
@@ -1315,7 +1321,20 @@ function GenerateTab({ courseId, scopeSets, setScopeSets, artifacts, setOutputs 
         disabled={generating || approvedCount === 0}>
         {generating ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
         {generating ? t('gen_loading') : t('gen_btn')}
+        {!generating && (
+          <span className="ml-auto text-xs opacity-60">
+            -{['outline', 'gen_plan'].includes(genType) ? 5 : 1} ✦
+          </span>
+        )}
       </button>
+
+      {creditsModal && (
+        <InsufficientCreditsModal
+          balance={creditsModal.balance}
+          required={creditsModal.required}
+          onClose={() => setCreditsModal(null)}
+        />
+      )}
 
       {error && (
         <div className="text-sm px-3 py-2 rounded-lg"

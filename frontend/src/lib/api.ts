@@ -62,6 +62,14 @@ async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
     }
     const err = await res.json().catch(() => ({ detail: res.statusText }))
     const raw = err.detail || err.message || `HTTP ${res.status}`
+    // 402 积分不足 — 抛出特殊错误供 UI 识别
+    if (res.status === 402) {
+      const creditsErr = new Error(raw) as Error & { code: string; balance?: number; required?: number }
+      creditsErr.code = 'INSUFFICIENT_CREDITS'
+      creditsErr.balance = err.balance
+      creditsErr.required = err.required
+      throw creditsErr
+    }
     throw new Error(humanizeError(raw, res.status))
   }
 
