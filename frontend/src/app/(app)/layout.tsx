@@ -16,6 +16,7 @@ import {
 // ── Feature navigation config ─────────────────────────────────────────────────
 
 const FEATURES = [
+  { view: 'resources',  emoji: '📚', zh: '课程资料',  en: 'Resources', featured: true  },
   { view: 'flashcards', emoji: '🃏', zh: '闪卡',    en: 'Flashcards', featured: true  },
   { view: 'mistakes',   emoji: '📝', zh: '错题集',   en: 'Mistakes',   featured: true  },
   { view: 'quiz',       emoji: '🎯', zh: '模拟题',   en: 'Quiz'                        },
@@ -23,7 +24,6 @@ const FEATURES = [
   { view: 'outline',    emoji: '📋', zh: '大纲',     en: 'Outline'                     },
   { view: 'ask',        emoji: '💬', zh: 'AI 问答',  en: 'AI Q&A'                      },
   { view: 'generate',   emoji: '⚡', zh: 'AI 生成',  en: 'AI Generate'                 },
-  { view: 'resources',  emoji: '📚', zh: '课程资料',  en: 'Resources', featured: true  },
   { view: 'scope',      emoji: '⚙️', zh: 'Scope',   en: 'Scope'                       },
 ]
 
