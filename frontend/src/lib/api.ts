@@ -107,6 +107,25 @@ async function nextReq<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>
 }
 
+/** 轮询异步生成 job，直到 done / failed / 超时。返回 Output 对象。 */
+async function _pollJob(courseId: string, jobId: string, timeoutMs = 180_000): Promise<Output> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 2000))
+    const job = await req<{ status: string; output_id: number | null; error_msg: string | null }>(
+      `/courses/${courseId}/jobs/${jobId}`
+    )
+    if (job.status === 'done' && job.output_id != null)
+      return req<Output>(`/courses/${courseId}/outputs/${job.output_id}`)
+    if (job.status === 'failed') {
+      const err = Object.assign(new Error(job.error_msg ?? '生成失败'), { code: 'GEN_FAILED' })
+      throw err
+    }
+    // pending / processing → continue polling
+  }
+  throw new Error('生成超时（3分钟），请稍后在历史记录中查看结果')
+}
+
 export const api = {
   auth: {
     register: (email: string, password: string, invite_code: string) =>
@@ -177,14 +196,22 @@ export const api = {
   },
 
   generate: {
-    summary:    (courseId: string, body: GenerateBody) =>
-      req<Output>(`/courses/${courseId}/generate/summary`, { method: 'POST', body: JSON.stringify(body) }),
-    quiz:       (courseId: string, body: GenerateBody) =>
-      req<Output>(`/courses/${courseId}/generate/quiz`, { method: 'POST', body: JSON.stringify(body) }),
-    outline:    (courseId: string, body: GenerateBody) =>
-      req<Output>(`/courses/${courseId}/generate/outline`, { method: 'POST', body: JSON.stringify(body) }),
-    flashcards: (courseId: string, body: GenerateBody) =>
-      req<Output>(`/courses/${courseId}/generate/flashcards`, { method: 'POST', body: JSON.stringify(body) }),
+    summary: async (courseId: string, body: GenerateBody): Promise<Output> => {
+      const { job_id } = await req<{ job_id: string }>(`/courses/${courseId}/generate/summary`, { method: 'POST', body: JSON.stringify(body) })
+      return _pollJob(courseId, job_id)
+    },
+    quiz: async (courseId: string, body: GenerateBody): Promise<Output> => {
+      const { job_id } = await req<{ job_id: string }>(`/courses/${courseId}/generate/quiz`, { method: 'POST', body: JSON.stringify(body) })
+      return _pollJob(courseId, job_id)
+    },
+    outline: async (courseId: string, body: GenerateBody): Promise<Output> => {
+      const { job_id } = await req<{ job_id: string }>(`/courses/${courseId}/generate/outline`, { method: 'POST', body: JSON.stringify(body) })
+      return _pollJob(courseId, job_id)
+    },
+    flashcards: async (courseId: string, body: GenerateBody): Promise<Output> => {
+      const { job_id } = await req<{ job_id: string }>(`/courses/${courseId}/generate/flashcards`, { method: 'POST', body: JSON.stringify(body) })
+      return _pollJob(courseId, job_id)
+    },
     /**
      * 发送问题到 Ask API。
      * - 无图片 → 直接调用 FastAPI 后端 RAG 流水线
