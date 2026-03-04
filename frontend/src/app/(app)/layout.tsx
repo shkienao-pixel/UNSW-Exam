@@ -3,8 +3,8 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import Image from 'next/image'
 import { useAuth } from '@/lib/auth-context'
+import ExamMasterLogo from '@/components/ExamMasterLogo'
 import { api } from '@/lib/api'
 import type { Course } from '@/lib/types'
 import { LangProvider, useLang } from '@/lib/i18n'
@@ -312,7 +312,7 @@ function SidebarShell({
         }}>
         {!collapsed && (
           <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
-            <Image src="/EMlogo.png" alt="Exam Master" width={128} height={38} style={{ objectFit: 'contain', objectPosition: 'left center' }} />
+            <ExamMasterLogo height={34} />
             <div className="text-xs mt-0.5 truncate" style={{ color: '#555', maxWidth: 150 }}>{user?.email}</div>
           </div>
         )}
@@ -405,7 +405,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
           }}>
           {!collapsed && (
             <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
-              <Image src="/EMlogo.png" alt="Exam Master" width={128} height={38} style={{ objectFit: 'contain', objectPosition: 'left center' }} />
+              <ExamMasterLogo height={34} />
               <div className="text-xs mt-0.5 truncate" style={{ color: '#555', maxWidth: 150 }}>{user.email}</div>
               {role !== 'guest' && credits !== null && (
                 <div className="flex items-center gap-1 mt-1 text-xs font-semibold"
@@ -504,7 +504,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
           </button>
 
           {/* Logo */}
-          <span className="text-sm font-bold" style={{ color: '#FFD700' }}>✦ Exam Master</span>
+          <ExamMasterLogo height={28} />
 
           {/* Course code badge (if in a course) */}
           {currentCourse && (
