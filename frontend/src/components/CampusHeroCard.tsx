@@ -35,7 +35,7 @@ function HRails({ side }: { side: 'left' | 'right' }) {
           width: 80,
           height: 1,
           transform: 'translateY(-50%)',
-          background: `rgba(255,215,0,${ln.op * 0.15})`,
+          background: `rgba(255,215,0,${ln.op * 0.09})`,
           overflow: 'visible',
         }}>
           <div style={{

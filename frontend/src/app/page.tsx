@@ -64,8 +64,8 @@ function HeroAINodes() {
           return (
             <g key={i}>
               <path d={d} fill="none"
-                stroke={isHov ? 'rgba(255,215,0,0.6)' : 'rgba(255,193,7,0.16)'}
-                strokeWidth={isHov ? 0.55 : 0.28}
+                stroke={isHov ? 'rgba(255,215,0,0.45)' : 'rgba(255,193,7,0.09)'}
+                strokeWidth={isHov ? 0.45 : 0.22}
                 strokeLinecap="round"
                 style={{
                   transition: 'stroke 0.3s, stroke-width 0.3s',
@@ -217,7 +217,7 @@ export default function LandingPage() {
       {/* ── Navbar ── */}
       <nav className="flex items-center justify-between px-6 py-4 border-b"
         style={{ borderColor: 'rgba(255,215,0,0.08)', backdropFilter: 'blur(16px)', position: 'sticky', top: 0, zIndex: 10, background: 'rgba(8,8,15,0.85)' }}>
-        <ExamMasterLogo height={40} />
+        <ExamMasterLogo height={28} />
         <div className="flex items-center gap-3">
           <Link href="/admin"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
@@ -265,7 +265,7 @@ export default function LandingPage() {
 
         {/* Subtitle */}
         <p className="text-base md:text-lg mb-2 max-w-lg leading-relaxed fade-in-up"
-          style={{ color: '#444455', animationDelay: '0.1s' }}>
+          style={{ color: '#444455', fontWeight: 300, animationDelay: '0.1s' }}>
           上传课件与历年真题，AI 自动提炼考点，生成闪卡与模拟试题。
         </p>
 
@@ -289,18 +289,32 @@ export default function LandingPage() {
       <section className="px-6 py-16 border-t" style={{ borderColor: 'rgba(255,215,0,0.06)' }}>
         <div className="max-w-4xl mx-auto">
           <h2 className="text-2xl font-bold text-center mb-12 text-white">为什么选择 Exam Master？</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {FEATURES.map(f => (
               <div key={f.title}
-                className="p-6 rounded-2xl"
+                className="p-7 rounded-2xl transition-all duration-300 group"
                 style={{
-                  background: 'rgba(255,215,0,0.03)',
-                  border: '1px solid rgba(255,215,0,0.1)',
+                  background: 'rgba(255,215,0,0.025)',
+                  border: '1px solid rgba(255,215,0,0.09)',
                   backdropFilter: 'blur(8px)',
-                }}>
-                <div className="mb-4" style={{ color: '#FFD700' }}>{f.icon}</div>
+                  cursor: 'default',
+                }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,215,0,0.055)'
+                  ;(e.currentTarget as HTMLDivElement).style.border = '1px solid rgba(212,168,67,0.22)'
+                  ;(e.currentTarget as HTMLDivElement).style.boxShadow = '0 0 28px rgba(212,168,67,0.08), 0 8px 32px rgba(0,0,0,0.4)'
+                  ;(e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)'
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,215,0,0.025)'
+                  ;(e.currentTarget as HTMLDivElement).style.border = '1px solid rgba(255,215,0,0.09)'
+                  ;(e.currentTarget as HTMLDivElement).style.boxShadow = 'none'
+                  ;(e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)'
+                }}
+              >
+                <div className="mb-4" style={{ color: '#D4A843' }}>{f.icon}</div>
                 <h3 className="text-base font-semibold text-white mb-2">{f.title}</h3>
-                <p className="text-sm leading-relaxed" style={{ color: '#555' }}>{f.desc}</p>
+                <p className="text-sm leading-relaxed" style={{ color: '#505060', fontWeight: 300 }}>{f.desc}</p>
               </div>
             ))}
           </div>
