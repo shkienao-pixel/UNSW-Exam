@@ -119,6 +119,7 @@ function CoursePageInner() {
             fileInputRef={fileInputRef}
             currentUserId={user?.id ?? ''}
             creditBalance={creditBalance}
+            onCreditSpent={amount => setCreditBalance(prev => prev - amount)}
           />
         )
       )}

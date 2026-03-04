@@ -537,10 +537,11 @@ interface Props {
   fileInputRef: React.RefObject<HTMLInputElement | null>
   currentUserId: string
   creditBalance: number
+  onCreditSpent: (amount: number) => void
 }
 
 export default function ResourceHubTab({
-  courseId, artifacts, setArtifacts, fileInputRef, currentUserId, creditBalance,
+  courseId, artifacts, setArtifacts, fileInputRef, currentUserId, creditBalance, onCreditSpent,
 }: Props) {
   const { t } = useLang()
   const [activeTab, setActiveTab]     = useState<DocType | 'all'>('all')
@@ -603,6 +604,7 @@ export default function ResourceHubTab({
     setArtifacts(prev => prev.map(a =>
       a.id === id ? { ...a, is_locked: false, storage_url: url ?? a.storage_url } : a
     ))
+    onCreditSpent(1)
   }
 
   // ── doc_type 修改回调 ─────────────────────────────────────────
@@ -611,7 +613,8 @@ export default function ResourceHubTab({
   }
 
   // ── 一键解锁全部回调 ───────────────────────────────────────────
-  async function handleUnlockAll(_spent: number) {
+  async function handleUnlockAll(spent: number) {
+    onCreditSpent(spent)
     try {
       const fresh = await api.artifacts.list(courseId)
       setArtifacts(fresh)
