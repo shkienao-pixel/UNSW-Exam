@@ -4,56 +4,9 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
+import Image from 'next/image'
 import { Loader2, Sparkles, Brain, BookOpen, Zap, Shield } from 'lucide-react'
 import CampusHeroCard from '@/components/CampusHeroCard'
-
-/** 几何 EM Logo — 金色 M 形 + E 元素 + 上升节点 */
-function ExamMasterLogo() {
-  return (
-    <div className="flex items-center gap-2.5 select-none">
-      {/* SVG geometric symbol */}
-      <svg width="32" height="30" viewBox="0 0 32 30" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <filter id="emGlow" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation="0.8" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-
-        {/* M shape: left post + two diagonals + right post */}
-        <line x1="3"  y1="26" x2="3"  y2="7"  stroke="#FFD700" strokeWidth="2.3" strokeLinecap="round" />
-        <line x1="3"  y1="7"  x2="14" y2="17" stroke="#FFD700" strokeWidth="2.3" strokeLinecap="round" />
-        <line x1="14" y1="17" x2="25" y2="7"  stroke="#FFD700" strokeWidth="2.3" strokeLinecap="round" />
-        <line x1="25" y1="7"  x2="25" y2="26" stroke="#FFD700" strokeWidth="2.3" strokeLinecap="round" />
-
-        {/* E integration: bottom bar + mid bar */}
-        <line x1="3"  y1="26" x2="18" y2="26" stroke="#FFD700" strokeWidth="2.3" strokeLinecap="round" />
-        <line x1="3"  y1="20" x2="13" y2="20" stroke="#FFD700" strokeWidth="1.6" strokeLinecap="round" strokeOpacity="0.6" />
-
-        {/* Rising node — top-right, symbolises ascent */}
-        <circle cx="29" cy="4" r="2" fill="#FFD700" filter="url(#emGlow)">
-          <animate attributeName="opacity" values="1;0.45;1" dur="2.2s" repeatCount="indefinite" />
-          <animate attributeName="r" values="2;2.6;2" dur="2.2s" repeatCount="indefinite" />
-        </circle>
-        {/* Connector from M-right-top to rising node */}
-        <line x1="25" y1="7" x2="29" y2="4" stroke="#FFD700" strokeWidth="1.4" strokeLinecap="round" strokeOpacity="0.45" />
-      </svg>
-
-      {/* Wordmark */}
-      <div className="leading-none">
-        <span className="font-black tracking-tight" style={{ color: '#fff', fontSize: '1.05rem' }}>
-          Exam
-        </span>
-        <span className="font-black tracking-tight ml-0.5" style={{ color: '#FFD700', fontSize: '1.05rem' }}>
-          Master
-        </span>
-      </div>
-    </div>
-  )
-}
 
 const FEATURES = [
   {
@@ -113,7 +66,7 @@ export default function LandingPage() {
       {/* ── Navbar ── */}
       <nav className="flex items-center justify-between px-6 py-4 border-b"
         style={{ borderColor: 'rgba(255,215,0,0.08)', backdropFilter: 'blur(16px)', position: 'sticky', top: 0, zIndex: 10, background: 'rgba(8,8,15,0.85)' }}>
-        <ExamMasterLogo />
+        <Image src="/logo.png" alt="Exam Master" width={120} height={40} style={{ objectFit: 'contain' }} priority />
         <div className="flex items-center gap-3">
           <Link href="/admin"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
