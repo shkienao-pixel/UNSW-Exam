@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown'
 import {
   Loader2, CheckCircle, XCircle, Trash2, Plus, RefreshCw,
   Users, BookOpen, FileText, Ticket, ChevronLeft, Key, DatabaseZap, Upload, MessageSquare, Sparkles,
-  Lock, Zap, Shield, ChevronRight, AlertTriangle, X, Calendar, Info,
+  Lock, Zap, Shield, ChevronRight, AlertTriangle, X, Calendar, Info, Coins, SlidersHorizontal,
 } from 'lucide-react'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8005'
@@ -57,6 +57,7 @@ interface Artifact {
 }
 interface User {
   id: string; email: string; created_at: string; last_sign_in_at: string | null; email_confirmed: boolean
+  credits?: number
 }
 interface Invite { id: string; code: string; note: string | null; max_uses: number; used_count: number; created_at: string }
 interface ApiKey { id: number; provider: 'openai' | 'gemini' | 'deepseek'; label: string; is_active: boolean; created_at: string; updated_at: string }
@@ -833,26 +834,247 @@ function ArtifactsTab({ secret }: { secret: string }) {
 
 // ── Users tab ─────────────────────────────────────────────────────────────────
 
-function UsersTab({ secret }: { secret: string }) {
-  const [users, setUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(true)
+// ── 积分调整 Modal ─────────────────────────────────────────────────────────────
+
+function PointsAdjustModal({
+  user,
+  secret,
+  onClose,
+  onSuccess,
+}: {
+  user: User
+  secret: string
+  onClose: () => void
+  onSuccess: (userId: string, newBalance: number) => void
+}) {
+  const [action, setAction] = useState<'add' | 'deduct'>('add')
+  const [amount, setAmount] = useState('50')
+  const [note, setNote] = useState('')
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  async function confirm() {
+    const n = parseInt(amount, 10)
+    if (!n || n <= 0) { setError('请输入正整数金额'); return }
+    setLoading(true); setError('')
+    try {
+      const res = await adminReq<{ ok: boolean; balance: number }>(
+        secret,
+        `/admin/users/${user.id}/credits/adjust`,
+        { method: 'POST', body: JSON.stringify({ action, amount: n, note: note.trim() || undefined }) },
+      )
+      onSuccess(user.id, res.balance)
+      onClose()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '操作失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const currentCredits = user.credits ?? 0
+  const previewBalance = action === 'add'
+    ? currentCredits + (parseInt(amount, 10) || 0)
+    : Math.max(0, currentCredits - (parseInt(amount, 10) || 0))
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.78)' }}
+      onClick={() => !loading && onClose()}>
+      <div className="relative w-full max-w-md mx-4 rounded-2xl p-6"
+        style={{ background: '#0c0c1a', border: '1px solid rgba(255,215,0,0.2)', boxShadow: '0 24px 80px rgba(0,0,0,0.8)' }}
+        onClick={e => e.stopPropagation()}>
+
+        {/* 标题 */}
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <SlidersHorizontal size={17} style={{ color: '#FFD700' }} />
+            <h3 className="text-base font-bold text-white">调整用户积分</h3>
+          </div>
+          <button onClick={() => !loading && onClose()} style={{ color: '#555' }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* 用户信息 */}
+        <div className="mb-5 px-4 py-3 rounded-xl flex items-center gap-3"
+          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+          <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold"
+            style={{ background: 'rgba(255,215,0,0.14)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}>
+            {user.email[0].toUpperCase()}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-white truncate">{user.email}</p>
+            <p className="text-xs mt-0.5 flex items-center gap-1.5" style={{ color: '#888' }}>
+              <span>当前余额：</span>
+              <span className="font-semibold" style={{ color: '#FFD700' }}>⚡ {currentCredits} 积分</span>
+            </p>
+          </div>
+        </div>
+
+        {/* 操作类型切换 */}
+        <div className="mb-4">
+          <p className="text-xs mb-2 font-medium" style={{ color: '#666' }}>操作类型</p>
+          <div className="grid grid-cols-2 gap-2">
+            {(['add', 'deduct'] as const).map(a => (
+              <button key={a} onClick={() => setAction(a)}
+                className="py-2.5 rounded-xl text-sm font-semibold transition-all"
+                style={{
+                  background: action === a
+                    ? (a === 'add' ? 'rgba(74,222,128,0.15)' : 'rgba(239,68,68,0.15)')
+                    : 'rgba(255,255,255,0.04)',
+                  color: action === a
+                    ? (a === 'add' ? '#4ade80' : '#f87171')
+                    : '#555',
+                  border: action === a
+                    ? `1px solid ${a === 'add' ? 'rgba(74,222,128,0.35)' : 'rgba(239,68,68,0.35)'}`
+                    : '1px solid rgba(255,255,255,0.07)',
+                }}>
+                {a === 'add' ? '➕ 赠送 / 增加' : '➖ 扣除'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 变动数量 */}
+        <div className="mb-4">
+          <p className="text-xs mb-2 font-medium" style={{ color: '#666' }}>变动数量（积分）</p>
+          <input
+            type="number"
+            min={1}
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+            className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+            style={{
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              color: '#fff',
+            }}
+            onFocus={e => (e.currentTarget.style.borderColor = 'rgba(255,215,0,0.45)')}
+            onBlur={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)')}
+            placeholder="输入正整数"
+          />
+        </div>
+
+        {/* 备注 */}
+        <div className="mb-5">
+          <p className="text-xs mb-2 font-medium" style={{ color: '#666' }}>备注 / 原因（可选）</p>
+          <input
+            type="text"
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+            style={{
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              color: '#fff',
+            }}
+            onFocus={e => (e.currentTarget.style.borderColor = 'rgba(255,215,0,0.45)')}
+            onBlur={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)')}
+            placeholder="如：内测奖励、Bug 补偿、充值到账..."
+          />
+        </div>
+
+        {/* 执行后预览余额 */}
+        <div className="mb-4 px-4 py-2.5 rounded-xl flex justify-between items-center text-sm"
+          style={{ background: 'rgba(255,215,0,0.05)', border: '1px solid rgba(255,215,0,0.12)' }}>
+          <span style={{ color: '#777' }}>执行后余额</span>
+          <span className="font-bold" style={{ color: '#FFD700' }}>⚡ {previewBalance} 积分</span>
+        </div>
+
+        {error && (
+          <p className="mb-3 text-xs px-3 py-2 rounded-lg"
+            style={{ color: '#ff8080', background: 'rgba(255,80,80,0.1)', border: '1px solid rgba(255,80,80,0.2)' }}>
+            {error}
+          </p>
+        )}
+
+        {/* 按钮 */}
+        <div className="flex gap-3">
+          <button onClick={() => !loading && onClose()} disabled={loading}
+            className="flex-1 py-2.5 rounded-xl text-sm"
+            style={{ background: 'rgba(255,255,255,0.05)', color: '#666', border: '1px solid rgba(255,255,255,0.08)' }}>
+            取消
+          </button>
+          <button onClick={confirm} disabled={loading}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+            style={{ background: 'rgba(255,215,0,0.18)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.35)' }}>
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+            {loading ? '执行中...' : '确认执行'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Toast 通知 ─────────────────────────────────────────────────────────────────
+
+function Toast({ message, onDone }: { message: string; onDone: () => void }) {
   useEffect(() => {
-    adminReq<User[]>(secret, '/admin/users')
-      .then(setUsers)
-      .catch((e: unknown) => setError(String(e)))
-      .finally(() => setLoading(false))
+    const t = setTimeout(onDone, 3000)
+    return () => clearTimeout(t)
+  }, [onDone])
+  return (
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-2xl text-sm font-medium flex items-center gap-2 shadow-2xl"
+      style={{ background: 'rgba(20,20,36,0.97)', border: '1px solid rgba(74,222,128,0.4)', color: '#4ade80', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}>
+      <CheckCircle size={15} /> {message}
+    </div>
+  )
+}
+
+function UsersTab({ secret }: { secret: string }) {
+  const [users, setUsers] = useState<User[]>([])
+  const [credits, setCredits] = useState<Record<string, number>>({})
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [adjustTarget, setAdjustTarget] = useState<User | null>(null)
+  const [toast, setToast] = useState('')
+
+  const load = useCallback(async () => {
+    setError('')
+    try {
+      const [usersData, creditsData] = await Promise.all([
+        adminReq<User[]>(secret, '/admin/users'),
+        adminReq<Record<string, number>>(secret, '/admin/users/credits'),
+      ])
+      setUsers(usersData)
+      setCredits(creditsData)
+    } catch (e: unknown) {
+      setError(String(e))
+    } finally {
+      setLoading(false)
+    }
   }, [secret])
+
+  useEffect(() => { load() }, [load])
+
+  function handleAdjustSuccess(userId: string, newBalance: number) {
+    setCredits(prev => ({ ...prev, [userId]: newBalance }))
+    const u = users.find(u => u.id === userId)
+    setToast(u ? `已成功更新 ${u.email} 的积分余额为 ${newBalance}` : '积分已更新')
+  }
+
+  const userWithCredits = users.map(u => ({ ...u, credits: credits[u.id] ?? 0 }))
 
   return (
     <div className="space-y-4 fade-in-up">
+      {toast && <Toast message={toast} onDone={() => setToast('')} />}
+      {adjustTarget && (
+        <PointsAdjustModal
+          user={{ ...adjustTarget, credits: credits[adjustTarget.id] ?? 0 }}
+          secret={secret}
+          onClose={() => setAdjustTarget(null)}
+          onSuccess={handleAdjustSuccess}
+        />
+      )}
       {error && <ErrorBox msg={error} />}
       {loading ? <Spinner /> : (
         <>
           <div className="space-y-2">
-            {users.map(u => (
-              <div key={u.id} className="flex items-center gap-4 px-4 py-3 rounded-2xl transition-all duration-200"
+            {userWithCredits.map(u => (
+              <div key={u.id}
+                className="flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200"
                 style={rowStyle}
                 onMouseEnter={e => {
                   (e.currentTarget as HTMLElement).style.background = 'rgba(255,215,0,0.03)'
@@ -862,10 +1084,14 @@ function UsersTab({ secret }: { secret: string }) {
                   (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.025)'
                   ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.07)'
                 }}>
-                <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-                  style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700', fontSize: 13, fontWeight: 700, border: '1px solid rgba(255,215,0,0.2)' }}>
+
+                {/* 头像 */}
+                <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold"
+                  style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.2)' }}>
                   {u.email[0].toUpperCase()}
                 </div>
+
+                {/* 邮箱 + 时间 */}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-white truncate">{u.email}</p>
                   <p className="text-xs mt-0.5" style={{ color: '#555' }}>
@@ -873,9 +1099,37 @@ function UsersTab({ secret }: { secret: string }) {
                     {u.last_sign_in_at && ` · 最近登录 ${new Date(u.last_sign_in_at).toLocaleDateString('zh-CN')}`}
                   </p>
                 </div>
+
+                {/* 积分余额 */}
+                <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg flex-shrink-0"
+                  style={{ background: 'rgba(255,215,0,0.08)', border: '1px solid rgba(255,215,0,0.16)' }}>
+                  <span style={{ color: '#FFD700', fontSize: 12 }}>⚡</span>
+                  <span className="text-xs font-semibold" style={{ color: '#FFD700' }}>{u.credits}</span>
+                </div>
+
+                {/* 验证状态 */}
                 <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium flex-shrink-0 ${u.email_confirmed ? 'badge-success' : 'badge-warning'}`}>
                   {u.email_confirmed ? '已验证' : '未验证'}
                 </span>
+
+                {/* 调整积分按钮 */}
+                <button
+                  onClick={() => setAdjustTarget(u)}
+                  title="调整积分"
+                  className="flex-shrink-0 p-1.5 rounded-lg transition-all"
+                  style={{ color: '#555', border: '1px solid rgba(255,255,255,0.07)' }}
+                  onMouseEnter={e => {
+                    (e.currentTarget as HTMLElement).style.color = '#FFD700'
+                    ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,215,0,0.35)'
+                    ;(e.currentTarget as HTMLElement).style.background = 'rgba(255,215,0,0.08)'
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLElement).style.color = '#555'
+                    ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.07)'
+                    ;(e.currentTarget as HTMLElement).style.background = 'transparent'
+                  }}>
+                  <SlidersHorizontal size={14} />
+                </button>
               </div>
             ))}
             {users.length === 0 && <Empty text="暂无用户" />}

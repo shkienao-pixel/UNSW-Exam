@@ -279,6 +279,40 @@ def admin_list_users(
     ]
 
 
+@router.get("/users/credits")
+def admin_get_user_credits(
+    _: None = Depends(_require_admin),
+    supabase: Client = Depends(get_db),
+) -> dict[str, int]:
+    """返回所有用户的积分余额 map：{user_id: balance}。"""
+    rows = supabase.table("user_credits").select("user_id, balance").execute().data or []
+    return {r["user_id"]: r["balance"] for r in rows}
+
+
+class CreditAdjustBody(BaseModel):
+    action: str          # "add" | "deduct"
+    amount: int          # 正整数
+    note: str | None = None
+
+
+@router.post("/users/{user_id}/credits/adjust")
+def admin_adjust_user_credits(
+    user_id: str,
+    body: CreditAdjustBody,
+    _: None = Depends(_require_admin),
+    supabase: Client = Depends(get_db),
+) -> dict[str, Any]:
+    """管理员手动增减用户积分。action='add' 增加，action='deduct' 扣除（下限 0）。"""
+    if body.action not in ("add", "deduct"):
+        raise HTTPException(status_code=422, detail="action must be 'add' or 'deduct'")
+    if body.amount <= 0:
+        raise HTTPException(status_code=422, detail="amount must be a positive integer")
+    amount = body.amount if body.action == "add" else -body.amount
+    credit_service.admin_grant(supabase, user_id, amount, note=body.note)
+    new_balance = credit_service.get_balance(supabase, user_id)
+    return {"ok": True, "user_id": user_id, "balance": new_balance}
+
+
 # ── Course Management (admin only) ────────────────────────────────────────────
 
 @router.get("/courses", response_model=list[CourseOut])
