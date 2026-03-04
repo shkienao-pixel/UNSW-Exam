@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { Loader2, Sparkles, Brain, BookOpen, Zap, Shield } from 'lucide-react'
 import CampusHeroCard from '@/components/CampusHeroCard'
+import LandingEffects from '@/components/LandingEffects'
 
 const FEATURES = [
   {
@@ -61,6 +62,7 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: '#08080f', color: '#fff' }}>
+      <LandingEffects />
 
       {/* ── Navbar ── */}
       <nav className="flex items-center justify-between px-6 py-4 border-b"

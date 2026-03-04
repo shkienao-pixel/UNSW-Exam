@@ -3,10 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import {
-  BookOpen, AlertCircle, Zap, FileText, ArrowRight,
-  Brain, MessageSquare, Sparkles, Upload, Cpu, LayoutGrid,
-} from 'lucide-react'
+import { BookOpen, AlertCircle, Zap, FileText, ArrowRight } from 'lucide-react'
 
 const NAV_PILLS = [
   { icon: <BookOpen size={14} />, label: 'Flashcards',       labelCn: '闪卡' },
@@ -15,158 +12,69 @@ const NAV_PILLS = [
   { icon: <FileText size={14} />, label: 'Practice Exams',    labelCn: '模拟题' },
 ]
 
-interface NodeDef {
-  Icon: React.ElementType
-  label: string
-  /** 0-100, vertical position percentage */
-  pct: number
-  delay: string
-}
 
-const LEFT_NODES: NodeDef[] = [
-  { Icon: Upload,     label: 'Upload', pct: 20, delay: '0s'   },
-  { Icon: Cpu,        label: 'AI',     pct: 50, delay: '0.4s' },
-  { Icon: LayoutGrid, label: 'Index',  pct: 80, delay: '0.8s' },
-]
-const RIGHT_NODES: NodeDef[] = [
-  { Icon: Brain,         label: 'Learn', pct: 20, delay: '0.2s' },
-  { Icon: MessageSquare, label: 'Ask',   pct: 50, delay: '0.6s' },
-  { Icon: Sparkles,      label: 'Magic', pct: 80, delay: '1.0s' },
+// ── Horizontal scan rails (extend left/right from card) ──────────────────────
+// Each "rail" is a horizontal line at a given % of the card height,
+// with a glowing particle sweeping from outside toward the card edge.
+const H_LINES = [
+  { pct: 18,  dur: '2.6s', delay: '0s',   op: 0.55 },
+  { pct: 36,  dur: '3.4s', delay: '0.8s', op: 0.35 },
+  { pct: 54,  dur: '2.2s', delay: '1.5s', op: 0.50 },
+  { pct: 72,  dur: '4.0s', delay: '0.4s', op: 0.30 },
+  { pct: 88,  dur: '3.0s', delay: '2.0s', op: 0.40 },
 ]
 
-// ── Side rail with S-curve animation ──────────────────────────────────────────
-function SideRail({ side, nodes }: { side: 'left' | 'right'; nodes: NodeDef[] }) {
+function HRails({ side }: { side: 'left' | 'right' }) {
   const isLeft = side === 'left'
-  // ViewBox: 64 wide × 360 tall — stretched to actual height via preserveAspectRatio
-  const W = 64
-  const cx = W / 2     // 32
-  const amp = 18       // horizontal oscillation amplitude
-
-  // S-curve: two full sine periods traversing the height
-  // Left rail oscillates: center → right → center → left → center → right → center → left → center
-  // Right rail is the mirror
-  const s = isLeft ? 1 : -1
-  const curve =
-    `M ${cx} 0 ` +
-    `C ${cx + s*amp} 45, ${cx - s*amp} 90,  ${cx} 135 ` +
-    `S ${cx + s*amp} 180, ${cx} 225 ` +
-    `S ${cx - s*amp} 270, ${cx} 315 ` +
-    `S ${cx + s*amp} 360, ${cx} 360`
-
-  const pid  = `p-${side}`
-  const gid  = `g-${side}`
-
   return (
     <div
       className="absolute top-0 bottom-0 hidden lg:block pointer-events-none"
-      style={{ [isLeft ? 'left' : 'right']: 0, width: W, overflow: 'visible' }}>
-
-      {/* ── SVG curve + travelling particles ── */}
-      <svg width={W} height="100%"
-        viewBox={`0 0 ${W} 360`}
-        preserveAspectRatio="none"
-        style={{ overflow: 'visible', display: 'block' }}>
-        <defs>
-          <path id={pid} d={curve} />
-          {/* Glow filter */}
-          <filter id={gid} x="-80%" y="-80%" width="260%" height="260%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="b" />
-            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-        </defs>
-
-        {/* Ghost base curve */}
-        <use href={`#${pid}`} fill="none"
-          stroke="rgba(255,215,0,0.08)" strokeWidth="1.2" />
-
-        {/* Flowing bright segment — fast, prominent */}
-        <use href={`#${pid}`} fill="none"
-          stroke="#FFD700" strokeWidth="1.5"
-          strokeDasharray="38 322"
-          strokeLinecap="round"
-          filter={`url(#${gid})`}
-          opacity="0.75">
-          <animate attributeName="stroke-dashoffset"
-            from="360" to="-360" dur="2.8s" repeatCount="indefinite" />
-        </use>
-
-        {/* Second segment, half-phase offset */}
-        <use href={`#${pid}`} fill="none"
-          stroke="rgba(255,215,0,0.45)" strokeWidth="1"
-          strokeDasharray="22 338"
-          strokeLinecap="round">
-          <animate attributeName="stroke-dashoffset"
-            from="360" to="-360" dur="2.8s" begin="1.4s" repeatCount="indefinite" />
-        </use>
-
-        {/* ── Glowing dot 1 ── */}
-        <circle r="3.5" fill="#FFD700" filter={`url(#${gid})`}>
-          <animateMotion dur="2.8s" repeatCount="indefinite"
-            calcMode="spline" keySplines="0.42 0 0.58 1">
-            <mpath href={`#${pid}`} />
-          </animateMotion>
-          <animate attributeName="opacity"
-            values="0;1;1;0" keyTimes="0;0.06;0.94;1"
-            dur="2.8s" repeatCount="indefinite" />
-        </circle>
-
-        {/* ── Glowing dot 2 — half-phase ── */}
-        <circle r="2.5" fill="rgba(255,215,0,0.6)" filter={`url(#${gid})`}>
-          <animateMotion dur="2.8s" begin="1.4s" repeatCount="indefinite"
-            calcMode="spline" keySplines="0.42 0 0.58 1">
-            <mpath href={`#${pid}`} />
-          </animateMotion>
-          <animate attributeName="opacity"
-            values="0;0.7;0.7;0" keyTimes="0;0.06;0.94;1"
-            dur="2.8s" begin="1.4s" repeatCount="indefinite" />
-        </circle>
-
-        {/* ── Node ring at each icon position ── */}
-        {nodes.map((n) => {
-          const y = (n.pct / 100) * 360
-          return (
-            <g key={n.label}>
-              <circle cx={cx} cy={y} r="5"
-                fill="rgba(8,6,20,0.95)"
-                stroke="rgba(255,215,0,0.35)" strokeWidth="1"
-                style={{ filter: 'drop-shadow(0 0 5px rgba(255,215,0,0.25))' }} />
-              <circle cx={cx} cy={y} r="2"
-                fill="rgba(255,215,0,0.5)" />
-            </g>
-          )
-        })}
-      </svg>
-
-      {/* ── Floating icon chips ── */}
-      {nodes.map((n) => (
-        <div key={n.label}
-          style={{
-            position: 'absolute',
-            top: `${n.pct}%`,
-            // chips face inward toward the card
-            [isLeft ? 'right' : 'left']: 2,
-            transform: 'translateY(-50%)',
-            animation: `chipFloat${isLeft ? 'L' : 'R'} 3.5s ease-in-out ${n.delay} infinite`,
-          }}>
+      style={{
+        [isLeft ? 'left' : 'right']: 0,
+        width: 80,
+        overflow: 'visible',
+      }}>
+      {H_LINES.map((ln, i) => (
+        <div key={i} style={{
+          position: 'absolute',
+          top: `${ln.pct}%`,
+          [isLeft ? 'right' : 'left']: 0,
+          // extend 80px outward from the card edge
+          width: 80,
+          height: 1,
+          transform: 'translateY(-50%)',
+          background: `rgba(255,215,0,${ln.op * 0.15})`,
+          overflow: 'visible',
+        }}>
+          {/* Traveling glow — sweeps from outer edge toward the card */}
           <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            padding: '4px 8px',
-            borderRadius: 8,
-            background: 'rgba(6,5,18,0.88)',
-            border: '1px solid rgba(255,215,0,0.18)',
-            backdropFilter: 'blur(10px)',
-            color: '#FFD700',
-            fontSize: '0.6rem',
-            fontWeight: 700,
-            whiteSpace: 'nowrap',
-            boxShadow: '0 2px 14px rgba(0,0,0,0.5), 0 0 8px rgba(255,215,0,0.06)',
-            letterSpacing: '0.04em',
-          }}>
-            <n.Icon size={10} />
-            {n.label}
-          </div>
+            position: 'absolute',
+            top: '-2px',
+            height: 5,
+            width: 36,
+            borderRadius: 3,
+            background: `linear-gradient(to ${isLeft ? 'right' : 'left'},
+              transparent,
+              rgba(255,215,0,${ln.op * 0.9}),
+              rgba(255,255,200,${ln.op}),
+              rgba(255,215,0,${ln.op * 0.9}),
+              transparent)`,
+            animation: `hRail${isLeft ? 'L' : 'R'} ${ln.dur} ease-in-out ${ln.delay} infinite`,
+            boxShadow: `0 0 8px 2px rgba(255,215,0,${ln.op * 0.4})`,
+          }} />
+          {/* Node dot at card edge */}
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            [isLeft ? 'right' : 'left']: 0,
+            transform: 'translate(50%,-50%)',
+            width: 6,
+            height: 6,
+            borderRadius: '50%',
+            background: `rgba(255,215,0,${ln.op * 0.5})`,
+            border: `1px solid rgba(255,215,0,${ln.op * 0.8})`,
+            boxShadow: `0 0 6px rgba(255,215,0,${ln.op * 0.4})`,
+          }} />
         </div>
       ))}
     </div>
@@ -186,8 +94,8 @@ export default function CampusHeroCard({ onGuestLogin, guestLoading }: Props) {
     <div className="relative w-full max-w-4xl mx-auto mt-8 mb-4 fade-in-up px-4 lg:px-20"
       style={{ animationDelay: '0.15s' }}>
 
-      <SideRail side="left"  nodes={LEFT_NODES}  />
-      <SideRail side="right" nodes={RIGHT_NODES} />
+      <HRails side="left"  />
+      <HRails side="right" />
 
       {/* ── Card ── */}
       <div className="relative rounded-3xl overflow-hidden flex flex-col sm:flex-row"
@@ -310,15 +218,19 @@ export default function CampusHeroCard({ onGuestLogin, guestLoading }: Props) {
           0%, 100% { transform: translateY(0); }
           50%       { transform: translateY(-5px); }
         }
-        /* Chips on the left rail nudge left */
-        @keyframes chipFloatL {
-          0%, 100% { transform: translateY(-50%) translateX(0px); }
-          50%       { transform: translateY(-50%) translateX(-4px); }
+        /* Horizontal rail particles: left side sweeps right→left (toward card from outside) */
+        @keyframes hRailL {
+          0%   { right: -36px; opacity: 0; }
+          10%  { opacity: 1; }
+          90%  { opacity: 1; }
+          100% { right: 80px; opacity: 0; }
         }
-        /* Chips on the right rail nudge right */
-        @keyframes chipFloatR {
-          0%, 100% { transform: translateY(-50%) translateX(0px); }
-          50%       { transform: translateY(-50%) translateX(4px); }
+        /* Right side sweeps left→right (toward card from outside) */
+        @keyframes hRailR {
+          0%   { left: -36px; opacity: 0; }
+          10%  { opacity: 1; }
+          90%  { opacity: 1; }
+          100% { left: 80px; opacity: 0; }
         }
       `}</style>
     </div>
