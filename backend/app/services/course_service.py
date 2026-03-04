@@ -199,17 +199,13 @@ def update_artifact_status(
     payload: dict[str, Any] = {"status": status}
     if reject_reason is not None:
         payload["reject_reason"] = reject_reason
-    # .select() required in supabase-py v2.x for UPDATE to return modified rows
-    resp = (
-        supabase.table("artifacts")
-        .update(payload)
-        .eq("id", artifact_id)
-        .select()
-        .execute()
-    )
-    if not resp.data:
+    # supabase-py update().eq() 返回 SyncFilterRequestBuilder，不支持 .select()
+    # 改为先 update 再单独 select 取回完整行
+    supabase.table("artifacts").update(payload).eq("id", artifact_id).execute()
+    fetch = supabase.table("artifacts").select("*").eq("id", artifact_id).execute()
+    if not fetch.data:
         raise NotFoundError("Artifact")
-    return resp.data[0]
+    return fetch.data[0]
 
 
 def delete_artifact(
