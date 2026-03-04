@@ -71,6 +71,7 @@ function CourseSidebar({
 }) {
   const searchParams = useSearchParams()
   const { lang, t } = useLang()
+  const { role } = useAuth()
   const currentView = searchParams.get('view') || 'flashcards'
 
   return (
@@ -109,7 +110,7 @@ function CourseSidebar({
       <div className="my-2" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }} />
 
       {/* Feature links */}
-      {FEATURES.map(f => {
+      {FEATURES.filter(f => !(f.view === 'files' && role === 'guest')).map(f => {
         const isActive = currentView === f.view
         const href = `/courses/${courseId}?view=${f.view}`
         const label = lang === 'zh' ? f.zh : f.en

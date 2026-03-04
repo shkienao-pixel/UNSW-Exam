@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef, Suspense } from 'react'
 import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
+import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/i18n'
 import { useGeneration } from '@/lib/generation-context'
 import type { Course, Artifact, ScopeSet, Output, DocType } from '@/lib/types'
@@ -32,6 +33,7 @@ function CoursePageInner() {
   const [loading, setLoading] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { t } = useLang()
+  const { role } = useAuth()
 
   const load = useCallback(async () => {
     try {
@@ -92,8 +94,21 @@ function CoursePageInner() {
       )}
       {view === 'outputs'    && <OutputsTab courseId={courseId} outputs={outputs} setOutputs={setOutputs} />}
       {view === 'files'      && (
-        <FilesTab courseId={courseId} artifacts={artifacts} setArtifacts={setArtifacts}
-          fileInputRef={fileInputRef} />
+        role === 'guest' ? (
+          <div className="flex flex-col items-center justify-center py-24 text-center">
+            <div className="text-4xl mb-4">🔒</div>
+            <h3 className="text-lg font-semibold text-white mb-2">文件上传仅限注册用户</h3>
+            <p className="text-sm mb-6" style={{ color: '#555' }}>注册账号后即可上传课件与真题</p>
+            <a href="/register"
+              className="px-6 py-2 rounded-xl text-sm font-semibold"
+              style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.3)' }}>
+              立即注册 →
+            </a>
+          </div>
+        ) : (
+          <FilesTab courseId={courseId} artifacts={artifacts} setArtifacts={setArtifacts}
+            fileInputRef={fileInputRef} />
+        )
       )}
       {view === 'scope'      && (
         <ScopeTab courseId={courseId} artifacts={artifacts}
