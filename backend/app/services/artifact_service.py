@@ -130,9 +130,14 @@ def store_file(
             file_options={"content-type": content_type, "upsert": "true"},
         )
     except Exception as exc:
-        # If it's a duplicate (already exists), that's fine
-        if "already exists" not in str(exc).lower():
-            raise AppError(f"Storage upload failed: {exc}") from exc
+        msg = str(exc)
+        # Supabase 返回 "already exists" 或 "Duplicate" 时视为幂等成功
+        if "already exists" in msg.lower() or "duplicate" in msg.lower():
+            pass  # 已存在，upsert 逻辑视为成功
+        else:
+            raise AppError(
+                f"Storage upload failed [{type(exc).__name__}]: {exc}"
+            ) from exc
 
     # Get a signed URL (10-year expiry — effectively permanent)
     storage_url = _make_signed_url(supabase, storage_path)
