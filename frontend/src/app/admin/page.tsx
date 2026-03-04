@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown'
 import {
   Loader2, CheckCircle, XCircle, Trash2, Plus, RefreshCw,
   Users, BookOpen, FileText, Ticket, ChevronLeft, Key, DatabaseZap, Upload, MessageSquare, Sparkles,
+  Lock, Zap, Shield,
 } from 'lucide-react'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8005'
@@ -111,15 +112,17 @@ function CoursesTab({ secret }: { secret: string }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 fade-in-up">
       {error && <ErrorBox msg={error} />}
-      <div className="p-4 rounded-xl" style={cardStyle}>
-        <h3 className="text-sm font-semibold mb-3" style={{ color: '#FFD700' }}>新建课程</h3>
+      <div className="card-gold p-5 rounded-2xl">
+        <h3 className="text-sm font-semibold mb-4 flex items-center gap-2" style={{ color: '#FFD700' }}>
+          <Plus size={14} /> 新建课程
+        </h3>
         <div className="flex gap-3 flex-wrap">
           <input value={code} onChange={e => setCode(e.target.value)} placeholder="课程代码 (如 COMP9517)"
-            className="px-3 py-2 rounded-lg text-sm outline-none flex-1 min-w-32" style={inputStyle} />
+            className="input-glass px-3 py-2 rounded-lg text-sm outline-none flex-1 min-w-32" />
           <input value={name} onChange={e => setName(e.target.value)} placeholder="课程名称"
-            className="px-3 py-2 rounded-lg text-sm outline-none flex-1 min-w-40" style={inputStyle} />
+            className="input-glass px-3 py-2 rounded-lg text-sm outline-none flex-1 min-w-40" />
           <ActionBtn onClick={create} loading={creating} disabled={!code.trim() || !name.trim()} icon={<Plus size={14} />}>
             创建
           </ActionBtn>
@@ -128,8 +131,17 @@ function CoursesTab({ secret }: { secret: string }) {
       {loading ? <Spinner /> : (
         <div className="space-y-2">
           {courses.map(c => (
-            <div key={c.id} className="flex items-center gap-4 px-4 py-3 rounded-xl" style={rowStyle}>
-              <span className="text-xs font-bold px-2 py-0.5 rounded" style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700' }}>{c.code}</span>
+            <div key={c.id} className="flex items-center gap-4 px-4 py-3 rounded-2xl transition-all duration-200"
+              style={rowStyle}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.background = 'rgba(255,215,0,0.03)'
+                ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,215,0,0.2)'
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.025)'
+                ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.07)'
+              }}>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-lg" style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}>{c.code}</span>
               <span className="text-sm text-white flex-1">{c.name}</span>
               <span className="text-xs" style={{ color: '#555' }}>{new Date(c.created_at).toLocaleDateString('zh-CN')}</span>
               <DeleteBtn onClick={() => del(c.id)} />
@@ -275,7 +287,7 @@ function ArtifactsTab({ secret }: { secret: string }) {
   }
 
   const statusColors: Record<string, string> = {
-    pending: '#FFD700', approved: '#4ade80', rejected: '#ff6b6b',
+    pending: '#f97316', approved: '#4ade80', rejected: '#ff7070',
   }
 
   if (loadingCourses) return <Spinner />
@@ -283,21 +295,24 @@ function ArtifactsTab({ secret }: { secret: string }) {
   // 课程选择视图
   if (!selectedCourse) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 fade-in-up">
         {error && <ErrorBox msg={error} />}
-        <p className="text-sm" style={{ color: '#777' }}>选择课程后查看该课程的待审文件</p>
+        <p className="text-sm" style={{ color: '#666' }}>选择课程后查看该课程的待审文件</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {courses.map(c => (
             <button key={c.id} onClick={() => setSelectedCourse(c)}
-              className="flex items-center gap-3 px-4 py-4 rounded-xl text-left transition-all"
-              style={{
-                ...rowStyle,
-                cursor: 'pointer',
+              className="flex items-center gap-3 px-4 py-4 rounded-2xl text-left transition-all duration-200"
+              style={{ ...rowStyle, cursor: 'pointer' }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.background = 'rgba(255,215,0,0.03)'
+                ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,215,0,0.25)'
               }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(255,215,0,0.3)')}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)')}>
-              <span className="text-xs font-bold px-2 py-0.5 rounded flex-shrink-0"
-                style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700' }}>{c.code}</span>
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.025)'
+                ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.07)'
+              }}>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-lg flex-shrink-0"
+                style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}>{c.code}</span>
               <span className="text-sm text-white">{c.name}</span>
             </button>
           ))}
@@ -309,7 +324,7 @@ function ArtifactsTab({ secret }: { secret: string }) {
 
   // 文件审核视图
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 fade-in-up">
       {/* Toast 轻提示 */}
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl text-sm font-medium shadow-lg"
@@ -320,45 +335,52 @@ function ArtifactsTab({ secret }: { secret: string }) {
 
       {error && <ErrorBox msg={error} />}
       {reindexResult && (
-        <div className="px-4 py-2 rounded-xl text-sm" style={{ background: 'rgba(74,222,128,0.1)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.2)' }}>
-          ✅ {reindexResult}
+        <div className="px-4 py-3 rounded-xl text-sm flex items-center gap-2" style={{ background: 'rgba(74,222,128,0.08)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.2)' }}>
+          <CheckCircle size={14} /> {reindexResult}
         </div>
       )}
 
       {/* 面包屑 + 筛选 */}
       <div className="flex items-center gap-3 flex-wrap">
         <button onClick={() => { setSelectedCourse(null); setArtifacts([]) }}
-          className="flex items-center gap-1.5 text-sm transition-colors"
-          style={{ color: '#666' }}
+          className="flex items-center gap-1.5 text-sm transition-colors duration-150"
+          style={{ color: '#555' }}
           onMouseEnter={e => (e.currentTarget.style.color = '#FFD700')}
-          onMouseLeave={e => (e.currentTarget.style.color = '#666')}>
+          onMouseLeave={e => (e.currentTarget.style.color = '#555')}>
           <ChevronLeft size={14} /> 所有课程
         </button>
-        <span style={{ color: '#444' }}>/</span>
+        <span style={{ color: '#333' }}>/</span>
         <span className="text-sm font-semibold" style={{ color: '#FFD700' }}>
           {selectedCourse.code} · {selectedCourse.name}
         </span>
         <div className="ml-auto flex gap-2 items-center">
           {(['pending', 'approved', 'rejected'] as const).map(s => (
             <button key={s} onClick={() => setStatusFilter(s)}
-              className="px-3 py-1 rounded-lg text-xs font-medium transition-all"
+              className="px-3 py-1 rounded-lg text-xs font-medium transition-all duration-150"
               style={{
-                background: statusFilter === s ? `${statusColors[s]}22` : 'rgba(255,255,255,0.04)',
+                background: statusFilter === s ? `${statusColors[s]}20` : 'rgba(255,255,255,0.04)',
                 color: statusFilter === s ? statusColors[s] : '#555',
-                border: `1px solid ${statusFilter === s ? `${statusColors[s]}44` : 'rgba(255,255,255,0.07)'}`,
+                border: `1px solid ${statusFilter === s ? `${statusColors[s]}50` : 'rgba(255,255,255,0.07)'}`,
               }}>
               {s === 'pending' ? '待审核' : s === 'approved' ? '已批准' : '已拒绝'}
             </button>
           ))}
-          <button onClick={() => loadFiles(selectedCourse.id, statusFilter)} style={{ color: '#555' }} title="刷新列表">
+          <button onClick={() => loadFiles(selectedCourse.id, statusFilter)}
+            className="p-1.5 rounded-lg transition-colors duration-150"
+            style={{ color: '#555' }}
+            onMouseEnter={e => (e.currentTarget.style.color = '#FFD700')}
+            onMouseLeave={e => (e.currentTarget.style.color = '#555')}
+            title="刷新列表">
             <RefreshCw size={14} />
           </button>
           <button
             onClick={reindex}
             disabled={reindexing}
             title="重新索引该课程（清洗+分块+向量化所有已批准文件）"
-            className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-50"
-            style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}>
+            className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all duration-150 disabled:opacity-50"
+            style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.3)' }}
+            onMouseEnter={e => { if (!reindexing) (e.currentTarget as HTMLElement).style.background = 'rgba(255,215,0,0.18)' }}
+            onMouseLeave={e => { if (!reindexing) (e.currentTarget as HTMLElement).style.background = 'rgba(255,215,0,0.1)' }}>
             {reindexing ? <Loader2 size={12} className="animate-spin" /> : <DatabaseZap size={12} />}
             {reindexing ? '索引中…' : '重新索引'}
           </button>
@@ -366,19 +388,23 @@ function ArtifactsTab({ secret }: { secret: string }) {
       </div>
 
       {/* 管理员直接上传区（免审核，立即 approved） */}
-      <div className="p-4 rounded-xl space-y-3" style={cardStyle}>
-        <p className="text-xs font-semibold" style={{ color: '#FFD700' }}>管理员直传（跳过审核，立即索引）</p>
+      <div className="p-4 rounded-2xl space-y-3" style={cardStyle}>
+        <p className="text-xs font-semibold flex items-center gap-1.5" style={{ color: '#FFD700' }}>
+          <Upload size={12} /> 管理员直传（跳过审核，立即索引）
+        </p>
         <div className="flex gap-3 items-center flex-wrap">
           <select value={uploadDocType} onChange={e => setUploadDocType(e.target.value as DocType)}
-            className="text-sm rounded-lg px-3 py-1.5 outline-none flex-1 min-w-40"
-            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,215,0,0.25)', color: DOC_TYPE_COLORS[uploadDocType] }}>
+            className="text-sm rounded-lg px-3 py-1.5 outline-none flex-1 min-w-40 transition-all duration-150"
+            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,215,0,0.2)', color: DOC_TYPE_COLORS[uploadDocType] }}>
             {DOC_TYPE_OPTIONS.map(o => (
               <option key={o.value} value={o.value} style={{ background: '#0d0d1a', color: '#fff' }}>{o.label}</option>
             ))}
           </select>
           <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
-            className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium disabled:opacity-50"
-            style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.3)' }}>
+            className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 disabled:opacity-50"
+            style={{ background: 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,215,0,0.08))', color: '#FFD700', border: '1px solid rgba(255,215,0,0.35)' }}
+            onMouseEnter={e => { if (!uploading) (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(255,215,0,0.22), rgba(255,215,0,0.12))' }}
+            onMouseLeave={e => { if (!uploading) (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,215,0,0.08))' }}>
             {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
             {uploading ? '上传中…' : '选择文件上传'}
           </button>
@@ -395,11 +421,11 @@ function ArtifactsTab({ secret }: { secret: string }) {
             const color = o.value === 'all' ? '#FFD700' : DOC_TYPE_COLORS[o.value as DocType]
             return (
               <button key={o.value} onClick={() => setDocTypeFilter(o.value)}
-                className="px-3 py-1 rounded-full text-xs font-medium transition-all"
+                className="px-3 py-1 rounded-full text-xs font-medium transition-all duration-150"
                 style={{
-                  background: isActive ? `${color}22` : 'rgba(255,255,255,0.04)',
+                  background: isActive ? `${color}20` : 'rgba(255,255,255,0.04)',
                   color: isActive ? color : '#555',
-                  border: `1px solid ${isActive ? `${color}55` : 'rgba(255,255,255,0.08)'}`,
+                  border: `1px solid ${isActive ? `${color}50` : 'rgba(255,255,255,0.08)'}`,
                 }}>
                 {o.label}
               </button>
@@ -415,7 +441,16 @@ function ArtifactsTab({ secret }: { secret: string }) {
         return (
         <div className="space-y-2">
           {displayedArtifacts.map(a => (
-            <div key={a.id} className="flex items-center gap-3 px-4 py-3 rounded-xl" style={rowStyle}>
+            <div key={a.id} className="flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200"
+              style={rowStyle}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.background = 'rgba(255,215,0,0.03)'
+                ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,215,0,0.18)'
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.025)'
+                ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.07)'
+              }}>
               <span className="text-lg">{a.file_type === 'pdf' ? '📄' : '🔗'}</span>
               <div className="flex-1 min-w-0">
                 {/* 文件名：有 storage_url 时变为可点击预览链接 */}
@@ -424,8 +459,10 @@ function ArtifactsTab({ secret }: { secret: string }) {
                     href={a.storage_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm truncate block hover:underline transition-opacity hover:opacity-100"
-                    style={{ color: '#60a5fa', opacity: 0.9 }}
+                    className="text-sm truncate block transition-opacity hover:opacity-100"
+                    style={{ color: '#60a5fa', opacity: 0.9, textDecoration: 'none' }}
+                    onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+                    onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
                     title="在新标签页预览文件">
                     {a.file_name}
                   </a>
@@ -440,10 +477,7 @@ function ArtifactsTab({ secret }: { secret: string }) {
               {/* doc_type 内联下拉（已批准时可修改；其他状态仅显示） */}
               {a.status === 'rejected' ? (
                 <div className="flex flex-col items-end flex-shrink-0 gap-0.5">
-                  <span className="text-xs px-2 py-0.5 rounded font-medium" style={{
-                    background: 'rgba(255,107,107,0.12)', color: '#ff6b6b',
-                    border: '1px solid rgba(255,107,107,0.3)',
-                  }}>已失效</span>
+                  <span className="badge-danger">已失效</span>
                   {a.reject_reason && (
                     <span className="text-xs max-w-32 truncate" style={{ color: '#ff8080' }}
                       title={a.reject_reason}>
@@ -460,11 +494,11 @@ function ArtifactsTab({ secret }: { secret: string }) {
                     disabled={updatingDocType === a.id}
                     value={a.doc_type ?? 'lecture'}
                     onChange={e => updateDocType(a.id, e.target.value as DocType)}
-                    className="text-xs rounded px-2 py-0.5 border outline-none cursor-pointer transition-opacity"
+                    className="text-xs rounded-lg px-2 py-0.5 border outline-none cursor-pointer transition-opacity"
                     style={{
-                      background: `${DOC_TYPE_COLORS[a.doc_type ?? 'lecture']}1a`,
+                      background: `${DOC_TYPE_COLORS[a.doc_type ?? 'lecture']}18`,
                       color: DOC_TYPE_COLORS[a.doc_type ?? 'lecture'],
-                      border: `1px solid ${DOC_TYPE_COLORS[a.doc_type ?? 'lecture']}44`,
+                      border: `1px solid ${DOC_TYPE_COLORS[a.doc_type ?? 'lecture']}40`,
                       opacity: updatingDocType === a.id ? 0.5 : 1,
                     }}>
                     {DOC_TYPE_OPTIONS.map(o => (
@@ -476,24 +510,39 @@ function ArtifactsTab({ secret }: { secret: string }) {
                   </select>
                 </div>
               ) : a.doc_type ? (
-                <span className="text-xs px-2 py-0.5 rounded flex-shrink-0" style={{
-                  background: `${DOC_TYPE_COLORS[a.doc_type]}1a`,
+                <span className="text-xs px-2 py-0.5 rounded-lg flex-shrink-0" style={{
+                  background: `${DOC_TYPE_COLORS[a.doc_type]}18`,
                   color: DOC_TYPE_COLORS[a.doc_type],
-                  border: `1px solid ${DOC_TYPE_COLORS[a.doc_type]}44`,
+                  border: `1px solid ${DOC_TYPE_COLORS[a.doc_type]}40`,
                 }}>
                   {DOC_TYPE_LABELS[a.doc_type]}
                 </span>
               ) : null}
-              <span className="text-xs px-2 py-0.5 rounded flex-shrink-0"
-                style={{ background: `${statusColors[a.status]}22`, color: statusColors[a.status] }}>
+              {/* 状态 badge — pill 样式 */}
+              <span className="text-xs px-2.5 py-0.5 rounded-full font-medium flex-shrink-0"
+                style={{
+                  background: `${statusColors[a.status]}18`,
+                  color: statusColors[a.status],
+                  border: `1px solid ${statusColors[a.status]}40`,
+                }}>
                 {a.status === 'pending' ? '待审' : a.status === 'approved' ? '已批准' : '已拒绝'}
               </span>
               {statusFilter === 'pending' && (
                 <div className="flex gap-1 flex-shrink-0">
-                  <button onClick={() => approve(a.id)} className="p-1.5 rounded-lg" title="批准" style={{ color: '#4ade80' }}>
+                  <button onClick={() => approve(a.id)}
+                    className="p-1.5 rounded-lg transition-colors duration-150"
+                    title="批准"
+                    style={{ color: '#4ade80' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(74,222,128,0.12)' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
                     <CheckCircle size={16} />
                   </button>
-                  <button onClick={() => reject(a.id)} className="p-1.5 rounded-lg" title="拒绝" style={{ color: '#ff6b6b' }}>
+                  <button onClick={() => reject(a.id)}
+                    className="p-1.5 rounded-lg transition-colors duration-150"
+                    title="拒绝"
+                    style={{ color: '#ff7070' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,112,112,0.12)' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
                     <XCircle size={16} />
                   </button>
                 </div>
@@ -530,15 +579,24 @@ function UsersTab({ secret }: { secret: string }) {
   }, [secret])
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 fade-in-up">
       {error && <ErrorBox msg={error} />}
       {loading ? <Spinner /> : (
         <>
           <div className="space-y-2">
             {users.map(u => (
-              <div key={u.id} className="flex items-center gap-4 px-4 py-3 rounded-xl" style={rowStyle}>
+              <div key={u.id} className="flex items-center gap-4 px-4 py-3 rounded-2xl transition-all duration-200"
+                style={rowStyle}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLElement).style.background = 'rgba(255,215,0,0.03)'
+                  ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,215,0,0.18)'
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.025)'
+                  ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.07)'
+                }}>
                 <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-                  style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', fontSize: 13, fontWeight: 700 }}>
+                  style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700', fontSize: 13, fontWeight: 700, border: '1px solid rgba(255,215,0,0.2)' }}>
                   {u.email[0].toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -548,11 +606,7 @@ function UsersTab({ secret }: { secret: string }) {
                     {u.last_sign_in_at && ` · 最近登录 ${new Date(u.last_sign_in_at).toLocaleDateString('zh-CN')}`}
                   </p>
                 </div>
-                <span className="text-xs px-2 py-0.5 rounded flex-shrink-0"
-                  style={{
-                    background: u.email_confirmed ? 'rgba(74,222,128,0.1)' : 'rgba(255,215,0,0.1)',
-                    color: u.email_confirmed ? '#4ade80' : '#FFD700',
-                  }}>
+                <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium flex-shrink-0 ${u.email_confirmed ? 'badge-success' : 'badge-warning'}`}>
                   {u.email_confirmed ? '已验证' : '未验证'}
                 </span>
               </div>
@@ -610,17 +664,19 @@ function InvitesTab({ secret }: { secret: string }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 fade-in-up">
       {error && <ErrorBox msg={error} />}
-      <div className="p-4 rounded-xl" style={cardStyle}>
-        <h3 className="text-sm font-semibold mb-3" style={{ color: '#FFD700' }}>生成邀请码</h3>
+      <div className="card-gold p-5 rounded-2xl">
+        <h3 className="text-sm font-semibold mb-4 flex items-center gap-2" style={{ color: '#FFD700' }}>
+          <Ticket size={14} /> 生成邀请码
+        </h3>
         <div className="flex gap-3 flex-wrap items-center">
           <input value={note} onChange={e => setNote(e.target.value)} placeholder="备注（如：学生姓名）"
-            className="px-3 py-2 rounded-lg text-sm outline-none flex-1 min-w-40" style={inputStyle} />
+            className="input-glass px-3 py-2 rounded-lg text-sm outline-none flex-1 min-w-40" />
           <div className="flex items-center gap-2">
             <span className="text-xs whitespace-nowrap" style={{ color: '#666' }}>最多使用次数</span>
             <input value={maxUses} onChange={e => setMaxUses(e.target.value)} type="number" min={1} max={100}
-              className="px-3 py-2 rounded-lg text-sm outline-none w-16 text-center" style={inputStyle} />
+              className="input-glass px-3 py-2 rounded-lg text-sm outline-none w-16 text-center" />
           </div>
           <ActionBtn onClick={create} loading={creating} icon={<Plus size={14} />}>生成</ActionBtn>
         </div>
@@ -628,15 +684,26 @@ function InvitesTab({ secret }: { secret: string }) {
       {loading ? <Spinner /> : (
         <div className="space-y-2">
           {invites.map(inv => (
-            <div key={inv.id} className="flex items-center gap-4 px-4 py-3 rounded-xl" style={rowStyle}>
+            <div key={inv.id} className="flex items-center gap-4 px-4 py-3 rounded-2xl transition-all duration-200"
+              style={rowStyle}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.background = 'rgba(255,215,0,0.03)'
+                ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,215,0,0.18)'
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.025)'
+                ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.07)'
+              }}>
               <button onClick={() => copy(inv.code)}
-                className="text-sm font-mono font-bold px-3 py-1 rounded-lg transition-all flex-shrink-0"
-                style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.2)', minWidth: 90 }}
+                className="text-sm font-mono font-bold px-3 py-1 rounded-lg transition-all duration-150 flex-shrink-0"
+                style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)', minWidth: 90 }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,215,0,0.2)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,215,0,0.12)')}
                 title="点击复制">
                 {copied === inv.code ? '✓ 已复制' : inv.code}
               </button>
               <span className="text-sm flex-1 truncate" style={{ color: '#888' }}>{inv.note || '—'}</span>
-              <span className="text-xs flex-shrink-0" style={{ color: inv.used_count >= inv.max_uses ? '#ff6b6b' : '#4ade80' }}>
+              <span className={`text-xs flex-shrink-0 px-2.5 py-0.5 rounded-full font-medium ${inv.used_count >= inv.max_uses ? 'badge-danger' : 'badge-success'}`}>
                 {inv.used_count}/{inv.max_uses} 次
               </span>
               <span className="text-xs flex-shrink-0" style={{ color: '#444' }}>
@@ -714,20 +781,22 @@ function ApiKeysTab({ secret }: { secret: string }) {
   }))
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 fade-in-up">
       {error && <ErrorBox msg={error} />}
 
       {/* 添加新密钥 */}
-      <div className="p-5 rounded-xl space-y-4" style={cardStyle}>
-        <h3 className="text-sm font-semibold" style={{ color: '#FFD700' }}>添加 / 更换 API 密钥</h3>
+      <div className="card-gold p-5 rounded-2xl space-y-4">
+        <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: '#FFD700' }}>
+          <Key size={14} /> 添加 / 更换 API 密钥
+        </h3>
         <div className="flex gap-2 flex-wrap">
           {(['openai', 'gemini', 'deepseek'] as const).map(p => (
             <button key={p} onClick={() => setProvider(p)}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150"
               style={{
-                background: provider === p ? `${PROVIDER_LABELS[p].color}22` : 'rgba(255,255,255,0.04)',
+                background: provider === p ? `${PROVIDER_LABELS[p].color}20` : 'rgba(255,255,255,0.04)',
                 color: provider === p ? PROVIDER_LABELS[p].color : '#666',
-                border: `1px solid ${provider === p ? `${PROVIDER_LABELS[p].color}44` : 'rgba(255,255,255,0.07)'}`,
+                border: `1px solid ${provider === p ? `${PROVIDER_LABELS[p].color}50` : 'rgba(255,255,255,0.07)'}`,
               }}>
               {PROVIDER_LABELS[p].name}
             </button>
@@ -739,16 +808,14 @@ function ApiKeysTab({ secret }: { secret: string }) {
             onChange={e => setApiKey(e.target.value)}
             type="password"
             placeholder={`API Key（${PROVIDER_LABELS[provider].hint}）`}
-            className="px-3 py-2 rounded-lg text-sm font-mono outline-none"
-            style={inputStyle}
+            className="input-glass px-3 py-2 rounded-lg text-sm font-mono outline-none"
           />
           <div className="flex gap-3">
             <input
               value={label}
               onChange={e => setLabel(e.target.value)}
               placeholder="备注标签（可选，如：Production Key）"
-              className="px-3 py-2 rounded-lg text-sm outline-none flex-1"
-              style={inputStyle}
+              className="input-glass px-3 py-2 rounded-lg text-sm outline-none flex-1"
             />
             <ActionBtn onClick={add} loading={adding} disabled={!apiKey.trim()} icon={<Plus size={14} />}>
               添加并激活
@@ -766,8 +833,8 @@ function ApiKeysTab({ secret }: { secret: string }) {
           {grouped.map(({ provider: p, info, keys: pKeys }) => (
             <div key={p}>
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs font-bold px-2 py-0.5 rounded"
-                  style={{ background: `${info.color}22`, color: info.color }}>
+                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full"
+                  style={{ background: `${info.color}20`, color: info.color, border: `1px solid ${info.color}40` }}>
                   {info.name}
                 </span>
                 <span className="text-xs" style={{ color: '#444' }}>{pKeys.length} 个密钥</span>
@@ -779,9 +846,18 @@ function ApiKeysTab({ secret }: { secret: string }) {
               ) : (
                 <div className="space-y-2">
                   {pKeys.map(k => (
-                    <div key={k.id} className="flex items-center gap-3 px-4 py-3 rounded-xl" style={rowStyle}>
+                    <div key={k.id} className="flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200"
+                      style={rowStyle}
+                      onMouseEnter={e => {
+                        (e.currentTarget as HTMLElement).style.background = 'rgba(255,215,0,0.03)'
+                        ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,215,0,0.18)'
+                      }}
+                      onMouseLeave={e => {
+                        (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.025)'
+                        ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.07)'
+                      }}>
                       <span className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ background: k.is_active ? '#4ade80' : '#444' }} />
+                        style={{ background: k.is_active ? '#4ade80' : '#333', boxShadow: k.is_active ? '0 0 6px rgba(74,222,128,0.5)' : 'none' }} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-white truncate">{k.label}</p>
                         <p className="text-xs mt-0.5" style={{ color: '#555' }}>
@@ -790,14 +866,15 @@ function ApiKeysTab({ secret }: { secret: string }) {
                       </div>
                       {!k.is_active && (
                         <button onClick={() => activate(k.id)}
-                          className="text-xs px-3 py-1 rounded-lg flex-shrink-0"
-                          style={{ background: `${info.color}22`, color: info.color, border: `1px solid ${info.color}44` }}>
+                          className="text-xs px-3 py-1 rounded-lg flex-shrink-0 transition-all duration-150"
+                          style={{ background: `${info.color}18`, color: info.color, border: `1px solid ${info.color}40` }}
+                          onMouseEnter={e => (e.currentTarget.style.background = `${info.color}30`)}
+                          onMouseLeave={e => (e.currentTarget.style.background = `${info.color}18`)}>
                           激活
                         </button>
                       )}
                       {k.is_active && (
-                        <span className="text-xs px-2 py-0.5 rounded flex-shrink-0"
-                          style={{ background: 'rgba(74,222,128,0.1)', color: '#4ade80' }}>
+                        <span className="badge-success text-xs px-2.5 py-0.5 rounded-full flex-shrink-0">
                           激活中
                         </span>
                       )}
@@ -880,7 +957,7 @@ function FeedbackTab({ secret }: { secret: string }) {
   const displayed = filter === 'all' ? items : items.filter(i => i.status === filter)
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 fade-in-up">
       {error && <ErrorBox msg={error} />}
 
       {/* AI 洞察按钮 */}
@@ -888,12 +965,14 @@ function FeedbackTab({ secret }: { secret: string }) {
         <button
           onClick={runAiSummary}
           disabled={aiLoading}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-150 disabled:opacity-50"
           style={{
-            background: 'linear-gradient(135deg, rgba(139,92,246,0.2), rgba(59,130,246,0.2))',
+            background: 'linear-gradient(135deg, rgba(139,92,246,0.18), rgba(59,130,246,0.18))',
             border: '1px solid rgba(139,92,246,0.4)',
             color: '#c4b5fd',
           }}
+          onMouseEnter={e => { if (!aiLoading) (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(139,92,246,0.28), rgba(59,130,246,0.28))' }}
+          onMouseLeave={e => { if (!aiLoading) (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(139,92,246,0.18), rgba(59,130,246,0.18))' }}
         >
           {aiLoading
             ? <><Loader2 size={14} className="animate-spin" />正在分析…</>
@@ -920,7 +999,13 @@ function FeedbackTab({ secret }: { secret: string }) {
             <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: '#c4b5fd' }}>
               <Sparkles size={14} /> DeepSeek 今日分析报告
             </h3>
-            <button onClick={() => setAiResult(null)} className="text-xs px-2 py-0.5 rounded" style={{ color: '#555', background: 'rgba(255,255,255,0.05)' }}>收起</button>
+            <button onClick={() => setAiResult(null)}
+              className="text-xs px-2 py-0.5 rounded-lg transition-colors duration-150"
+              style={{ color: '#555', background: 'rgba(255,255,255,0.05)' }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#aaa')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#555')}>
+              收起
+            </button>
           </div>
           <div className="prose prose-sm prose-invert max-w-none text-sm leading-relaxed"
             style={{ color: '#ccc' }}>
@@ -933,22 +1018,27 @@ function FeedbackTab({ secret }: { secret: string }) {
       <div className="flex items-center gap-2 flex-wrap">
         {(['all', 'pending', 'in_progress', 'resolved', 'adopted'] as const).map(s => (
           <button key={s} onClick={() => setFilter(s)}
-            className="px-3 py-1 rounded-lg text-xs font-medium transition-all"
+            className="px-3 py-1 rounded-lg text-xs font-medium transition-all duration-150"
             style={{
               background: filter === s
-                ? s === 'all' ? 'rgba(255,215,0,0.15)' : `${STATUS_COLOR[s as FeedbackStatus]}22`
+                ? s === 'all' ? 'rgba(255,215,0,0.15)' : `${STATUS_COLOR[s as FeedbackStatus]}20`
                 : 'rgba(255,255,255,0.04)',
               color: filter === s
                 ? s === 'all' ? '#FFD700' : STATUS_COLOR[s as FeedbackStatus]
                 : '#555',
               border: `1px solid ${filter === s
-                ? s === 'all' ? 'rgba(255,215,0,0.3)' : `${STATUS_COLOR[s as FeedbackStatus]}44`
+                ? s === 'all' ? 'rgba(255,215,0,0.3)' : `${STATUS_COLOR[s as FeedbackStatus]}50`
                 : 'rgba(255,255,255,0.07)'}`,
             }}>
             {s === 'all' ? `全部 (${items.length})` : `${STATUS_LABEL[s as FeedbackStatus]} (${items.filter(i => i.status === s).length})`}
           </button>
         ))}
-        <button onClick={load} className="ml-auto" style={{ color: '#555' }} title="刷新">
+        <button onClick={load}
+          className="ml-auto p-1.5 rounded-lg transition-colors duration-150"
+          style={{ color: '#555' }}
+          onMouseEnter={e => (e.currentTarget.style.color = '#FFD700')}
+          onMouseLeave={e => (e.currentTarget.style.color = '#555')}
+          title="刷新">
           <RefreshCw size={14} />
         </button>
       </div>
@@ -956,18 +1046,18 @@ function FeedbackTab({ secret }: { secret: string }) {
       {loading ? <Spinner /> : (
         <div className="space-y-3">
           {displayed.map(item => (
-            <div key={item.id} className="p-4 rounded-xl space-y-2" style={cardStyle}>
+            <div key={item.id} className="p-4 rounded-2xl space-y-2 transition-all duration-200" style={cardStyle}>
               {/* Meta row */}
               <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-xs px-2 py-0.5 rounded font-medium" style={{
-                  background: `${STATUS_COLOR[item.status]}22`,
+                <span className="text-xs px-2.5 py-0.5 rounded-full font-medium" style={{
+                  background: `${STATUS_COLOR[item.status]}18`,
                   color: STATUS_COLOR[item.status],
-                  border: `1px solid ${STATUS_COLOR[item.status]}44`,
+                  border: `1px solid ${STATUS_COLOR[item.status]}40`,
                 }}>
                   {STATUS_LABEL[item.status]}
                 </span>
-                <span className="text-xs font-mono px-2 py-0.5 rounded truncate max-w-xs"
-                  style={{ background: 'rgba(255,255,255,0.04)', color: '#777' }}>
+                <span className="text-xs font-mono px-2 py-0.5 rounded-lg truncate max-w-xs"
+                  style={{ background: 'rgba(255,255,255,0.04)', color: '#666', border: '1px solid rgba(255,255,255,0.06)' }}>
                   📍 {item.page_url}
                 </span>
                 <span className="text-xs ml-auto" style={{ color: '#444' }}>
@@ -983,16 +1073,20 @@ function FeedbackTab({ secret }: { secret: string }) {
                 <div className="flex justify-end gap-2">
                   {STATUS_NEXT[item.status] && (
                     <button onClick={() => advance(item)}
-                      className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all"
-                      style={{ background: 'rgba(255,255,255,0.06)', color: '#aaa', border: '1px solid rgba(255,255,255,0.1)' }}>
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all duration-150"
+                      style={{ background: 'rgba(255,255,255,0.06)', color: '#aaa', border: '1px solid rgba(255,255,255,0.1)' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.1)'; (e.currentTarget as HTMLElement).style.color = '#fff' }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLElement).style.color = '#aaa' }}>
                       <CheckCircle size={12} />
                       标记为「{STATUS_LABEL[STATUS_NEXT[item.status]!]}」
                     </button>
                   )}
                   {item.status === 'in_progress' && (
                     <button onClick={() => adopt(item)}
-                      className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all"
-                      style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.3)' }}>
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all duration-150"
+                      style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.3)' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,215,0,0.18)' }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,215,0,0.1)' }}>
                       ✦ 采纳反馈 (+1 积分)
                     </button>
                   )}
@@ -1016,8 +1110,8 @@ const inputStyle: React.CSSProperties = {
 }
 
 const rowStyle: React.CSSProperties = {
-  background: 'rgba(255,255,255,0.03)',
-  border: '1px solid rgba(255,255,255,0.06)',
+  background: 'rgba(255,255,255,0.025)',
+  border: '1px solid rgba(255,255,255,0.07)',
 }
 
 const cardStyle: React.CSSProperties = {
@@ -1026,7 +1120,11 @@ const cardStyle: React.CSSProperties = {
 }
 
 function Spinner() {
-  return <div className="flex justify-center py-10"><Loader2 className="animate-spin" style={{ color: '#FFD700' }} size={24} /></div>
+  return (
+    <div className="flex justify-center py-10">
+      <Loader2 className="animate-spin" style={{ color: '#FFD700' }} size={24} />
+    </div>
+  )
 }
 
 function Empty({ text }: { text: string }) {
@@ -1035,8 +1133,8 @@ function Empty({ text }: { text: string }) {
 
 function ErrorBox({ msg }: { msg: string }) {
   return (
-    <div className="p-3 rounded-lg text-sm" style={{ background: 'rgba(255,80,80,0.1)', color: '#ff8080', border: '1px solid rgba(255,80,80,0.2)' }}>
-      {msg}
+    <div className="p-3 rounded-xl text-sm flex items-center gap-2" style={{ background: 'rgba(255,80,80,0.08)', color: '#ff8080', border: '1px solid rgba(255,80,80,0.2)' }}>
+      <XCircle size={14} /> {msg}
     </div>
   )
 }
@@ -1046,13 +1144,16 @@ function ActionBtn({ onClick, loading = false, disabled = false, icon, children 
 }) {
   return (
     <button onClick={onClick} disabled={loading || disabled}
-      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold"
+      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-150"
       style={{
-        background: 'rgba(255,215,0,0.15)', color: '#FFD700',
-        border: '1px solid rgba(255,215,0,0.3)',
+        background: loading || disabled ? 'rgba(255,215,0,0.08)' : 'linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,215,0,0.1))',
+        color: '#FFD700',
+        border: '1px solid rgba(255,215,0,0.35)',
         opacity: loading || disabled ? 0.5 : 1,
         cursor: loading || disabled ? 'not-allowed' : 'pointer',
-      }}>
+      }}
+      onMouseEnter={e => { if (!loading && !disabled) (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(255,215,0,0.28), rgba(255,215,0,0.16))' }}
+      onMouseLeave={e => { if (!loading && !disabled) (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,215,0,0.1))' }}>
       {loading ? <Loader2 size={14} className="animate-spin" /> : icon}
       {children}
     </button>
@@ -1062,8 +1163,12 @@ function ActionBtn({ onClick, loading = false, disabled = false, icon, children 
 function DeleteBtn({ onClick }: { onClick: () => void }) {
   const [hov, setHov] = useState(false)
   return (
-    <button onClick={onClick} className="p-1.5 rounded-lg flex-shrink-0"
-      style={{ color: hov ? '#ff6b6b' : '#555' }}
+    <button onClick={onClick}
+      className="p-1.5 rounded-lg flex-shrink-0 transition-all duration-150"
+      style={{
+        color: hov ? '#ff6b6b' : '#444',
+        background: hov ? 'rgba(255,107,107,0.1)' : 'transparent',
+      }}
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}>
       <Trash2 size={14} />
     </button>
@@ -1079,26 +1184,59 @@ export default function AdminPage() {
 
   if (!secret) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-8">
-        <div className="w-full max-w-sm p-8 rounded-2xl space-y-6"
-          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,215,0,0.12)' }}>
+      <div className="min-h-screen flex items-center justify-center p-8"
+        style={{ background: '#08080f' }}>
+        <div className="w-full max-w-sm p-8 rounded-2xl space-y-6 fade-in-up"
+          style={{
+            background: 'rgba(255,215,0,0.05)',
+            border: '1px solid rgba(255,215,0,0.18)',
+            boxShadow: '0 0 40px rgba(255,215,0,0.06)',
+          }}>
           <div>
-            <div className="text-2xl font-bold mb-1" style={{ color: '#FFD700' }}>🛡 管理后台</div>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.25)' }}>
+                <Shield size={20} style={{ color: '#FFD700' }} />
+              </div>
+              <div className="text-xl font-bold" style={{ color: '#FFD700' }}>管理后台</div>
+            </div>
             <p className="text-sm" style={{ color: '#555' }}>请输入管理员密钥进入</p>
-            <p className="text-xs mt-1 font-mono" style={{ color: '#444' }}>API: {API}</p>
+            <p className="text-xs mt-1 font-mono" style={{ color: '#333' }}>API: {API}</p>
           </div>
-          <input
-            type="password"
-            value={secretInput}
-            onChange={e => setSecretInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && setSecret(secretInput.trim())}
-            placeholder="Admin Secret"
-            className="w-full px-4 py-3 rounded-xl text-sm outline-none"
-            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#e0e0e0' }}
-          />
+          <div className="relative">
+            <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: '#555' }} />
+            <input
+              type="password"
+              value={secretInput}
+              onChange={e => setSecretInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && setSecret(secretInput.trim())}
+              placeholder="Admin Secret"
+              className="w-full pl-9 pr-4 py-3 rounded-xl text-sm outline-none transition-all duration-150"
+              style={{
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: '#e0e0e0',
+              }}
+              onFocus={e => {
+                e.currentTarget.style.border = '1px solid rgba(255,215,0,0.5)'
+                e.currentTarget.style.boxShadow = '0 0 12px rgba(255,215,0,0.08)'
+              }}
+              onBlur={e => {
+                e.currentTarget.style.border = '1px solid rgba(255,255,255,0.1)'
+                e.currentTarget.style.boxShadow = 'none'
+              }}
+            />
+          </div>
           <button onClick={() => setSecret(secretInput.trim())}
-            className="w-full py-3 rounded-xl text-sm font-semibold"
-            style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.3)' }}>
+            className="w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all duration-150"
+            style={{
+              background: 'linear-gradient(135deg, rgba(255,215,0,0.22), rgba(255,215,0,0.12))',
+              color: '#FFD700',
+              border: '1px solid rgba(255,215,0,0.35)',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'linear-gradient(135deg, rgba(255,215,0,0.32), rgba(255,215,0,0.18))')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'linear-gradient(135deg, rgba(255,215,0,0.22), rgba(255,215,0,0.12))')}>
+            <Zap size={15} />
             进入管理后台
           </button>
         </div>
@@ -1107,29 +1245,46 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-6 max-w-4xl mx-auto" style={{ minHeight: '100vh' }}>
+      {/* Header */}
       <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold" style={{ color: '#FFD700' }}>🛡 管理后台</h1>
-          <p className="text-sm mt-0.5" style={{ color: '#555' }}>课程 · 文件审核 · 用户 · 邀请码 · API密钥</p>
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{ background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.22)' }}>
+            <Shield size={16} style={{ color: '#FFD700' }} />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold" style={{ color: '#FFD700' }}>管理后台</h1>
+            <p className="text-xs mt-0.5" style={{ color: '#555' }}>课程 · 文件审核 · 用户 · 邀请码 · API密钥</p>
+          </div>
         </div>
         <button onClick={() => setSecret('')}
-          className="text-xs px-3 py-1.5 rounded-lg"
-          style={{ color: '#555', border: '1px solid rgba(255,255,255,0.07)' }}>
+          className="text-xs px-3 py-1.5 rounded-lg transition-all duration-150"
+          style={{ color: '#555', border: '1px solid rgba(255,255,255,0.07)' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#ff7070'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,112,112,0.3)' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#555'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.07)' }}>
           退出
         </button>
       </div>
 
-      <div className="flex gap-2 mb-6 flex-wrap">
+      {/* Tab Navigation */}
+      <div className="flex gap-1 mb-6 flex-wrap p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 relative"
             style={{
-              background: tab === t.id ? 'rgba(255,215,0,0.12)' : 'rgba(255,255,255,0.04)',
-              color: tab === t.id ? '#FFD700' : '#666',
-              border: `1px solid ${tab === t.id ? 'rgba(255,215,0,0.3)' : 'rgba(255,255,255,0.07)'}`,
-            }}>
+              background: tab === t.id ? 'rgba(255,215,0,0.1)' : 'transparent',
+              color: tab === t.id ? '#FFD700' : '#444',
+              border: tab === t.id ? '1px solid rgba(255,215,0,0.25)' : '1px solid transparent',
+              textShadow: tab === t.id ? '0 0 12px rgba(255,215,0,0.4)' : 'none',
+            }}
+            onMouseEnter={e => { if (tab !== t.id) { (e.currentTarget as HTMLElement).style.color = '#888' } }}
+            onMouseLeave={e => { if (tab !== t.id) { (e.currentTarget as HTMLElement).style.color = '#444' } }}>
             {t.icon} {t.label}
+            {tab === t.id && (
+              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full"
+                style={{ background: '#FFD700', boxShadow: '0 0 6px rgba(255,215,0,0.6)' }} />
+            )}
           </button>
         ))}
       </div>
