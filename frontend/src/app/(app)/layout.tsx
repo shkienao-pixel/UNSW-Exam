@@ -10,7 +10,7 @@ import { LangProvider, useLang } from '@/lib/i18n'
 import { GenerationProvider } from '@/lib/generation-context'
 import FloatingProgress from '@/components/FloatingProgress'
 import {
-  LayoutDashboard, LogOut, ArrowLeft, Loader2, BookOpen, ChevronLeft, Menu, X, MessageSquarePlus, Send,
+  LayoutDashboard, LogOut, ArrowLeft, Loader2, BookOpen, ChevronLeft, Menu, X, MessageSquarePlus, Send, CreditCard,
 } from 'lucide-react'
 
 // ── Feature navigation config ─────────────────────────────────────────────────
@@ -167,6 +167,7 @@ function DefaultSidebar({
 }) {
   const [coursesOpen, setCoursesOpen] = useState(true)
   const { t } = useLang()
+  const { role } = useAuth()
 
   function navItem(href: string, icon: React.ReactNode, label: string) {
     const active = pathname === href
@@ -188,6 +189,7 @@ function DefaultSidebar({
   return (
     <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto overflow-x-hidden">
       {navItem('/dashboard', <LayoutDashboard size={16} />, t('dashboard'))}
+      {role !== 'guest' && navItem('/credits', <CreditCard size={16} />, '积分 & 充值')}
 
       {!collapsed && (
         <div>
