@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { Loader2, Sparkles, Brain, BookOpen, Zap } from 'lucide-react'
+import CampusHeroCard from '@/components/CampusHeroCard'
 
 const FEATURES = [
   {
@@ -80,63 +81,46 @@ export default function LandingPage() {
       </nav>
 
       {/* ── Hero ── */}
-      <section className="flex-1 flex flex-col items-center justify-center text-center px-6 py-24">
+      <section className="flex-1 flex flex-col items-center justify-center text-center px-4 sm:px-6 pt-20 pb-10">
+
         {/* Badge */}
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-8"
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-7 fade-in-up"
           style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.2)' }}>
           <Sparkles size={12} />
           数据驱动 · AI 助教 · 专为留学生打造
         </div>
 
-        <h1 className="text-5xl md:text-7xl font-black mb-6 leading-tight"
+        {/* Title */}
+        <h1 className="text-5xl md:text-7xl font-black mb-4 leading-tight fade-in-up"
           style={{
             background: 'linear-gradient(135deg, #FFD700 0%, #FFF3B0 50%, #FFD700 100%)',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
             backgroundClip: 'text',
+            animationDelay: '0.05s',
           }}>
           Exam Master
         </h1>
 
-        <p className="text-lg md:text-xl mb-4 max-w-xl leading-relaxed" style={{ color: '#888' }}>
+        {/* Subtitle */}
+        <p className="text-base md:text-lg mb-2 max-w-lg leading-relaxed fade-in-up"
+          style={{ color: '#444455', animationDelay: '0.1s' }}>
           上传课件与历年真题，AI 自动提炼考点，生成闪卡与模拟试题。
-          <br />
-          UNSW 留学生的智能复习神器。
         </p>
 
         {guestError && (
-          <p className="text-sm mb-4 px-4 py-2 rounded-lg"
+          <p className="text-sm mt-3 px-4 py-2 rounded-lg"
             style={{ color: '#ff8080', background: 'rgba(255,100,100,0.1)', border: '1px solid rgba(255,100,100,0.2)' }}>
             {guestError}
           </p>
         )}
 
-        {/* CTAs */}
-        <div className="flex flex-col sm:flex-row items-center gap-4 mt-2">
-          <Link href="/register"
-            className="px-8 py-3 rounded-xl text-base font-bold transition-all"
-            style={{
-              background: 'linear-gradient(135deg, rgba(255,215,0,0.25), rgba(255,180,0,0.15))',
-              color: '#FFD700',
-              border: '1px solid rgba(255,215,0,0.4)',
-              boxShadow: '0 0 24px rgba(255,215,0,0.15)',
-            }}>
-            立即注册 →
-          </Link>
+        {/* ── Campus Hero Card ── */}
+        <CampusHeroCard onGuestLogin={handleGuestLogin} guestLoading={guestLoading} />
 
-          <button
-            onClick={handleGuestLogin}
-            disabled={guestLoading}
-            className="px-8 py-3 rounded-xl text-base transition-all disabled:opacity-50"
-            style={{ color: '#666', border: '1px solid rgba(255,255,255,0.08)' }}>
-            {guestLoading
-              ? <span className="flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> 进入中…</span>
-              : '先逛逛 →'}
-          </button>
-        </div>
-
-        <p className="text-xs mt-6" style={{ color: '#444' }}>
-          游客模式仅可体验 COMP9517 课程，注册后解锁全部内容
+        {/* Footer hint */}
+        <p className="text-xs mt-2" style={{ color: '#2a2a3a' }}>
+          游客模式仅限 COMP9517 课程体验 · 注册解锁全部功能
         </p>
       </section>
 
