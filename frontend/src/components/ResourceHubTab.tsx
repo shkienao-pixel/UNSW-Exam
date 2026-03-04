@@ -23,6 +23,10 @@ import {
   Code, Globe, FileJson, FileCheck,
 } from 'lucide-react'
 
+// ── 上传队列类型 ─────────────────────────────────────────────────────────────
+type UploadStatus = 'pending' | 'uploading' | 'done' | 'error'
+interface UploadItem { id: number; file: File; status: UploadStatus; error?: string }
+
 // ── 文件类型图标 ───────────────────────────────────────────────────────────────
 
 function FileTypeIcon({ fileType, size = 40 }: { fileType: string; size?: number }) {
@@ -450,7 +454,10 @@ export default function ResourceHubTab({
   const { t } = useLang()
   const [activeTab, setActiveTab]     = useState<DocType | 'all'>('all')
   const [search, setSearch]           = useState('')
-  const [uploading, setUploading]     = useState(false)
+  const [uploadQueue, setUploadQueue] = useState<UploadItem[]>([])
+  const uploadIdRef = useRef(0)
+  const isUploading = uploadQueue.some(q => q.status === 'uploading')
+  const allDone = uploadQueue.length > 0 && uploadQueue.every(q => q.status === 'done' || q.status === 'error')
   const [uploadOpen, setUploadOpen]   = useState(false)
   const [pendingDocType, setPendingDocType] = useState<DocType>('lecture')
   const [unlockTarget, setUnlockTarget]     = useState<Artifact | null>(null)
@@ -473,17 +480,23 @@ export default function ResourceHubTab({
     return m
   }, [artifacts])
 
-  // ── 上传 ───────────────────────────────────────────────────────
-  async function uploadFile(file: File) {
-    setUploading(true)
-    try {
-      const art = await api.artifacts.upload(courseId, file, pendingDocType)
-      setArtifacts(prev => [art, ...prev])
-      setUploadOpen(false)
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : '上传失败')
-    } finally {
-      setUploading(false)
+  // ── 批量上传（顺序逐个） ────────────────────────────────────────
+  async function startUpload(files: File[]) {
+    if (files.length === 0) return
+    const newItems: UploadItem[] = files.map(f => ({
+      id: ++uploadIdRef.current, file: f, status: 'pending' as UploadStatus,
+    }))
+    setUploadQueue(prev => [...prev, ...newItems])
+    for (const item of newItems) {
+      setUploadQueue(prev => prev.map(q => q.id === item.id ? { ...q, status: 'uploading' as UploadStatus } : q))
+      try {
+        const art = await api.artifacts.upload(courseId, item.file, pendingDocType)
+        setArtifacts(prev => [art, ...prev])
+        setUploadQueue(prev => prev.map(q => q.id === item.id ? { ...q, status: 'done' as UploadStatus } : q))
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : '上传失败'
+        setUploadQueue(prev => prev.map(q => q.id === item.id ? { ...q, status: 'error' as UploadStatus, error: msg } : q))
+      }
     }
   }
 
@@ -582,16 +595,20 @@ export default function ResourceHubTab({
           </div>
           <div
             className="rounded-xl border-2 border-dashed flex flex-col items-center justify-center py-8 cursor-pointer transition-colors"
-            style={{ borderColor: uploading ? '#FFD700' : 'rgba(255,215,0,0.2)' }}
-            onClick={() => fileInputRef.current?.click()}
+            style={{ borderColor: isUploading ? '#FFD700' : 'rgba(255,215,0,0.2)' }}
+            onClick={() => !isUploading && fileInputRef.current?.click()}
             onDragOver={e => e.preventDefault()}
-            onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) uploadFile(f) }}
+            onDrop={e => {
+              e.preventDefault()
+              const files = Array.from(e.dataTransfer.files)
+              if (files.length > 0) startUpload(files)
+            }}
           >
-            {uploading
+            {isUploading
               ? <Loader2 className="animate-spin mb-2" style={{ color: '#FFD700' }} size={22} />
               : <Upload size={22} className="mb-2" style={{ color: '#444' }} />}
             <p className="text-sm font-medium" style={{ color: '#888' }}>
-              {uploading ? '上传中...' : '拖拽或点击选择文件'}
+              {isUploading ? '上传中...' : '拖拽或点击选择文件（可多选）'}
             </p>
             <p className="text-xs mt-1" style={{ color: '#555' }}>
               支持 PDF · Word · Python · TXT · Jupyter · URL
@@ -600,10 +617,56 @@ export default function ResourceHubTab({
               ref={fileInputRef}
               type="file"
               accept=".pdf,.docx,.doc,.py,.txt,.ipynb"
+              multiple
               className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = '' }}
+              onChange={e => {
+                const files = Array.from(e.target.files ?? [])
+                if (files.length > 0) startUpload(files)
+                e.target.value = ''
+              }}
             />
           </div>
+          {/* 上传队列进度 */}
+          {uploadQueue.length > 0 && (
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium" style={{ color: '#888' }}>
+                  上传队列（{uploadQueue.filter(q => q.status === 'done').length}/{uploadQueue.length} 完成）
+                </span>
+                {allDone && (
+                  <button
+                    onClick={() => setUploadQueue([])}
+                    className="text-xs px-2 py-0.5 rounded"
+                    style={{ color: '#555' }}
+                    onMouseEnter={e => (e.currentTarget.style.color = '#aaa')}
+                    onMouseLeave={e => (e.currentTarget.style.color = '#555')}
+                  >
+                    清除
+                  </button>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                {uploadQueue.map(item => (
+                  <div key={item.id} className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                    style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    {item.status === 'pending'  && <div className="w-3.5 h-3.5 rounded-full border border-dashed flex-shrink-0" style={{ borderColor: '#444' }} />}
+                    {item.status === 'uploading' && <Loader2 size={13} className="animate-spin flex-shrink-0" style={{ color: '#FFD700' }} />}
+                    {item.status === 'done'      && <CheckCircle2 size={13} className="flex-shrink-0" style={{ color: '#4ade80' }} />}
+                    {item.status === 'error'     && <X size={13} className="flex-shrink-0" style={{ color: '#EF4444' }} />}
+                    <span className="text-xs flex-1 truncate"
+                      style={{ color: item.status === 'error' ? '#EF4444' : item.status === 'done' ? '#555' : '#aaa' }}>
+                      {item.file.name}
+                    </span>
+                    {item.status === 'error' && item.error && (
+                      <span className="text-xs flex-shrink-0 ml-2 max-w-[120px] truncate" style={{ color: '#ef9999' }} title={item.error}>
+                        {item.error}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

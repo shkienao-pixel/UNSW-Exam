@@ -60,6 +60,7 @@ interface User {
 }
 interface Invite { id: string; code: string; note: string | null; max_uses: number; used_count: number; created_at: string }
 interface ApiKey { id: number; provider: 'openai' | 'gemini' | 'deepseek'; label: string; is_active: boolean; created_at: string; updated_at: string }
+interface AdminUploadItem { id: number; file: File; status: 'pending' | 'uploading' | 'done' | 'error'; error?: string }
 
 type Tab = 'courses' | 'artifacts' | 'users' | 'invites' | 'api-keys' | 'feedback'
 
@@ -384,8 +385,10 @@ function ArtifactsTab({ secret }: { secret: string }) {
   const [reindexing, setReindexing] = useState(false)
   const [reindexResult, setReindexResult] = useState<string>('')
   const [uploadDocType, setUploadDocType] = useState<DocType>('lecture')
-  const [uploading, setUploading] = useState(false)
+  const [uploadQueue, setUploadQueue] = useState<AdminUploadItem[]>([])
+  const uploadIdRef = useRef(0)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const isUploading = uploadQueue.some(q => q.status === 'uploading')
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
   const [updatingDocType, setUpdatingDocType] = useState<number | null>(null)
@@ -449,26 +452,36 @@ function ArtifactsTab({ secret }: { secret: string }) {
     }
   }
 
-  async function uploadFile(file: File) {
-    if (!selectedCourse) return
-    setUploading(true); setError('')
-    try {
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('doc_type', uploadDocType)
-      // Use fetch directly — adminReq forces Content-Type: application/json which breaks FormData
-      const res = await fetch(`${API}/admin/courses/${selectedCourse.id}/artifacts`, {
-        method: 'POST',
-        headers: { 'X-Admin-Secret': secret },
-        body: fd,
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: res.statusText }))
-        throw new Error(err.detail || `HTTP ${res.status}`)
+  async function startUpload(files: File[]) {
+    if (!selectedCourse || files.length === 0) return
+    const newItems: AdminUploadItem[] = files.map(f => ({
+      id: ++uploadIdRef.current, file: f, status: 'pending' as const,
+    }))
+    setUploadQueue(prev => [...prev, ...newItems])
+    setError('')
+    for (const item of newItems) {
+      setUploadQueue(prev => prev.map(q => q.id === item.id ? { ...q, status: 'uploading' as const } : q))
+      try {
+        const fd = new FormData()
+        fd.append('file', item.file)
+        fd.append('doc_type', uploadDocType)
+        // Use fetch directly — adminReq forces Content-Type: application/json which breaks FormData
+        const res = await fetch(`${API}/admin/courses/${selectedCourse.id}/artifacts`, {
+          method: 'POST',
+          headers: { 'X-Admin-Secret': secret },
+          body: fd,
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: res.statusText }))
+          throw new Error(err.detail || `HTTP ${res.status}`)
+        }
+        setUploadQueue(prev => prev.map(q => q.id === item.id ? { ...q, status: 'done' as const } : q))
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setUploadQueue(prev => prev.map(q => q.id === item.id ? { ...q, status: 'error' as const, error: msg } : q))
       }
-      await loadFiles(selectedCourse.id, statusFilter)
-    } catch (e: unknown) { setError(String(e)) }
-    finally { setUploading(false) }
+    }
+    await loadFiles(selectedCourse.id, statusFilter)
   }
 
   async function reindex() {
@@ -618,17 +631,53 @@ function ArtifactsTab({ secret }: { secret: string }) {
               <option key={o.value} value={o.value} style={{ background: '#0d0d1a', color: '#fff' }}>{o.label}</option>
             ))}
           </select>
-          <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
+          <button onClick={() => fileInputRef.current?.click()} disabled={isUploading}
             className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 disabled:opacity-50"
             style={{ background: 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,215,0,0.08))', color: '#FFD700', border: '1px solid rgba(255,215,0,0.35)' }}
-            onMouseEnter={e => { if (!uploading) (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(255,215,0,0.22), rgba(255,215,0,0.12))' }}
-            onMouseLeave={e => { if (!uploading) (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,215,0,0.08))' }}>
-            {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-            {uploading ? '上传中…' : '选择文件上传'}
+            onMouseEnter={e => { if (!isUploading) (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(255,215,0,0.22), rgba(255,215,0,0.12))' }}
+            onMouseLeave={e => { if (!isUploading) (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,215,0,0.08))' }}>
+            {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+            {isUploading ? '上传中…' : '选择文件上传（可多选）'}
           </button>
-          <input ref={fileInputRef} type="file" accept=".pdf,.docx,.doc" className="hidden"
-            onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = '' }} />
+          <input ref={fileInputRef} type="file" accept=".pdf,.docx,.doc,.py,.txt,.ipynb" multiple className="hidden"
+            onChange={e => { const files = Array.from(e.target.files ?? []); if (files.length > 0) startUpload(files); e.target.value = '' }} />
         </div>
+        {/* 上传队列进度 */}
+        {uploadQueue.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs" style={{ color: '#666' }}>
+                上传进度：{uploadQueue.filter(q => q.status === 'done').length}/{uploadQueue.length} 完成
+              </span>
+              {uploadQueue.every(q => q.status === 'done' || q.status === 'error') && (
+                <button onClick={() => setUploadQueue([])} className="text-xs px-2 py-0.5 rounded"
+                  style={{ color: '#555' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = '#aaa')}
+                  onMouseLeave={e => (e.currentTarget.style.color = '#555')}>
+                  清除记录
+                </button>
+              )}
+            </div>
+            {uploadQueue.map(item => (
+              <div key={item.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs"
+                style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                {item.status === 'pending'   && <div className="w-3 h-3 rounded-full border border-dashed flex-shrink-0" style={{ borderColor: '#444' }} />}
+                {item.status === 'uploading' && <Loader2 size={12} className="animate-spin flex-shrink-0" style={{ color: '#FFD700' }} />}
+                {item.status === 'done'      && <CheckCircle size={12} className="flex-shrink-0" style={{ color: '#4ade80' }} />}
+                {item.status === 'error'     && <XCircle size={12} className="flex-shrink-0" style={{ color: '#EF4444' }} />}
+                <span className="flex-1 truncate"
+                  style={{ color: item.status === 'error' ? '#EF4444' : item.status === 'done' ? '#555' : '#aaa' }}>
+                  {item.file.name}
+                </span>
+                {item.status === 'error' && item.error && (
+                  <span className="flex-shrink-0 ml-2 max-w-[150px] truncate" style={{ color: '#ef9999' }} title={item.error}>
+                    {item.error}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 已批准时显示 doc_type 横向子过滤 */}
