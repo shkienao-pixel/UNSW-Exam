@@ -19,6 +19,7 @@ import MistakesView from '@/components/MistakesView'
 import InsufficientCreditsModal from '@/components/InsufficientCreditsModal'
 import ReactMarkdown from 'react-markdown'
 import ReviewOutlineTab from '@/components/ReviewOutlineTab'
+import ResourceHubTab from '@/components/ResourceHubTab'
 import KnowledgeTab from '@/components/KnowledgeTab'
 
 // ── View routing ──────────────────────────────────────────────────────────────
@@ -35,19 +36,22 @@ function CoursePageInner() {
   const [loading, setLoading] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { t } = useLang()
-  const { role } = useAuth()
+  const { role, user } = useAuth()
+  const [creditBalance, setCreditBalance] = useState(0)
 
   const load = useCallback(async () => {
     try {
       const c = await api.courses.get(courseId)
       setCourse(c)
-      // Load artifacts and scope-sets independently — don't let either block course display
-      const [arts, scopes] = await Promise.allSettled([
+      // Load artifacts, scope-sets, credits independently
+      const [arts, scopes, bal] = await Promise.allSettled([
         api.artifacts.list(courseId),
         api.scopeSets.list(courseId),
+        api.credits.balance(),
       ])
       if (arts.status === 'fulfilled') setArtifacts(arts.value)
       if (scopes.status === 'fulfilled') setScopeSets(scopes.value)
+      if (bal.status === 'fulfilled') setCreditBalance(bal.value.balance)
     } finally {
       setLoading(false)
     }
@@ -95,12 +99,12 @@ function CoursePageInner() {
           artifacts={artifacts} setOutputs={setOutputs} />
       )}
       {view === 'outputs'    && <OutputsTab courseId={courseId} outputs={outputs} setOutputs={setOutputs} />}
-      {view === 'files'      && (
+      {view === 'resources'  && (
         role === 'guest' ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <div className="text-4xl mb-4">🔒</div>
-            <h3 className="text-lg font-semibold text-white mb-2">文件上传仅限注册用户</h3>
-            <p className="text-sm mb-6" style={{ color: '#555' }}>注册账号后即可上传课件与真题</p>
+            <h3 className="text-lg font-semibold text-white mb-2">课程资料库仅限注册用户</h3>
+            <p className="text-sm mb-6" style={{ color: '#555' }}>注册账号后即可上传课件与真题，并参与积分解锁</p>
             <a href="/register"
               className="px-6 py-2 rounded-xl text-sm font-semibold"
               style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.3)' }}>
@@ -108,8 +112,14 @@ function CoursePageInner() {
             </a>
           </div>
         ) : (
-          <FilesTab courseId={courseId} artifacts={artifacts} setArtifacts={setArtifacts}
-            fileInputRef={fileInputRef} />
+          <ResourceHubTab
+            courseId={courseId}
+            artifacts={artifacts}
+            setArtifacts={setArtifacts}
+            fileInputRef={fileInputRef}
+            currentUserId={user?.id ?? ''}
+            creditBalance={creditBalance}
+          />
         )
       )}
       {view === 'scope'      && (

@@ -23,7 +23,7 @@ const FEATURES = [
   { view: 'outline',    emoji: '📋', zh: '大纲',     en: 'Outline'                     },
   { view: 'ask',        emoji: '💬', zh: 'AI 问答',  en: 'AI Q&A'                      },
   { view: 'generate',   emoji: '⚡', zh: 'AI 生成',  en: 'AI Generate'                 },
-  { view: 'files',      emoji: '📁', zh: '文件上传',  en: 'Files'                      },
+  { view: 'resources',  emoji: '📚', zh: '课程资料',  en: 'Resources', featured: true  },
   { view: 'scope',      emoji: '⚙️', zh: 'Scope',   en: 'Scope'                       },
 ]
 
@@ -110,7 +110,7 @@ function CourseSidebar({
       <div className="my-2" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }} />
 
       {/* Feature links */}
-      {FEATURES.filter(f => !(f.view === 'files' && role === 'guest')).map(f => {
+      {FEATURES.filter(f => !(f.view === 'resources' && role === 'guest')).map(f => {
         const isActive = currentView === f.view
         const href = `/courses/${courseId}?view=${f.view}`
         const label = lang === 'zh' ? f.zh : f.en

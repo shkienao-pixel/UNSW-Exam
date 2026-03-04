@@ -162,6 +162,51 @@ def unlock_artifact(
     return {"ok": True, "already_unlocked": False, "storage_url": art.get("storage_url")}
 
 
+@router.patch("/{course_id}/artifacts/{artifact_id}/doc-type", response_model=ArtifactOut)
+def update_artifact_doc_type(
+    course_id: str,
+    artifact_id: int,
+    doc_type: str = Body(..., embed=True),
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_db),
+) -> dict[str, Any]:
+    """上传者修改自己文件的分类，并异步同步 ChromaDB 向量元数据。
+
+    RAG Sync 架构：
+      1. UPDATE artifacts.doc_type → Supabase (同步、快速)
+      2. UPDATE ChromaDB chunk metadata → 后台任务 (非阻塞、无重新向量化)
+    ChromaDB 只更新 metadata 字段，不重新 embed，零成本。
+    """
+    if doc_type not in _VALID_DOC_TYPES:
+        raise HTTPException(status_code=422, detail=f"Invalid doc_type. Must be one of: {sorted(_VALID_DOC_TYPES)}")
+
+    # 仅允许上传者修改自己的文件
+    row = supabase.table("artifacts").select("*").eq("id", artifact_id).eq("course_id", course_id).execute()
+    if not row.data:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    art = row.data[0]
+    if art.get("user_id") != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Only the uploader can change the category")
+
+    # Step 1: 更新关系型数据库
+    supabase.table("artifacts").update({"doc_type": doc_type}).eq("id", artifact_id).execute()
+    updated = supabase.table("artifacts").select("*").eq("id", artifact_id).execute().data[0]
+
+    # Step 2: 异步同步 ChromaDB 向量元数据（非阻塞）
+    try:
+        from app.services.rag_service import sync_artifact_doc_type
+        import threading
+        threading.Thread(
+            target=sync_artifact_doc_type,
+            args=(course_id, artifact_id, doc_type),
+            daemon=True,
+        ).start()
+    except Exception:
+        pass  # RAG sync 失败不影响主流程
+
+    return {**updated, "is_locked": False}
+
+
 @router.delete("/{course_id}/artifacts/{artifact_id}", status_code=200)
 def delete_artifact_route(
     course_id: str,

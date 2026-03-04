@@ -144,6 +144,11 @@ export const api = {
       req<{ ok: boolean; already_unlocked: boolean; storage_url: string | null }>(
         `/courses/${courseId}/artifacts/${artifactId}/unlock`, { method: 'POST' }
       ),
+    updateDocType: (courseId: string, artifactId: number, docType: string) =>
+      req<import('@/lib/types').Artifact>(
+        `/courses/${courseId}/artifacts/${artifactId}/doc-type`,
+        { method: 'PATCH', body: JSON.stringify({ doc_type: docType }) }
+      ),
   },
 
   scopeSets: {
