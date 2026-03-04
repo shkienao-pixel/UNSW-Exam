@@ -15,8 +15,7 @@ import app.services.credit_service as credit_service
 
 router = APIRouter()
 
-# doc_type 需要花积分解锁才能查看下载链接
-_LOCKED_DOC_TYPES = {"past_exam", "assignment"}
+# 所有他人上传的文件均需积分解锁（自己上传的永远免费）
 
 
 def _get_unlocked_ids(supabase: Client, user_id: str) -> set[int]:
@@ -57,8 +56,7 @@ def get_artifacts(
     result: list[dict[str, Any]] = []
     for a in arts:
         needs_lock = (
-            a.get("doc_type") in _LOCKED_DOC_TYPES
-            and a.get("user_id") != user_id  # 自己上传的不锁
+            a.get("user_id") != user_id  # 自己上传的不锁，其余全部锁
             and a["id"] not in unlocked_ids
         )
         if needs_lock:
@@ -146,10 +144,7 @@ def unlock_artifact(
         raise HTTPException(status_code=404, detail="Artifact not found")
     art = row.data[0]
 
-    if art.get("doc_type") not in _LOCKED_DOC_TYPES:
-        raise HTTPException(status_code=400, detail="This file does not require unlocking")
-
-    # 只允许解锁已审核通过的文件（fixes #7: missing status check）
+    # 只允许解锁已审核通过的文件
     if art.get("status") != "approved":
         raise HTTPException(status_code=400, detail="Only approved files can be unlocked")
 
@@ -187,18 +182,16 @@ def unlock_all_artifacts(
     arts = freshen_artifact_urls(supabase, arts)
     unlocked_ids = _get_unlocked_ids(supabase, user_id)
 
-    # 找出本课程中对当前用户而言仍然锁定的文件
+    # 找出本课程中对当前用户而言仍然锁定的文件（所有他人上传）
     to_unlock = [
         a for a in arts
-        if a.get("doc_type") in _LOCKED_DOC_TYPES
-        and a.get("user_id") != user_id
+        if a.get("user_id") != user_id
         and a["id"] not in unlocked_ids
     ]
 
     locked_total = len([
         a for a in arts
-        if a.get("doc_type") in _LOCKED_DOC_TYPES
-        and a.get("user_id") != user_id
+        if a.get("user_id") != user_id
     ])
 
     if not to_unlock:
