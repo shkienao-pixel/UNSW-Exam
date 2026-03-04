@@ -344,7 +344,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   useEffect(() => {
-    if (!loading && !user) router.replace('/login')
+    if (!loading && !user) router.replace('/')
   }, [user, loading, router])
 
   useEffect(() => {
