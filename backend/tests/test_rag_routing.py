@@ -3,7 +3,7 @@
 Covers:
   - _resolve_artifact_ids() priority / fallback / None-return logic
   - get_artifact_ids_by_doc_type() DB query behaviour
-  - Per-endpoint routing rules (strict vs. fallback)
+  - Per-endpoint routing rules (strict vs. fallback) — tested at service layer
   - Knowledge router revision-strict routing
   - Error messages when no matching doc_type found
 """
@@ -24,7 +24,7 @@ os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service")
 os.environ.setdefault("OPENAI_API_KEY",            "test-openai")
 os.environ.setdefault("ADMIN_SECRET",              "test-admin-secret")
 
-from app.routers.generate import _resolve_artifact_ids
+from app.services.generate_service import _resolve_artifact_ids
 from app.services.rag_service import get_artifact_ids_by_doc_type
 from app.core.exceptions import AppError
 
@@ -131,12 +131,12 @@ class TestResolveArtifactIds:
             data=[{"id": 5, "artifact_ids": [10, 11], "course_id": "c1", "name": "s", "is_default": False,
                    "created_at": "2025-01-01", "updated_at": "2025-01-01"}]
         )
-        with patch("app.routers.generate.get_scope_set", return_value={"artifact_ids": [10, 11]}):
+        with patch("app.services.generate_service.get_scope_set", return_value={"artifact_ids": [10, 11]}):
             result = _resolve_artifact_ids(sb, "u1", "c1", scope_set_id=5, artifact_ids=None)
         assert result == [10, 11]
 
     def test_scope_set_empty_returns_none(self):
-        with patch("app.routers.generate.get_scope_set", return_value={"artifact_ids": []}):
+        with patch("app.services.generate_service.get_scope_set", return_value={"artifact_ids": []}):
             sb = MagicMock()
             result = _resolve_artifact_ids(sb, "u1", "c1", scope_set_id=5, artifact_ids=None)
         assert result is None
@@ -145,7 +145,7 @@ class TestResolveArtifactIds:
     def test_priority_doc_type_found_returns_ids(self):
         sb = MagicMock()
         with patch(
-            "app.routers.generate.get_artifact_ids_by_doc_type",
+            "app.services.generate_service.get_artifact_ids_by_doc_type",
             return_value=[20, 21],
         ):
             result = _resolve_artifact_ids(
@@ -163,7 +163,7 @@ class TestResolveArtifactIds:
         def fake_get(sb_, course_id, doc_types):
             return call_results.get(tuple(doc_types), [])
 
-        with patch("app.routers.generate.get_artifact_ids_by_doc_type", side_effect=fake_get):
+        with patch("app.services.generate_service.get_artifact_ids_by_doc_type", side_effect=fake_get):
             result = _resolve_artifact_ids(
                 sb, "u1", "c1", None, None,
                 priority_doc_types=["revision"],
@@ -174,7 +174,7 @@ class TestResolveArtifactIds:
     def test_priority_not_found_no_fallback_returns_none(self):
         """When fallback_doc_types=None, return None (full corpus search)."""
         sb = MagicMock()
-        with patch("app.routers.generate.get_artifact_ids_by_doc_type", return_value=[]):
+        with patch("app.services.generate_service.get_artifact_ids_by_doc_type", return_value=[]):
             result = _resolve_artifact_ids(
                 sb, "u1", "c1", None, None,
                 priority_doc_types=["past_exam"],
@@ -184,7 +184,7 @@ class TestResolveArtifactIds:
 
     def test_both_priority_and_fallback_empty_returns_none(self):
         sb = MagicMock()
-        with patch("app.routers.generate.get_artifact_ids_by_doc_type", return_value=[]):
+        with patch("app.services.generate_service.get_artifact_ids_by_doc_type", return_value=[]):
             result = _resolve_artifact_ids(
                 sb, "u1", "c1", None, None,
                 priority_doc_types=["revision"],
@@ -201,58 +201,68 @@ class TestResolveArtifactIds:
 # ── Per-endpoint routing rules ────────────────────────────────────────────────
 
 class TestEndpointRoutingRules:
-    """Verify each endpoint calls _resolve_artifact_ids with the correct doc_type config.
+    """Verify each generate_service function calls _resolve_artifact_ids with
+    the correct doc_type config.
 
-    We patch _resolve_artifact_ids and check which priority_doc_types / fallback_doc_types
-    it receives when scope_set_id and artifact_ids are both None.
+    Tests run at the service layer (not HTTP layer) because the router endpoints
+    now return {job_id} immediately and delegate to background asyncio tasks.
     """
 
-    def _make_route_client(self):
-        from fastapi.testclient import TestClient
-        from app.main import app
-        from app.core.dependencies import get_current_user, get_db
-        app.dependency_overrides[get_current_user] = lambda: {"id": "u1", "email": "t@t.com"}
-        app.dependency_overrides[get_db] = lambda: MagicMock()
-        return TestClient(app, raise_server_exceptions=False)
+    def _body(self, **kwargs):
+        b = MagicMock()
+        b.scope_set_id = None
+        b.artifact_ids = None
+        b.num_questions = 5
+        b.exclude_topics = []
+        for k, v in kwargs.items():
+            setattr(b, k, v)
+        return b
 
-    def _call_generate(self, client, endpoint: str):
+    def _call_service(self, fn_name: str):
+        from app.services import generate_service
+        fn = getattr(generate_service, fn_name)
+        sb = MagicMock()
+        body = self._body()
         with (
-            patch("app.services.course_service.get_course", return_value={"id": "c1"}),
-            patch("app.routers.generate._resolve_artifact_ids", return_value=None) as mock_resolve,
-            patch("app.routers.generate._get_context", return_value=("", [])),
-            patch("app.routers.generate._get_openai_key", return_value="key"),
+            patch("app.services.generate_service._resolve_artifact_ids", return_value=None) as mock_resolve,
+            patch("app.services.generate_service._get_context", return_value=("", [])),
+            patch("app.services.generate_service.get_course_chunks_sampled", return_value=("", [])),
+            patch("app.services.generate_service._get_openai_key", return_value="key"),
         ):
-            client.post(f"/courses/c1/generate/{endpoint}", json={})
-            return mock_resolve
+            try:
+                fn(sb, "u1", "c1", body)
+            except Exception:
+                pass  # we only care about mock_resolve call args
+        return mock_resolve
 
     # quiz → past_exam strict
     def test_quiz_uses_past_exam_priority_no_fallback(self):
-        client = self._make_route_client()
-        mock_resolve = self._call_generate(client, "quiz")
+        mock_resolve = self._call_service("run_quiz")
+        assert mock_resolve.called
         _, kwargs = mock_resolve.call_args
         assert kwargs.get("priority_doc_types") == ["past_exam"]
         assert kwargs.get("fallback_doc_types") is None
 
     # outline → revision strict
     def test_outline_uses_revision_priority_no_fallback(self):
-        client = self._make_route_client()
-        mock_resolve = self._call_generate(client, "outline")
+        mock_resolve = self._call_service("run_outline")
+        assert mock_resolve.called
         _, kwargs = mock_resolve.call_args
         assert kwargs.get("priority_doc_types") == ["revision"]
         assert kwargs.get("fallback_doc_types") is None
 
     # summary → lecture with tutorial fallback
     def test_summary_uses_lecture_priority_with_fallback(self):
-        client = self._make_route_client()
-        mock_resolve = self._call_generate(client, "summary")
+        mock_resolve = self._call_service("run_summary")
+        assert mock_resolve.called
         _, kwargs = mock_resolve.call_args
         assert kwargs.get("priority_doc_types") == ["lecture"]
         assert kwargs.get("fallback_doc_types") == ["tutorial"]
 
     # flashcards → lecture with tutorial fallback
     def test_flashcards_uses_lecture_priority_with_fallback(self):
-        client = self._make_route_client()
-        mock_resolve = self._call_generate(client, "flashcards")
+        mock_resolve = self._call_service("run_flashcards")
+        assert mock_resolve.called
         _, kwargs = mock_resolve.call_args
         assert kwargs.get("priority_doc_types") == ["lecture"]
         assert kwargs.get("fallback_doc_types") == ["tutorial"]
@@ -261,40 +271,39 @@ class TestEndpointRoutingRules:
 # ── Error messages when no matching docs ──────────────────────────────────────
 
 class TestDocTypeErrorMessages:
-    def _make_client(self):
-        from fastapi.testclient import TestClient
-        from app.main import app
-        from app.core.dependencies import get_current_user, get_db
-        app.dependency_overrides[get_current_user] = lambda: {"id": "u1", "email": "t@t.com"}
-        app.dependency_overrides[get_db] = lambda: MagicMock()
-        return TestClient(app, raise_server_exceptions=False)
+    """Verify that when no docs of the required type exist, a meaningful
+    Chinese error message is raised (AppError.detail)."""
+
+    def _body(self):
+        b = MagicMock()
+        b.scope_set_id = None
+        b.artifact_ids = None
+        b.num_questions = 5
+        b.exclude_topics = []
+        return b
 
     def test_quiz_no_past_exam_returns_meaningful_error(self):
-        client = self._make_client()
+        from app.services import generate_service
+        sb = MagicMock()
         with (
-            patch("app.services.course_service.get_course", return_value={"id": "c1"}),
-            patch("app.routers.generate._resolve_artifact_ids", return_value=None),
-            patch("app.routers.generate._get_context", return_value=("", [])),
-            patch("app.routers.generate._get_openai_key", return_value="key"),
+            patch("app.services.generate_service._resolve_artifact_ids", return_value=None),
+            patch("app.services.generate_service.get_course_chunks_sampled", return_value=("", [])),
         ):
-            resp = client.post("/courses/c1/generate/quiz", json={})
-        assert resp.status_code in (400, 422)
-        body = resp.json()
-        detail = body.get("detail", "")
+            with pytest.raises(AppError) as exc_info:
+                generate_service.run_quiz(sb, "u1", "c1", self._body())
+        detail = exc_info.value.detail
         assert "往年考题" in detail or "past_exam" in detail
 
     def test_outline_no_revision_returns_meaningful_error(self):
-        client = self._make_client()
+        from app.services import generate_service
+        sb = MagicMock()
         with (
-            patch("app.services.course_service.get_course", return_value={"id": "c1"}),
-            patch("app.routers.generate._resolve_artifact_ids", return_value=None),
-            patch("app.routers.generate._get_context", return_value=("", [])),
-            patch("app.routers.generate._get_openai_key", return_value="key"),
+            patch("app.services.generate_service._resolve_artifact_ids", return_value=None),
+            patch("app.services.generate_service._get_context", return_value=("", [])),
         ):
-            resp = client.post("/courses/c1/generate/outline", json={})
-        assert resp.status_code in (400, 422)
-        body = resp.json()
-        detail = body.get("detail", "")
+            with pytest.raises(AppError) as exc_info:
+                generate_service.run_outline(sb, "u1", "c1", self._body())
+        detail = exc_info.value.detail
         assert "复习总结" in detail or "revision" in detail
 
 

@@ -9,7 +9,7 @@ import os
 # Ensure app package is importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.routers.generate import _extract_json, _sources_note
+from app.services.generate_service import _extract_json, _sources_note
 
 
 # ── _extract_json ─────────────────────────────────────────────────────────────
