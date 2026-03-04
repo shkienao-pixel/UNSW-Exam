@@ -12,6 +12,7 @@ import {
   FileText, Upload, Loader2, Zap, History, Settings2,
   CheckSquare, ChevronDown, MessageSquare, BookOpen, Send, RotateCcw,
   ExternalLink, Trash2, Languages, HelpCircle, ImagePlus, X, Sparkles,
+  Code, Lock,
 } from 'lucide-react'
 import { addMistake } from '@/lib/mistakes-store'
 import MistakesView from '@/components/MistakesView'
@@ -1499,6 +1500,9 @@ function FilesTab({ courseId, artifacts, setArtifacts, fileInputRef }: {
   const [dragOver, setDragOver] = useState(false)
   const [pendingDocType, setPendingDocType] = useState<DocType>('lecture')
   const [filterDocType, setFilterDocType] = useState<DocType | 'all'>('all')
+  const [unlockTarget, setUnlockTarget] = useState<Artifact | null>(null)
+  const [unlocking, setUnlocking] = useState(false)
+  const [unlockError, setUnlockError] = useState('')
 
   async function uploadFile(file: File) {
     setUploading(true)
@@ -1510,12 +1514,71 @@ function FilesTab({ courseId, artifacts, setArtifacts, fileInputRef }: {
     finally { setUploading(false) }
   }
 
+  async function handleUnlock() {
+    if (!unlockTarget) return
+    setUnlocking(true)
+    setUnlockError('')
+    try {
+      const res = await api.artifacts.unlock(courseId, unlockTarget.id)
+      // 解锁成功：更新本地 artifact 列表 is_locked=false + storage_url
+      setArtifacts(prev => prev.map(a =>
+        a.id === unlockTarget.id
+          ? { ...a, is_locked: false, storage_url: res.storage_url ?? a.storage_url }
+          : a
+      ))
+      setUnlockTarget(null)
+    } catch (err: unknown) {
+      setUnlockError(err instanceof Error ? err.message : '解锁失败，请稍后重试')
+    } finally {
+      setUnlocking(false)
+    }
+  }
+
   const displayed = filterDocType === 'all'
     ? artifacts
     : artifacts.filter(a => a.doc_type === filterDocType)
 
   return (
     <div className="space-y-5">
+
+      {/* 解锁确认 Modal */}
+      {unlockTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.75)' }}
+          onClick={() => !unlocking && setUnlockTarget(null)}>
+          <div className="relative w-full max-w-sm mx-4 p-6 rounded-2xl" onClick={e => e.stopPropagation()}
+            style={{ background: '#0e0e1c', border: '1px solid rgba(255,165,0,0.3)', boxShadow: '0 20px 60px rgba(0,0,0,0.7)' }}>
+            <div className="flex items-center gap-2 mb-3">
+              <Lock size={18} style={{ color: '#FFA500' }} />
+              <h3 className="text-base font-bold text-white">解锁文件访问</h3>
+            </div>
+            <p className="text-sm mb-1" style={{ color: '#aaa' }}>
+              文件：<span className="text-white font-medium">{unlockTarget.file_name}</span>
+            </p>
+            <p className="text-sm mb-4" style={{ color: '#888' }}>
+              此「{DOC_TYPE_LABELS[unlockTarget.doc_type]}」需消耗 <span style={{ color: '#FFD700', fontWeight: 600 }}>1 积分</span> 永久解锁下载。
+            </p>
+            {unlockError && (
+              <p className="text-xs mb-3 px-3 py-2 rounded-lg" style={{ color: '#ff8080', background: 'rgba(255,80,80,0.1)', border: '1px solid rgba(255,80,80,0.2)' }}>
+                {unlockError}
+              </p>
+            )}
+            <div className="flex gap-3">
+              <button onClick={() => setUnlockTarget(null)} disabled={unlocking}
+                className="flex-1 py-2 rounded-xl text-sm font-medium"
+                style={{ background: 'rgba(255,255,255,0.06)', color: '#777', border: '1px solid rgba(255,255,255,0.1)' }}>
+                取消
+              </button>
+              <button onClick={handleUnlock} disabled={unlocking}
+                className="flex-1 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                style={{ background: 'rgba(255,165,0,0.18)', color: '#FFA500', border: '1px solid rgba(255,165,0,0.35)' }}>
+                {unlocking ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
+                {unlocking ? '解锁中...' : '确认解锁（-1 积分）'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div>
         <h2 className="text-2xl font-bold text-white flex items-center gap-2">
           <FileText size={22} style={{ color: '#FFD700' }} /> {t('files_title')}
@@ -1557,7 +1620,7 @@ function FilesTab({ courseId, artifacts, setArtifacts, fileInputRef }: {
             {uploading ? t('files_uploading') : t('files_drag')}
           </p>
           <p className="text-xs mt-1" style={{ color: '#555' }}>{t('files_hint')}</p>
-          <input ref={fileInputRef} type="file" accept=".pdf,.docx,.doc,.py" className="hidden"
+          <input ref={fileInputRef} type="file" accept=".pdf,.docx,.doc,.py,.txt,.ipynb" className="hidden"
             onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = '' }} />
         </div>
       </div>
@@ -1586,34 +1649,56 @@ function FilesTab({ courseId, artifacts, setArtifacts, fileInputRef }: {
 
       {/* 文件列表 */}
       <div className="space-y-2">
-        {displayed.map(a => (
-          <div key={a.id} className="glass flex items-center gap-3 px-4 py-3">
-            <FileText size={16} style={{ color: '#FFD700', flexShrink: 0 }} />
-            <span className="flex-1 text-sm text-white truncate">{a.file_name}</span>
-            {/* doc_type 标签 */}
-            <span className="text-xs px-2 py-0.5 rounded flex-shrink-0" style={{
-              background: `${DOC_TYPE_COLORS[a.doc_type]}1a`,
-              color: DOC_TYPE_COLORS[a.doc_type],
-              border: `1px solid ${DOC_TYPE_COLORS[a.doc_type]}44`,
-            }}>
-              {DOC_TYPE_LABELS[a.doc_type]}
-            </span>
-            {/* 审核状态 */}
-            <span className="text-xs px-2 py-0.5 rounded flex-shrink-0" style={{
-              background: a.status === 'approved' ? 'rgba(0,200,100,0.1)' : a.status === 'rejected' ? 'rgba(255,68,68,0.1)' : 'rgba(255,165,0,0.1)',
-              color: a.status === 'approved' ? '#00C864' : a.status === 'rejected' ? '#FF4444' : '#FFA500',
-            }}>
-              {a.status === 'approved' ? t('files_approved') : a.status === 'rejected' ? t('files_rejected') : t('files_pending')}
-            </span>
-            <span className="text-xs flex-shrink-0" style={{ color: '#555' }}>{new Date(a.created_at).toLocaleDateString('zh-CN')}</span>
-            {a.storage_url && (
-              <a href={a.storage_url} target="_blank" rel="noopener noreferrer" title={t('view_file')}
-                style={{ color: '#FFD700', opacity: 0.7 }} className="hover:opacity-100 transition-opacity flex-shrink-0">
-                <ExternalLink size={14} />
-              </a>
-            )}
-          </div>
-        ))}
+        {displayed.map(a => {
+          const isCode = a.file_type === 'python' || a.file_type === 'notebook'
+          const fileIcon = isCode
+            ? <Code size={16} style={{ color: '#8B5CF6', flexShrink: 0 }} />
+            : <FileText size={16} style={{ color: '#FFD700', flexShrink: 0 }} />
+          return (
+            <div key={a.id} className="glass flex items-center gap-3 px-4 py-3">
+              {fileIcon}
+              <span className="flex-1 text-sm text-white truncate">{a.file_name}</span>
+              {/* 代码文件标识 */}
+              {isCode && (
+                <span className="text-xs px-1.5 py-0.5 rounded flex-shrink-0" style={{
+                  background: 'rgba(139,92,246,0.12)', color: '#8B5CF6', border: '1px solid rgba(139,92,246,0.25)',
+                }}>
+                  {a.file_type === 'notebook' ? 'Jupyter' : 'Python'}
+                </span>
+              )}
+              {/* doc_type 标签 */}
+              <span className="text-xs px-2 py-0.5 rounded flex-shrink-0" style={{
+                background: `${DOC_TYPE_COLORS[a.doc_type]}1a`,
+                color: DOC_TYPE_COLORS[a.doc_type],
+                border: `1px solid ${DOC_TYPE_COLORS[a.doc_type]}44`,
+              }}>
+                {DOC_TYPE_LABELS[a.doc_type]}
+              </span>
+              {/* 审核状态 */}
+              <span className="text-xs px-2 py-0.5 rounded flex-shrink-0" style={{
+                background: a.status === 'approved' ? 'rgba(0,200,100,0.1)' : a.status === 'rejected' ? 'rgba(255,68,68,0.1)' : 'rgba(255,165,0,0.1)',
+                color: a.status === 'approved' ? '#00C864' : a.status === 'rejected' ? '#FF4444' : '#FFA500',
+              }}>
+                {a.status === 'approved' ? t('files_approved') : a.status === 'rejected' ? t('files_rejected') : t('files_pending')}
+              </span>
+              <span className="text-xs flex-shrink-0" style={{ color: '#555' }}>{new Date(a.created_at).toLocaleDateString('zh-CN')}</span>
+              {a.is_locked ? (
+                <button
+                  onClick={() => { setUnlockTarget(a); setUnlockError('') }}
+                  title="花 1 积分解锁下载"
+                  className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition-all hover:opacity-80 flex-shrink-0"
+                  style={{ background: 'rgba(255,165,0,0.1)', color: '#FFA500', border: '1px solid rgba(255,165,0,0.25)' }}>
+                  <Lock size={11} /> 解锁
+                </button>
+              ) : a.storage_url ? (
+                <a href={a.storage_url} target="_blank" rel="noopener noreferrer" title={t('view_file')}
+                  style={{ color: '#FFD700', opacity: 0.7 }} className="hover:opacity-100 transition-opacity flex-shrink-0">
+                  <ExternalLink size={14} />
+                </a>
+              ) : null}
+            </div>
+          )
+        })}
         {displayed.length === 0 && (
           <p className="text-center py-8 text-sm" style={{ color: '#444' }}>
             {filterDocType === 'all' ? t('files_empty') : `暂无「${DOC_TYPE_LABELS[filterDocType as DocType]}」类型文件`}

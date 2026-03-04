@@ -52,6 +52,7 @@ class ArtifactOut(BaseModel):
     storage_url: str | None = None
     reject_reason: str | None = None
     uploaded_by: str | None = None
+    is_locked: bool = False
     created_at: datetime
 
 

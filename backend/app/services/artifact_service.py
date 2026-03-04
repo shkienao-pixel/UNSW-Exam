@@ -24,20 +24,24 @@ _UNSAFE_CHARS = re.compile(r"[^a-zA-Z0-9.\-]")
 # Signed URL validity — 10 years (effectively permanent for this app)
 _SIGNED_URL_EXPIRY = 10 * 365 * 24 * 3600
 
-FileType = Literal["pdf", "word", "python", "url", "other"]
+FileType = Literal["pdf", "word", "python", "text", "notebook", "url", "other"]
 
 _EXT_TO_TYPE: dict[str, FileType] = {
-    ".pdf":  "pdf",
-    ".docx": "word",
-    ".doc":  "word",
-    ".py":   "python",
+    ".pdf":   "pdf",
+    ".docx":  "word",
+    ".doc":   "word",
+    ".py":    "python",
+    ".txt":   "text",
+    ".ipynb": "notebook",
 }
 
-_TYPE_TO_MIME: dict[FileType, str] = {
-    "pdf":    "application/pdf",
-    "word":   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "python": "text/x-python",
-    "other":  "application/octet-stream",
+_TYPE_TO_MIME: dict[str, str] = {
+    "pdf":      "application/pdf",
+    "word":     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "python":   "text/x-python",
+    "text":     "text/plain",
+    "notebook": "application/x-ipynb+json",
+    "other":    "application/octet-stream",
 }
 
 

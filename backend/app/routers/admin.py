@@ -44,10 +44,15 @@ def _require_admin(x_admin_secret: str = Header(default="")) -> None:
 
 
 def _bg_process(supabase: Client, artifact: dict) -> None:
-    """Background task: chunk + embed one artifact."""
+    """Background task: chunk + embed one artifact.
+
+    Only indexes text-extractable types (pdf, word, text).
+    Skips code files (python, notebook) — not useful for RAG text search.
+    """
     sp = artifact.get("storage_path")
     ft = artifact.get("file_type", "pdf")
-    if not sp or ft == "url":
+    # url has no file; python/notebook are code — skip RAG indexing
+    if not sp or ft in ("url", "python", "notebook"):
         return
     try:
         from app.services.rag_service import process_artifact

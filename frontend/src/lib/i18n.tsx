@@ -98,7 +98,7 @@ const dict = {
 
   // Files tab
   files_drag:      { zh: '拖拽文件到此处，或点击选择', en: 'Drag & drop here, or click to select' },
-  files_hint:      { zh: '支持 PDF / Word / Python · 上传后需管理员审核', en: 'PDF / Word / Python · Requires admin review after upload' },
+  files_hint:      { zh: '支持 PDF / Word / Python / TXT / Jupyter · 上传后需管理员审核', en: 'PDF / Word / Python / TXT / Jupyter · Requires admin review' },
   files_uploading: { zh: '上传中...',  en: 'Uploading...'  },
   files_approved:  { zh: '已通过',    en: 'Approved'      },
   files_rejected:  { zh: '已拒绝',    en: 'Rejected'      },

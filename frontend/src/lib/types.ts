@@ -49,6 +49,7 @@ export interface Artifact {
   doc_type: DocType
   status: 'pending' | 'approved' | 'rejected'
   storage_url?: string
+  is_locked?: boolean
   created_at: string
 }
 

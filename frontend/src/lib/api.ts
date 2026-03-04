@@ -140,6 +140,10 @@ export const api = {
     },
     delete: (courseId: string, artifactId: number) =>
       req<{ ok: boolean }>(`/courses/${courseId}/artifacts/${artifactId}`, { method: 'DELETE' }),
+    unlock: (courseId: string, artifactId: number) =>
+      req<{ ok: boolean; already_unlocked: boolean; storage_url: string | null }>(
+        `/courses/${courseId}/artifacts/${artifactId}/unlock`, { method: 'POST' }
+      ),
   },
 
   scopeSets: {
@@ -304,5 +308,10 @@ export const api = {
   credits: {
     balance: () => req<{ balance: number }>('/credits/balance'),
     transactions: () => req<{ id: string; amount: number; type: string; note: string | null; created_at: string }[]>('/credits/transactions'),
+    checkout: (successUrl: string, cancelUrl: string) =>
+      req<{ checkout_url: string; session_id: string }>('/credits/checkout', {
+        method: 'POST',
+        body: JSON.stringify({ package: '10', success_url: successUrl, cancel_url: cancelUrl }),
+      }),
   },
 }
