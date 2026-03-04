@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown'
 import {
   Loader2, CheckCircle, XCircle, Trash2, Plus, RefreshCw,
   Users, BookOpen, FileText, Ticket, ChevronLeft, Key, DatabaseZap, Upload, MessageSquare, Sparkles,
-  Lock, Zap, Shield,
+  Lock, Zap, Shield, ChevronRight, AlertTriangle, X, Calendar, Info,
 } from 'lucide-react'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8005'
@@ -74,6 +74,211 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 
 // ── Courses tab ───────────────────────────────────────────────────────────────
 
+// ── 课程详情 Modal ─────────────────────────────────────────────────────────────
+
+function CourseDetailModal({
+  course, secret, onClose, onDeleted,
+}: {
+  course: Course; secret: string; onClose: () => void; onDeleted: () => void
+}) {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div className="fixed inset-0 z-40 flex items-center justify-center"
+        style={{ background: 'rgba(0,0,0,0.72)' }}
+        onClick={onClose}>
+        {/* Modal panel */}
+        <div className="relative w-full max-w-lg mx-4 rounded-3xl flex flex-col max-h-[90vh]"
+          onClick={e => e.stopPropagation()}
+          style={{ background: '#0d0d1c', border: '1px solid rgba(255,215,0,0.15)', boxShadow: '0 24px 80px rgba(0,0,0,0.8)' }}>
+
+          {/* 顶部关闭 */}
+          <div className="flex items-center justify-between px-6 pt-5 pb-4"
+            style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <Info size={16} style={{ color: '#FFD700' }} /> 课程详情
+            </h2>
+            <button onClick={onClose} className="p-1.5 rounded-lg transition-colors"
+              style={{ color: '#555' }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#aaa')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#555')}>
+              <X size={16} />
+            </button>
+          </div>
+
+          {/* 内容区（可滚动） */}
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+            {/* 基本信息 */}
+            <div className="rounded-2xl p-4 space-y-3"
+              style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-bold px-2.5 py-1 rounded-lg flex-shrink-0"
+                  style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}>
+                  {course.code}
+                </span>
+                <span className="text-base font-semibold text-white">{course.name}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs" style={{ color: '#555' }}>
+                <Calendar size={12} />
+                创建于 {new Date(course.created_at).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}
+              </div>
+              <div className="text-xs pt-1" style={{ color: '#444', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                <span style={{ color: '#555' }}>课程 ID：</span>
+                <span className="font-mono text-xs" style={{ color: '#3a3a5a' }}>{course.id}</span>
+              </div>
+            </div>
+
+            {/* ── Danger Zone ── */}
+            <div className="rounded-2xl p-4"
+              style={{ background: 'rgba(239,68,68,0.04)', border: '1px dashed rgba(239,68,68,0.35)' }}>
+              <h4 className="text-sm font-bold mb-1 flex items-center gap-1.5" style={{ color: '#EF4444' }}>
+                <AlertTriangle size={14} /> 危险操作区
+              </h4>
+              <p className="text-xs mb-4 leading-relaxed" style={{ color: '#7a3030' }}>
+                删除课程将<strong style={{ color: '#cc4444' }}>不可恢复地清空</strong>该课程下的所有课件文件、AI 闪卡、错题集与 RAG 向量索引。
+              </p>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(239,68,68,0.2)'
+                  e.currentTarget.style.borderColor = 'rgba(239,68,68,0.5)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(239,68,68,0.12)'
+                  e.currentTarget.style.borderColor = 'rgba(239,68,68,0.3)'
+                }}>
+                <Trash2 size={14} /> 删除该课程
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 二次确认弹窗 */}
+      {showDeleteConfirm && (
+        <DeleteConfirmModal
+          course={course}
+          secret={secret}
+          onClose={() => setShowDeleteConfirm(false)}
+          onDeleted={() => { setShowDeleteConfirm(false); onClose(); onDeleted() }}
+        />
+      )}
+    </>
+  )
+}
+
+// ── 删除确认 Modal ─────────────────────────────────────────────────────────────
+
+function DeleteConfirmModal({
+  course, secret, onClose, onDeleted,
+}: {
+  course: Course; secret: string; onClose: () => void; onDeleted: () => void
+}) {
+  const [codeInput, setCodeInput] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState('')
+  const confirmed = codeInput.trim().toUpperCase() === course.code.toUpperCase()
+
+  async function handleDelete() {
+    if (!confirmed) return
+    setDeleting(true); setError('')
+    try {
+      await adminReq(secret, `/admin/courses/${course.id}`, { method: 'DELETE' })
+      onDeleted()
+    } catch (e: unknown) { setError(String(e)) }
+    finally { setDeleting(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.82)' }}
+      onClick={() => !deleting && onClose()}>
+      <div className="w-full max-w-md mx-4 rounded-2xl p-6"
+        onClick={e => e.stopPropagation()}
+        style={{ background: '#100a0a', border: '1px solid rgba(239,68,68,0.4)', boxShadow: '0 24px 80px rgba(200,0,0,0.25)' }}>
+
+        {/* 警告图标 */}
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.35)' }}>
+            <AlertTriangle size={20} style={{ color: '#EF4444' }} />
+          </div>
+          <div>
+            <h3 className="text-base font-bold" style={{ color: '#EF4444' }}>此操作不可逆转！</h3>
+            <p className="text-xs" style={{ color: '#774444' }}>无法撤销，请仔细阅读以下警告</p>
+          </div>
+        </div>
+
+        {/* 警告文案 */}
+        <div className="rounded-xl p-3 mb-5 text-xs leading-relaxed"
+          style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.18)', color: '#aa5555' }}>
+          删除课程 <span style={{ color: '#FFD700', fontWeight: 600 }}>「{course.code} · {course.name}」</span> 将同时清空其下所有的：
+          <ul className="mt-1.5 ml-3 space-y-0.5 list-disc" style={{ color: '#884444' }}>
+            <li>全部课件文件（Supabase Storage + 数据库记录）</li>
+            <li>AI 生成的闪卡与模拟题</li>
+            <li>所有用户的错题记录</li>
+            <li>RAG 向量索引（ChromaDB chunks）</li>
+          </ul>
+        </div>
+
+        {/* 输入校验 */}
+        <div className="mb-4">
+          <label className="block text-xs font-medium mb-1.5" style={{ color: '#aa5555' }}>
+            请输入课程代码 <span style={{ color: '#EF4444', fontWeight: 700 }}>「{course.code}」</span> 以确认删除：
+          </label>
+          <input
+            autoFocus
+            value={codeInput}
+            onChange={e => setCodeInput(e.target.value)}
+            placeholder={course.code}
+            className="w-full px-3 py-2 rounded-xl text-sm font-mono outline-none transition-all"
+            style={{
+              background: 'rgba(239,68,68,0.08)',
+              border: `1px solid ${confirmed ? 'rgba(239,68,68,0.6)' : 'rgba(239,68,68,0.2)'}`,
+              color: confirmed ? '#EF4444' : '#cc6666',
+            }}
+            onKeyDown={e => { if (e.key === 'Enter' && confirmed) handleDelete() }}
+          />
+        </div>
+
+        {error && (
+          <p className="text-xs mb-3 px-3 py-2 rounded-lg" style={{ color: '#ff8080', background: 'rgba(255,80,80,0.1)', border: '1px solid rgba(255,80,80,0.2)' }}>
+            {error}
+          </p>
+        )}
+
+        {/* 按钮组 */}
+        <div className="flex gap-3">
+          <button onClick={onClose} disabled={deleting}
+            className="flex-1 py-2.5 rounded-xl text-sm transition-all"
+            style={{ background: 'rgba(255,255,255,0.05)', color: '#666', border: '1px solid rgba(255,255,255,0.08)' }}>
+            取消
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={!confirmed || deleting}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all"
+            style={{
+              background: confirmed ? 'rgba(239,68,68,0.22)' : 'rgba(239,68,68,0.06)',
+              color: confirmed ? '#EF4444' : '#5a3333',
+              border: `1px solid ${confirmed ? 'rgba(239,68,68,0.45)' : 'rgba(239,68,68,0.15)'}`,
+              cursor: confirmed ? 'pointer' : 'not-allowed',
+            }}>
+            {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            {deleting ? '删除中...' : '确认删除'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── 课程管理 Tab ────────────────────────────────────────────────────────────────
+
 function CoursesTab({ secret }: { secret: string }) {
   const [courses, setCourses] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
@@ -81,6 +286,7 @@ function CoursesTab({ secret }: { secret: string }) {
   const [name, setName] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
+  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -105,14 +311,16 @@ function CoursesTab({ secret }: { secret: string }) {
     finally { setCreating(false) }
   }
 
-  async function del(id: string) {
-    if (!confirm('确认删除该课程及所有相关数据？')) return
-    try { await adminReq(secret, `/admin/courses/${id}`, { method: 'DELETE' }); await load() }
-    catch (e: unknown) { setError(String(e)) }
-  }
-
   return (
     <div className="space-y-6 fade-in-up">
+      {selectedCourse && (
+        <CourseDetailModal
+          course={selectedCourse}
+          secret={secret}
+          onClose={() => setSelectedCourse(null)}
+          onDeleted={() => { setSelectedCourse(null); load() }}
+        />
+      )}
       {error && <ErrorBox msg={error} />}
       <div className="card-gold p-5 rounded-2xl">
         <h3 className="text-sm font-semibold mb-4 flex items-center gap-2" style={{ color: '#FFD700' }}>
@@ -131,21 +339,31 @@ function CoursesTab({ secret }: { secret: string }) {
       {loading ? <Spinner /> : (
         <div className="space-y-2">
           {courses.map(c => (
-            <div key={c.id} className="flex items-center gap-4 px-4 py-3 rounded-2xl transition-all duration-200"
+            <button
+              key={c.id}
+              className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all duration-200 text-left"
               style={rowStyle}
+              onClick={() => setSelectedCourse(c)}
               onMouseEnter={e => {
-                (e.currentTarget as HTMLElement).style.background = 'rgba(255,215,0,0.03)'
-                ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,215,0,0.2)'
+                e.currentTarget.style.background = 'rgba(255,215,0,0.05)'
+                e.currentTarget.style.borderColor = 'rgba(255,215,0,0.25)'
+                e.currentTarget.style.transform = 'translateX(2px)'
               }}
               onMouseLeave={e => {
-                (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.025)'
-                ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.07)'
+                e.currentTarget.style.background = 'rgba(255,255,255,0.025)'
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'
+                e.currentTarget.style.transform = 'none'
               }}>
-              <span className="text-xs font-bold px-2 py-0.5 rounded-lg" style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}>{c.code}</span>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-lg flex-shrink-0"
+                style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}>
+                {c.code}
+              </span>
               <span className="text-sm text-white flex-1">{c.name}</span>
-              <span className="text-xs" style={{ color: '#555' }}>{new Date(c.created_at).toLocaleDateString('zh-CN')}</span>
-              <DeleteBtn onClick={() => del(c.id)} />
-            </div>
+              <span className="text-xs flex-shrink-0" style={{ color: '#555' }}>
+                {new Date(c.created_at).toLocaleDateString('zh-CN')}
+              </span>
+              <ChevronRight size={14} style={{ color: '#444', flexShrink: 0 }} />
+            </button>
           ))}
           {courses.length === 0 && <Empty text="暂无课程" />}
         </div>

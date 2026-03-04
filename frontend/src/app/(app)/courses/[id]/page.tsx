@@ -500,7 +500,6 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
           <p className="text-sm mt-0.5" style={{ color: '#555' }}>{t('flashcards_sub')}</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 pt-1">
-          <BilingualToggle mode={biMode} onChange={setBiMode} />
           {outputs.length > 0 && (
             <select className="input-glass text-xs py-1" value={selectedOutputId ?? ''}
               onChange={e => { const o = outputs.find(x => x.id === Number(e.target.value)); if (o) loadCards(o) }}>
