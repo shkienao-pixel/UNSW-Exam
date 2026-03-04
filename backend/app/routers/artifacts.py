@@ -145,12 +145,8 @@ def unlock_artifact(
     if art.get("doc_type") not in _LOCKED_DOC_TYPES:
         raise HTTPException(status_code=400, detail="This file does not require unlocking")
 
-    # 扣 1 积分（余额不足会抛 InsufficientCreditsError → 422）
-    from app.core.exceptions import InsufficientCreditsError
-    try:
-        credit_service.spend(supabase, user_id, 1, "unlock_upload", ref_id=str(artifact_id), note=f"解锁文件 {art['file_name']}")
-    except InsufficientCreditsError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    # 扣 1 积分（余额不足抛 InsufficientCreditsError → main.py 统一处理为 402）
+    credit_service.spend(supabase, user_id, 1, "unlock_upload", ref_id=str(artifact_id), note=f"解锁文件 {art['file_name']}")
 
     # 写入解锁记录
     try:
@@ -198,14 +194,11 @@ def unlock_all_artifacts(
 
     cost = len(to_unlock)
 
-    from app.core.exceptions import InsufficientCreditsError
-    try:
-        credit_service.spend(
-            supabase, user_id, cost, "unlock_all",
-            note=f"一键解锁课程 {course_id[:8]} 全部 {cost} 个付费文件",
-        )
-    except InsufficientCreditsError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    # 积分不足抛 InsufficientCreditsError → main.py 统一处理为 402
+    credit_service.spend(
+        supabase, user_id, cost, "unlock_all",
+        note=f"一键解锁课程 {course_id[:8]} 全部 {cost} 个付费文件",
+    )
 
     for a in to_unlock:
         try:

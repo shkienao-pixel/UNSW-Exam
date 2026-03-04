@@ -68,7 +68,7 @@ export default function InsufficientCreditsModal({ balance, required, onClose }:
         {/* Actions */}
         <div className="flex gap-3">
           <Link
-            href="?view=files"
+            href="?view=resources"
             onClick={onClose}
             className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-center"
             style={{

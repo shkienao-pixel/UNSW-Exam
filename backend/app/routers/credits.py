@@ -28,8 +28,8 @@ class GrantRequest(BaseModel):
     note: str | None = None
 
 
-def _require_admin(x_admin_secret: str | None = Header(default=None)) -> None:
-    if x_admin_secret != get_settings().admin_secret:
+def _require_admin(x_admin_secret: str = Header(default="")) -> None:
+    if not x_admin_secret or x_admin_secret not in get_settings().admin_secrets_set:
         raise HTTPException(status_code=403, detail="Forbidden")
 
 

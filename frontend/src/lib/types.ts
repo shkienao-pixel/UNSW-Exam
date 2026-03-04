@@ -50,6 +50,7 @@ export interface Artifact {
   status: 'pending' | 'approved' | 'rejected'
   storage_url?: string
   is_locked?: boolean
+  uploaded_by?: string
   created_at: string
 }
 

@@ -164,7 +164,7 @@ function ArtifactCard({
   onUnlock: (a: Artifact) => void
   onEditDocType: (a: Artifact) => void
 }) {
-  const isOwner = (artifact as any).user_id === currentUserId
+  const isOwner = artifact.uploaded_by === currentUserId
   const isLocked = artifact.is_locked
   const isCode   = artifact.file_type === 'python' || artifact.file_type === 'notebook'
   const isUrl    = artifact.file_type === 'url'

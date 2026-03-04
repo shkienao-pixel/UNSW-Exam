@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
+from app.core.exceptions import InsufficientCreditsError
 from app.core.supabase_client import get_supabase
 from app.routers import auth, courses, artifacts, scope_sets, outputs, admin, content, generate, review, knowledge, feedback, credits
 
@@ -13,7 +15,7 @@ settings = get_settings()
 
 app = FastAPI(
     title="UNSW Exam Master API",
-    version="0.4.0",
+    version="0.5.0",
     description="Backend API for UNSW Exam Master — multi-user AI exam prep platform",
 )
 
@@ -42,6 +44,19 @@ app.include_router(knowledge.router,  prefix="",         tags=["knowledge"])
 app.include_router(feedback.router,   prefix="",         tags=["feedback"])
 app.include_router(credits.router,    prefix="/credits", tags=["credits"])
 app.include_router(credits.admin_router, prefix="/admin", tags=["admin"])
+
+
+@app.exception_handler(InsufficientCreditsError)
+async def insufficient_credits_handler(request: Request, exc: InsufficientCreditsError) -> JSONResponse:
+    """统一 402 积分不足响应：{ detail, balance, required }"""
+    return JSONResponse(
+        status_code=402,
+        content={
+            "detail": exc.detail,
+            "balance": exc.balance,
+            "required": exc.required,
+        },
+    )
 
 
 @app.get("/health", tags=["system"])

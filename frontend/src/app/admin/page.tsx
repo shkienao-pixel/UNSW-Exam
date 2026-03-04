@@ -8,7 +8,7 @@ import {
   Lock, Zap, Shield, ChevronRight, AlertTriangle, X, Calendar, Info, Coins, SlidersHorizontal,
 } from 'lucide-react'
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8005'
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 // ── Doc type constants (mirrored from types.ts) ────────────────────────────────
 type DocType = 'lecture' | 'tutorial' | 'revision' | 'past_exam' | 'assignment' | 'other'
@@ -59,7 +59,7 @@ interface User {
   id: string; email: string; created_at: string; last_sign_in_at: string | null; email_confirmed: boolean
   credits?: number
 }
-interface Invite { id: string; code: string; note: string | null; max_uses: number; used_count: number; created_at: string }
+interface Invite { id: string; code: string; note: string | null; max_uses: number; use_count: number; created_at: string }
 interface ApiKey { id: number; provider: 'openai' | 'gemini' | 'deepseek'; label: string; is_active: boolean; created_at: string; updated_at: string }
 interface AdminUploadItem { id: number; file: File; status: 'pending' | 'uploading' | 'done' | 'error'; error?: string }
 
@@ -1224,8 +1224,8 @@ function InvitesTab({ secret }: { secret: string }) {
                 {copied === inv.code ? '✓ 已复制' : inv.code}
               </button>
               <span className="text-sm flex-1 truncate" style={{ color: '#888' }}>{inv.note || '—'}</span>
-              <span className={`text-xs flex-shrink-0 px-2.5 py-0.5 rounded-full font-medium ${inv.used_count >= inv.max_uses ? 'badge-danger' : 'badge-success'}`}>
-                {inv.used_count}/{inv.max_uses} 次
+              <span className={`text-xs flex-shrink-0 px-2.5 py-0.5 rounded-full font-medium ${inv.use_count >= inv.max_uses ? 'badge-danger' : 'badge-success'}`}>
+                {inv.use_count}/{inv.max_uses} 次
               </span>
               <span className="text-xs flex-shrink-0" style={{ color: '#444' }}>
                 {new Date(inv.created_at).toLocaleDateString('zh-CN')}

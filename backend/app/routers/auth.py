@@ -24,8 +24,8 @@ def _build_token_response(session: Any) -> TokenResponse:
     )
 
 
-def _use_invite(supabase: Client, code: str) -> None:
-    """Validate and consume an invite code. Raises AuthError if invalid."""
+def _validate_invite(supabase: Client, code: str) -> dict:
+    """Validate an invite code WITHOUT consuming it. Returns invite row."""
     try:
         row = (
             supabase.table("invites")
@@ -50,7 +50,11 @@ def _use_invite(supabase: Client, code: str) -> None:
         if datetime.now(timezone.utc) > expires:
             raise AuthError("This invite code has expired")
 
-    # Consume one use
+    return invite
+
+
+def _consume_invite(supabase: Client, invite: dict) -> None:
+    """Consume one use of an already-validated invite. Call only after successful sign_up."""
     supabase.table("invites").update(
         {"use_count": invite["use_count"] + 1}
     ).eq("id", invite["id"]).execute()
@@ -59,8 +63,10 @@ def _use_invite(supabase: Client, code: str) -> None:
 @router.post("/register", response_model=TokenResponse, status_code=201)
 def register(body: RegisterRequest, supabase: Client = Depends(get_db)) -> TokenResponse:
     """Create a new user account (requires valid invite code) and return tokens."""
-    _use_invite(supabase, body.invite_code)
+    # Step 1: validate invite — no DB write, failure here does NOT consume the code
+    invite = _validate_invite(supabase, body.invite_code)
 
+    # Step 2: create account — invite untouched if this fails
     try:
         resp = supabase.auth.sign_up({"email": body.email, "password": body.password})
     except Exception as exc:
@@ -70,6 +76,12 @@ def register(body: RegisterRequest, supabase: Client = Depends(get_db)) -> Token
         raise AuthError(
             "Registration successful. Please check your email to confirm your account."
         )
+
+    # Step 3: consume invite only after successful sign_up
+    try:
+        _consume_invite(supabase, invite)
+    except Exception:
+        pass  # non-fatal: account is live, invite tracking failure is recoverable
 
     # 新用户 welcome bonus +5 积分
     try:
