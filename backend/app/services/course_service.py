@@ -87,7 +87,7 @@ def delete_course(supabase: Client, course_id: str) -> None:
 
 
 _ARTIFACT_COLS = (
-    "id, course_id, file_name, file_hash, file_path, file_type, doc_type, status, "
+    "id, course_id, user_id, file_name, file_hash, file_path, file_type, doc_type, status, "
     "storage_path, storage_url, reject_reason, uploaded_by, created_at"
 )
 

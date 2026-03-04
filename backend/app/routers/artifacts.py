@@ -162,6 +162,62 @@ def unlock_artifact(
     return {"ok": True, "already_unlocked": False, "storage_url": art.get("storage_url")}
 
 
+@router.post("/{course_id}/artifacts/unlock-all", status_code=200)
+def unlock_all_artifacts(
+    course_id: str,
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_db),
+) -> dict[str, Any]:
+    """一次性花积分解锁本课程所有锁定文件（幂等：已解锁的不重复扣费）。
+
+    返回 { ok, locked_count, unlocked_count, credits_spent }
+    """
+    get_course(supabase, course_id)
+    user_id = current_user["id"]
+
+    arts = list_artifacts(supabase, user_id, course_id, status="approved")
+    arts = freshen_artifact_urls(supabase, arts)
+    unlocked_ids = _get_unlocked_ids(supabase, user_id)
+
+    # 找出本课程中对当前用户而言仍然锁定的文件
+    to_unlock = [
+        a for a in arts
+        if a.get("doc_type") in _LOCKED_DOC_TYPES
+        and a.get("user_id") != user_id
+        and a["id"] not in unlocked_ids
+    ]
+
+    locked_total = len([
+        a for a in arts
+        if a.get("doc_type") in _LOCKED_DOC_TYPES
+        and a.get("user_id") != user_id
+    ])
+
+    if not to_unlock:
+        return {"ok": True, "locked_count": locked_total, "unlocked_count": 0, "credits_spent": 0}
+
+    cost = len(to_unlock)
+
+    from app.core.exceptions import InsufficientCreditsError
+    try:
+        credit_service.spend(
+            supabase, user_id, cost, "unlock_all",
+            note=f"一键解锁课程 {course_id[:8]} 全部 {cost} 个付费文件",
+        )
+    except InsufficientCreditsError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    for a in to_unlock:
+        try:
+            supabase.table("user_unlocked_files").insert(
+                {"user_id": user_id, "artifact_id": a["id"]}
+            ).execute()
+        except Exception:
+            pass  # 唯一约束冲突忽略
+
+    return {"ok": True, "locked_count": locked_total, "unlocked_count": cost, "credits_spent": cost}
+
+
 @router.patch("/{course_id}/artifacts/{artifact_id}/doc-type", response_model=ArtifactOut)
 def update_artifact_doc_type(
     course_id: str,

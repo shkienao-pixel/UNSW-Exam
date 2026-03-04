@@ -437,6 +437,97 @@ function UnlockModal({
   )
 }
 
+// ── 一键解锁全部 Modal ────────────────────────────────────────────────────────
+
+function UnlockAllModal({
+  courseId,
+  lockedCount,
+  creditBalance,
+  onClose,
+  onUnlocked,
+}: {
+  courseId: string
+  lockedCount: number
+  creditBalance: number
+  onClose: () => void
+  onUnlocked: (spent: number) => void
+}) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const canAfford = creditBalance >= lockedCount
+
+  async function confirm() {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await api.artifacts.unlockAll(courseId)
+      onUnlocked(res.credits_spent)
+      onClose()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '解锁失败，请稍后重试')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.75)' }}
+      onClick={() => !loading && onClose()}>
+      <div className="relative w-full max-w-sm mx-4 p-6 rounded-2xl" onClick={e => e.stopPropagation()}
+        style={{ background: '#0e0e1c', border: '1px solid rgba(255,165,0,0.25)', boxShadow: '0 20px 60px rgba(0,0,0,0.7)' }}>
+
+        <div className="flex items-center gap-2 mb-4">
+          <Lock size={18} style={{ color: '#FFD700' }} />
+          <h3 className="text-base font-bold text-white">一键解锁全部付费文件</h3>
+        </div>
+
+        <div className="space-y-2 mb-4 px-3 py-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="flex justify-between text-sm">
+            <span style={{ color: '#888' }}>需解锁文件数</span>
+            <span className="font-semibold text-white">{lockedCount} 个</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span style={{ color: '#888' }}>消耗积分</span>
+            <span className="font-semibold" style={{ color: '#FFD700' }}>{lockedCount} 积分</span>
+          </div>
+          <div className="flex justify-between text-sm pt-1" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+            <span style={{ color: '#888' }}>当前余额</span>
+            <span className="font-semibold" style={{ color: canAfford ? '#4ade80' : '#EF4444' }}>
+              {creditBalance} 积分{!canAfford && ' （不足）'}
+            </span>
+          </div>
+        </div>
+
+        {!canAfford && (
+          <p className="text-xs mb-3 px-3 py-2 rounded-lg" style={{ color: '#ff8080', background: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.18)' }}>
+            积分不足，请先充值
+          </p>
+        )}
+
+        {error && (
+          <p className="text-xs mb-3 px-3 py-2 rounded-lg" style={{ color: '#ff8080', background: 'rgba(255,80,80,0.1)', border: '1px solid rgba(255,80,80,0.2)' }}>
+            {error}
+          </p>
+        )}
+
+        <div className="flex gap-3">
+          <button onClick={onClose} disabled={loading}
+            className="flex-1 py-2.5 rounded-xl text-sm"
+            style={{ background: 'rgba(255,255,255,0.05)', color: '#666', border: '1px solid rgba(255,255,255,0.08)' }}>
+            取消
+          </button>
+          <button onClick={confirm} disabled={loading || !canAfford}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-40"
+            style={{ background: 'rgba(255,215,0,0.16)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.32)' }}>
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
+            {loading ? '解锁中...' : `确认（-${lockedCount} 积分）`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── 主组件 ────────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -462,6 +553,13 @@ export default function ResourceHubTab({
   const [pendingDocType, setPendingDocType] = useState<DocType>('lecture')
   const [unlockTarget, setUnlockTarget]     = useState<Artifact | null>(null)
   const [editTarget, setEditTarget]         = useState<Artifact | null>(null)
+  const [unlockAllOpen, setUnlockAllOpen]   = useState(false)
+
+  // 计算当前用户还未解锁的文件数（用于"一键解锁"按钮显示）
+  const lockedCount = useMemo(
+    () => artifacts.filter(a => a.is_locked).length,
+    [artifacts]
+  )
 
   // ── 过滤 & 搜索 ────────────────────────────────────────────────
   const displayed = useMemo(() => {
@@ -512,6 +610,14 @@ export default function ResourceHubTab({
     setArtifacts(prev => prev.map(a => a.id === updated.id ? { ...a, ...updated } : a))
   }
 
+  // ── 一键解锁全部回调 ───────────────────────────────────────────
+  async function handleUnlockAll(_spent: number) {
+    try {
+      const fresh = await api.artifacts.list(courseId)
+      setArtifacts(fresh)
+    } catch { /* ignore */ }
+  }
+
   return (
     <div className="flex flex-col h-full">
 
@@ -530,6 +636,15 @@ export default function ResourceHubTab({
           courseId={courseId}
           onClose={() => setEditTarget(null)}
           onSaved={handleDocTypeSaved}
+        />
+      )}
+      {unlockAllOpen && (
+        <UnlockAllModal
+          courseId={courseId}
+          lockedCount={lockedCount}
+          creditBalance={creditBalance}
+          onClose={() => setUnlockAllOpen(false)}
+          onUnlocked={handleUnlockAll}
         />
       )}
 
@@ -560,6 +675,21 @@ export default function ResourceHubTab({
           style={{ background: 'rgba(255,215,0,0.08)', border: '1px solid rgba(255,215,0,0.18)', color: '#FFD700' }}>
           ⚡ {creditBalance} 积分
         </div>
+
+        {/* 一键解锁全部 */}
+        {lockedCount > 0 && (
+          <button
+            onClick={() => setUnlockAllOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold flex-shrink-0 transition-all"
+            style={{
+              background: 'rgba(255,165,0,0.1)',
+              border: '1px solid rgba(255,165,0,0.28)',
+              color: '#FFA500',
+            }}>
+            <Lock size={12} />
+            一键解锁 ({lockedCount})
+          </button>
+        )}
 
         {/* 上传按钮 */}
         <button
