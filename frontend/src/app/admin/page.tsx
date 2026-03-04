@@ -816,12 +816,12 @@ function ApiKeysTab({ secret }: { secret: string }) {
 
 // ── Feedback Tab ──────────────────────────────────────────────────────────────
 
-type FeedbackStatus = 'pending' | 'in_progress' | 'resolved'
+type FeedbackStatus = 'pending' | 'in_progress' | 'resolved' | 'adopted'
 interface FeedbackItem { id: string; user_id: string | null; content: string; page_url: string; status: FeedbackStatus; created_at: string }
 
-const STATUS_LABEL: Record<FeedbackStatus, string> = { pending: '待处理', in_progress: '处理中', resolved: '已解决' }
-const STATUS_COLOR: Record<FeedbackStatus, string> = { pending: '#f97316', in_progress: '#60a5fa', resolved: '#4ade80' }
-const STATUS_NEXT:  Record<FeedbackStatus, FeedbackStatus | null> = { pending: 'in_progress', in_progress: 'resolved', resolved: null }
+const STATUS_LABEL: Record<FeedbackStatus, string> = { pending: '待处理', in_progress: '处理中', resolved: '已解决', adopted: '已采纳' }
+const STATUS_COLOR: Record<FeedbackStatus, string> = { pending: '#f97316', in_progress: '#60a5fa', resolved: '#4ade80', adopted: '#FFD700' }
+const STATUS_NEXT:  Record<FeedbackStatus, FeedbackStatus | null> = { pending: 'in_progress', in_progress: 'resolved', resolved: null, adopted: null }
 
 interface AiSummaryResult { summary: string; feedback_count: number; analyzed_at: string }
 
@@ -865,6 +865,15 @@ function FeedbackTab({ secret }: { secret: string }) {
         method: 'PATCH', body: JSON.stringify({ status: next }),
       })
       setItems(prev => prev.map(i => i.id === item.id ? { ...i, status: next } : i))
+    } catch (e: unknown) { setError(String(e)) }
+  }
+
+  async function adopt(item: FeedbackItem) {
+    try {
+      await adminReq(secret, `/admin/feedback/${item.id}`, {
+        method: 'PATCH', body: JSON.stringify({ status: 'adopted' }),
+      })
+      setItems(prev => prev.map(i => i.id === item.id ? { ...i, status: 'adopted' } : i))
     } catch (e: unknown) { setError(String(e)) }
   }
 
@@ -922,7 +931,7 @@ function FeedbackTab({ secret }: { secret: string }) {
 
       {/* 筛选 + 刷新 */}
       <div className="flex items-center gap-2 flex-wrap">
-        {(['all', 'pending', 'in_progress', 'resolved'] as const).map(s => (
+        {(['all', 'pending', 'in_progress', 'resolved', 'adopted'] as const).map(s => (
           <button key={s} onClick={() => setFilter(s)}
             className="px-3 py-1 rounded-lg text-xs font-medium transition-all"
             style={{
@@ -970,14 +979,23 @@ function FeedbackTab({ secret }: { secret: string }) {
               <p className="text-sm text-white whitespace-pre-wrap leading-relaxed">{item.content}</p>
 
               {/* Action */}
-              {STATUS_NEXT[item.status] && (
-                <div className="flex justify-end">
-                  <button onClick={() => advance(item)}
-                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all"
-                    style={{ background: 'rgba(255,255,255,0.06)', color: '#aaa', border: '1px solid rgba(255,255,255,0.1)' }}>
-                    <CheckCircle size={12} />
-                    标记为「{STATUS_LABEL[STATUS_NEXT[item.status]!]}」
-                  </button>
+              {(STATUS_NEXT[item.status] || item.status === 'in_progress') && (
+                <div className="flex justify-end gap-2">
+                  {STATUS_NEXT[item.status] && (
+                    <button onClick={() => advance(item)}
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all"
+                      style={{ background: 'rgba(255,255,255,0.06)', color: '#aaa', border: '1px solid rgba(255,255,255,0.1)' }}>
+                      <CheckCircle size={12} />
+                      标记为「{STATUS_LABEL[STATUS_NEXT[item.status]!]}」
+                    </button>
+                  )}
+                  {item.status === 'in_progress' && (
+                    <button onClick={() => adopt(item)}
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all"
+                      style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.3)' }}>
+                      ✦ 采纳反馈 (+1 积分)
+                    </button>
+                  )}
                 </div>
               )}
             </div>

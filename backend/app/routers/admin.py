@@ -25,6 +25,7 @@ from app.services.course_service import (
     list_artifacts_by_ids,
     update_artifact_status,
 )
+import app.services.credit_service as credit_service
 
 try:
     from app.services.rag_service import sync_artifact_doc_type as _sync_doc_type
@@ -85,6 +86,14 @@ def approve_artifact(
     """Approve a user-uploaded file — triggers background RAG indexing."""
     art = update_artifact_status(supabase, artifact_id, status="approved")
     background_tasks.add_task(_bg_process, supabase, art)
+    # 给上传者奖励 +1 积分（admin 上传的 user_id 为 None，跳过）
+    uploader_id = art.get("user_id")
+    if uploader_id:
+        try:
+            credit_service.earn(supabase, uploader_id, 1, "artifact_approved",
+                                ref_id=str(artifact_id), note="文件审核通过")
+        except Exception:
+            pass  # 积分奖励失败不影响审核流程
     return art
 
 

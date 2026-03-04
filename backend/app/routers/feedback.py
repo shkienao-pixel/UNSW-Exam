@@ -33,7 +33,7 @@ class FeedbackCreate(BaseModel):
 
 
 class FeedbackStatusUpdate(BaseModel):
-    status: str = Field(pattern=r"^(pending|in_progress|resolved)$")
+    status: str = Field(pattern=r"^(pending|in_progress|resolved|adopted)$")
 
 
 # ── Admin auth helper ──────────────────────────────────────────────────────────
@@ -179,7 +179,10 @@ def update_feedback_status(
     _: None          = Depends(_require_admin),
     supabase: Client = Depends(get_db),
 ) -> dict[str, Any]:
-    """Update feedback status. Returns updated row."""
+    """Update feedback status. Returns updated row.
+
+    When status is set to 'adopted', the submitter earns +1 credit.
+    """
     (
         supabase.table("user_feedback")
         .update({"status": body.status})
@@ -194,4 +197,16 @@ def update_feedback_status(
     ).data or []
     if not rows:
         raise HTTPException(status_code=404, detail="Feedback not found")
+
+    # 反馈被采纳 → 奖励提交者 +1 积分
+    if body.status == "adopted":
+        submitter_id = rows[0].get("user_id")
+        if submitter_id:
+            try:
+                from app.services import credit_service
+                credit_service.earn(supabase, submitter_id, 1, "feedback_adopted",
+                                    ref_id=feedback_id, note="反馈被采纳")
+            except Exception:
+                pass  # 积分奖励失败不影响状态更新
+
     return {"ok": True, **rows[0]}
