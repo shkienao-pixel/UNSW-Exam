@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
-import { Loader2, Sparkles, Brain, BookOpen, Zap } from 'lucide-react'
+import { Loader2, Sparkles, Brain, BookOpen, Zap, Shield } from 'lucide-react'
 import CampusHeroCard from '@/components/CampusHeroCard'
 
 const FEATURES = [
@@ -67,6 +67,12 @@ export default function LandingPage() {
         style={{ borderColor: 'rgba(255,215,0,0.08)', backdropFilter: 'blur(16px)', position: 'sticky', top: 0, zIndex: 10, background: 'rgba(8,8,15,0.85)' }}>
         <span className="text-lg font-bold" style={{ color: '#FFD700' }}>✦ Exam Master</span>
         <div className="flex items-center gap-3">
+          <Link href="/admin"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+            style={{ color: '#888', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)' }}>
+            <Shield size={13} />
+            管理后台
+          </Link>
           <Link href="/login"
             className="px-4 py-1.5 rounded-lg text-sm transition-all"
             style={{ color: '#999', border: '1px solid rgba(255,255,255,0.1)' }}>
