@@ -10,6 +10,7 @@ import type { Course } from '@/lib/types'
 import { LangProvider, useLang } from '@/lib/i18n'
 import { GenerationProvider } from '@/lib/generation-context'
 import FloatingProgress from '@/components/FloatingProgress'
+import ExamCountdown from '@/components/ExamCountdown'
 import {
   LayoutDashboard, LogOut, ArrowLeft, Loader2, BookOpen, ChevronLeft, Menu, X, MessageSquarePlus, Send, CreditCard,
 } from 'lucide-react'
@@ -514,6 +515,13 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
             </span>
           )}
         </header>
+
+        {/* 考试倒计时横幅（仅在课程页且有 exam_date 时显示） */}
+        {currentCourse?.exam_date && (
+          <div className="px-4 pt-3 pb-0 shrink-0">
+            <ExamCountdown examDate={currentCourse.exam_date} size="lg" />
+          </div>
+        )}
 
         {/* Page content — with iOS safe-area bottom padding */}
         <div className="flex-1 flex flex-col overflow-hidden"

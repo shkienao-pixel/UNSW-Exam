@@ -80,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('user_role')
     setUser(null)
     setRole('user')
-    window.location.href = '/login'
+    window.location.href = '/'
   }, [])
 
   return (

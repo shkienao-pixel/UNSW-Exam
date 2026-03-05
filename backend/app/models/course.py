@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -35,8 +35,13 @@ class CourseOut(BaseModel):
     id: str
     code: str
     name: str
+    exam_date: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+
+
+class ExamDateUpdate(BaseModel):
+    exam_date: Optional[datetime] = None
 
 
 class ArtifactOut(BaseModel):

@@ -37,6 +37,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
       </head>
       <body>
+        {/* Global grain overlay — 微噪点，仅桌面端，z-index 9999 */}
+        <div aria-hidden className="grain-overlay" />
         <AuthProvider>
           {children}
         </AuthProvider>

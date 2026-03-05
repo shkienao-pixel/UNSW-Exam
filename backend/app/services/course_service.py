@@ -33,7 +33,7 @@ def list_courses(supabase: Client) -> list[dict[str, Any]]:
     """List all courses — courses are shared/admin-managed, visible to all users."""
     resp = (
         supabase.table("courses")
-        .select("id, code, name, created_at, updated_at")
+        .select("id, code, name, exam_date, created_at, updated_at")
         .order("code")
         .execute()
     )
@@ -44,7 +44,7 @@ def get_course(supabase: Client, course_id: str, user_id: str | None = None) -> 
     """Get a course by ID. user_id is accepted but not used for filtering (courses are shared)."""
     resp = (
         supabase.table("courses")
-        .select("id, code, name, created_at, updated_at")
+        .select("id, code, name, exam_date, created_at, updated_at")
         .eq("id", course_id)
         .single()
         .execute()
@@ -81,6 +81,21 @@ def create_course(
 def delete_course(supabase: Client, course_id: str) -> None:
     """Admin only: delete a course."""
     supabase.table("courses").delete().eq("id", course_id).execute()
+
+
+def set_exam_date(supabase: Client, course_id: str, exam_date: "datetime | None") -> dict[str, Any]:
+    """Admin only: set or clear the exam date for a course."""
+    value = exam_date.isoformat() if exam_date is not None else None
+    resp = (
+        supabase.table("courses")
+        .update({"exam_date": value, "updated_at": _now_iso()})
+        .eq("id", course_id)
+        .select("id, code, name, exam_date, created_at, updated_at")
+        .execute()
+    )
+    if not resp.data:
+        raise NotFoundError("Course")
+    return resp.data[0]
 
 
 # ── Artifacts ─────────────────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import type { Course } from '@/lib/types'
 import { BookOpen, Loader2, ArrowRight, Layers } from 'lucide-react'
+import ExamCountdown from '@/components/ExamCountdown'
 
 export default function DashboardPage() {
   const [courses, setCourses] = useState<Course[]>([])
@@ -115,9 +116,14 @@ export default function DashboardPage() {
                   {/* Course name */}
                   <h3 className="text-white font-semibold text-sm leading-snug">{c.name}</h3>
 
-                  <p className="text-xs mt-2" style={{ color: '#33334a' }}>
-                    {new Date(c.created_at).toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })}
-                  </p>
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    <ExamCountdown examDate={c.exam_date} size="sm" />
+                    {!c.exam_date && (
+                      <p className="text-xs" style={{ color: '#33334a' }}>
+                        {new Date(c.created_at).toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Enter CTA */}

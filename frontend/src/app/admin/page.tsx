@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown'
 import {
   Loader2, CheckCircle, XCircle, Trash2, Plus, RefreshCw,
   Users, BookOpen, FileText, Ticket, ChevronLeft, Key, DatabaseZap, Upload, MessageSquare, Sparkles,
-  Lock, Zap, Shield, ChevronRight, AlertTriangle, X, Calendar, Info, Coins, SlidersHorizontal,
+  Lock, Zap, Shield, ChevronRight, AlertTriangle, X, Calendar, Info, Coins, SlidersHorizontal, CalendarDays,
 } from 'lucide-react'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -79,11 +79,35 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 // ── 课程详情 Modal ─────────────────────────────────────────────────────────────
 
 function CourseDetailModal({
-  course, secret, onClose, onDeleted,
+  course, secret, onClose, onDeleted, onUpdated,
 }: {
-  course: Course; secret: string; onClose: () => void; onDeleted: () => void
+  course: Course; secret: string; onClose: () => void; onDeleted: () => void; onUpdated: (c: Course) => void
 }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  // 考试日期编辑
+  const toLocalInput = (iso?: string | null) => {
+    if (!iso) return ''
+    const d = new Date(iso)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+  const [examInput, setExamInput] = useState(toLocalInput(course.exam_date))
+  const [savingExam, setSavingExam] = useState(false)
+  const [examError, setExamError] = useState('')
+
+  async function handleSaveExamDate() {
+    setSavingExam(true); setExamError('')
+    try {
+      const body = examInput
+        ? { exam_date: new Date(examInput).toISOString() }
+        : { exam_date: null }
+      const updated = await adminReq<Course>(secret, `/admin/courses/${course.id}/exam-date`, {
+        method: 'PATCH', body: JSON.stringify(body),
+      })
+      onUpdated(updated)
+    } catch (e: unknown) { setExamError(String(e)) }
+    finally { setSavingExam(false) }
+  }
 
   return (
     <>
@@ -130,6 +154,38 @@ function CourseDetailModal({
                 <span style={{ color: '#555' }}>课程 ID：</span>
                 <span className="font-mono text-xs" style={{ color: '#3a3a5a' }}>{course.id}</span>
               </div>
+            </div>
+
+            {/* ── 考试日期 ── */}
+            <div className="rounded-2xl p-4 space-y-3"
+              style={{ background: 'rgba(255,212,0,0.03)', border: '1px solid rgba(255,212,0,0.12)' }}>
+              <h4 className="text-sm font-semibold flex items-center gap-1.5" style={{ color: '#b08000' }}>
+                <CalendarDays size={14} /> 考试日期
+              </h4>
+              <div className="flex gap-2">
+                <input
+                  type="datetime-local"
+                  value={examInput}
+                  onChange={e => setExamInput(e.target.value)}
+                  className="flex-1 rounded-lg px-3 py-2 text-sm outline-none"
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,212,0,0.2)', color: '#ccc', colorScheme: 'dark' }}
+                />
+                <button
+                  onClick={handleSaveExamDate}
+                  disabled={savingExam}
+                  className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 transition-all"
+                  style={{ background: 'rgba(255,212,0,0.15)', color: '#FFD400', border: '1px solid rgba(255,212,0,0.25)' }}>
+                  {savingExam ? '保存中…' : '保存'}
+                </button>
+                {examInput && (
+                  <button onClick={() => setExamInput('')}
+                    className="px-3 py-2 rounded-lg text-xs"
+                    style={{ color: '#555', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    清除
+                  </button>
+                )}
+              </div>
+              {examError && <p className="text-xs" style={{ color: '#e05050' }}>{examError}</p>}
             </div>
 
             {/* ── Danger Zone ── */}
@@ -321,6 +377,10 @@ function CoursesTab({ secret }: { secret: string }) {
           secret={secret}
           onClose={() => setSelectedCourse(null)}
           onDeleted={() => { setSelectedCourse(null); load() }}
+          onUpdated={(updated) => {
+            setSelectedCourse(updated)
+            setCourses(prev => prev.map(c => c.id === updated.id ? updated : c))
+          }}
         />
       )}
       {error && <ErrorBox msg={error} />}

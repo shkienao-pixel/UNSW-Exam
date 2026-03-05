@@ -17,6 +17,14 @@
 :root {
   --background: #08080f;
   --foreground: #e8e8f0;
+
+  /* ── Accent color tokens ───────────────────────── */
+  --accent:         #FFD400;
+  --accent-hover:   #F2C200;
+  --accent-pressed: #D9AE00;
+  --accent-soft:    rgba(255, 212, 0, 0.12);
+  --accent-border:  rgba(255, 212, 0, 0.18);
+  --accent-glow:    rgba(255, 212, 0, 0.22);
 }
 
 /* ── Base ────────────────────────────────────────────────────────────────────── */
@@ -387,6 +395,80 @@ body {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: #FFD700;
+}
+
+/* ── Landing section heading ─────────────────────────────────────────────────── */
+
+.section-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 600;
+  color: #3a3a55;
+}
+
+/* ── Glass card hover state (CSS-only fallback) ──────────────────────────────── */
+.glass-card-hover {
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.28s ease,
+              border-color 0.28s ease,
+              background 0.28s ease;
+}
+.glass-card-hover:hover {
+  transform: translateY(-3px);
+  border-color: rgba(255, 215, 0, 0.14);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.55), 0 0 24px rgba(255, 215, 0, 0.06), inset 0 1px 0 rgba(255, 215, 0, 0.04);
+}
+
+/* ── Grain overlay (SVG fractal noise, fixed, pointer-events none) ──────────── */
+/* Applied via a div in layout.tsx */
+
+.grain-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.055;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='256' height='256' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
+
+/* 移动端 + 降级运动偏好关闭 grain */
+@media (max-width: 768px), (prefers-reduced-motion: reduce) {
+  .grain-overlay { display: none; }
+}
+
+/* ── Caustics (liquid light ripple on glass cards) ──────────────────────────── */
+
+@keyframes caustics {
+  0%   { background-position: 0% 0%,   100% 100%, 50% 50%; }
+  25%  { background-position: 55% 38%, 45%  62%,  30% 70%; }
+  50%  { background-position: 80% 20%, 20%  80%,  70% 30%; }
+  75%  { background-position: 35% 75%, 65%  25%,  55% 45%; }
+  100% { background-position: 0% 0%,   100% 100%, 50% 50%; }
+}
+
+.caustics-layer {
+  background:
+    radial-gradient(ellipse 28% 18% at 30% 30%, rgba(255,212,0,0.11) 0%, transparent 55%),
+    radial-gradient(ellipse 20% 28% at 72% 68%, rgba(255,255,255,0.05) 0%, transparent 55%),
+    radial-gradient(ellipse 16% 22% at 55% 18%, rgba(255,220,80,0.07)  0%, transparent 50%);
+  background-size: 200% 200%;
+  animation: caustics 28s ease-in-out infinite;
+  mix-blend-mode: screen;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caustics-layer { animation: none; }
+}
+
+/* ── Reduced motion global ───────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* ── Gold shimmer text ───────────────────────────────────────────────────────── */

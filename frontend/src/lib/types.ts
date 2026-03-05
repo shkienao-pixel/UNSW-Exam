@@ -14,6 +14,7 @@ export interface Course {
   id: string
   code: string
   name: string
+  exam_date?: string | null   // ISO 8601，管理员设置的考试日期
   created_at: string
   updated_at: string
 }

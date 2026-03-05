@@ -1,6 +1,6 @@
 {
   "name": "frontend",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -13,6 +13,7 @@
     "@types/cytoscape": "^3.31.0",
     "clsx": "^2.1.1",
     "cytoscape": "^3.33.1",
+    "framer-motion": "^12.35.0",
     "lucide-react": "^0.575.0",
     "next": "16.1.6",
     "openai": "^6.25.0",

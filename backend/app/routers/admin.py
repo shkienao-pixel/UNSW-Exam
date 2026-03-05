@@ -16,7 +16,7 @@ from supabase import Client
 from app.core.config import get_settings
 from app.core.dependencies import get_db
 from app.core.supabase_client import get_supabase
-from app.models.course import ArtifactOut, CourseCreate, CourseOut
+from app.models.course import ArtifactOut, CourseCreate, CourseOut, ExamDateUpdate
 from app.services.artifact_service import remove_artifact, store_file, store_url
 from app.services.course_service import (
     create_course,
@@ -336,6 +336,18 @@ def admin_create_course(
 ) -> dict[str, Any]:
     """Create a shared course (admin only)."""
     return create_course(supabase, code=body.code, name=body.name)
+
+
+@router.patch("/courses/{course_id}/exam-date", response_model=CourseOut)
+def admin_set_exam_date(
+    course_id: str,
+    body: ExamDateUpdate,
+    _: None = Depends(_require_admin),
+    supabase: Client = Depends(get_db),
+) -> dict[str, Any]:
+    """Set or clear the exam date for a course (admin only)."""
+    from app.services.course_service import set_exam_date
+    return set_exam_date(supabase, course_id, body.exam_date)
 
 
 @router.delete("/courses/{course_id}", status_code=200)
