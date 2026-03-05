@@ -49,7 +49,7 @@ async function adminReq<T>(secret: string, path: string, options: RequestInit = 
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface Course { id: string; code: string; name: string; created_at: string }
+interface Course { id: string; code: string; name: string; exam_date?: string | null; created_at: string }
 interface Artifact {
   id: number; course_id: string; file_name: string; file_type: string
   status: string; created_at: string; reject_reason: string | null; uploaded_by: string | null
