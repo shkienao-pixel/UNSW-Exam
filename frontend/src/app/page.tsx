@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth-context'
 import { Loader2, Sparkles, Brain, BookOpen, Zap, Shield } from 'lucide-react'
 import CampusHeroCard from '@/components/CampusHeroCard'
 import ExamMasterLogo from '@/components/ExamMasterLogo'
+import ParticleText from '@/components/ParticleText'
 
 // ── Hero AI Knowledge Nodes (outer bubbles in negative space) ─────────────────
 
@@ -251,17 +252,28 @@ export default function LandingPage() {
           数据驱动 · AI 助教 · 专为留学生打造
         </div>
 
-        {/* Title */}
-        <h1 className="text-5xl md:text-7xl font-black mb-4 leading-tight fade-in-up"
-          style={{
-            background: 'linear-gradient(135deg, #FFD700 0%, #FFF3B0 50%, #FFD700 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-            animationDelay: '0.05s',
-          }}>
-          Exam Master
-        </h1>
+        {/* Title — 粒子文字 */}
+        <div className="relative mb-4 fade-in-up w-full max-w-2xl" style={{ animationDelay: '0.05s' }}>
+          {/* 静态兜底（低透明度，保证可读性 + SEO）*/}
+          <h1
+            className="text-5xl md:text-7xl font-black leading-tight select-none"
+            style={{
+              background: 'linear-gradient(135deg, #FFD700 0%, #FFF3B0 50%, #FFD700 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              opacity: 0.18,
+            }}
+            aria-label="Exam Master"
+          >
+            Exam Master
+          </h1>
+          {/* 粒子层（绝对覆盖，pointer-events none）*/}
+          <ParticleText
+            text="Exam Master"
+            className="w-full h-full"
+          />
+        </div>
 
         {/* Subtitle */}
         <p className="text-base md:text-lg mb-2 max-w-lg leading-relaxed fade-in-up"
