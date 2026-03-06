@@ -32,12 +32,12 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'SF Pro Display', 'SF Pro Text', 'Segoe UI Variable', 'Helvetica Neue', 'Segoe UI', sans-serif;
   min-height: 100vh;
   background-image:
-    radial-gradient(ellipse 70% 55% at 12% 12%, rgba(255, 215, 0, 0.055) 0%, transparent 65%),
-    radial-gradient(ellipse 55% 70% at 88% 88%, rgba(40, 38, 120, 0.13)  0%, transparent 65%),
-    radial-gradient(ellipse 90% 90% at 50% 50%, rgba(14, 14, 28, 0.7)    0%, transparent 100%);
+    radial-gradient(ellipse 70% 55% at 50% 0%, rgba(32, 40, 61, 0.34) 0%, transparent 62%),
+    radial-gradient(ellipse 28% 24% at 82% 10%, rgba(185, 150, 69, 0.08) 0%, transparent 70%),
+    linear-gradient(180deg, #050608 0%, #090b11 52%, #050608 100%);
   background-attachment: fixed;
 }
 
@@ -45,87 +45,86 @@ body {
 
 .tech-grid {
   background-image:
-    linear-gradient(rgba(255,215,0,0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,215,0,0.025) 1px, transparent 1px);
-  background-size: 48px 48px;
+    linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size: 56px 56px;
 }
 
 /* ── Glassmorphism card ──────────────────────────────────────────────────────── */
 
 .glass {
-  background: rgba(255, 255, 255, 0.028);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-top-color:  rgba(255, 255, 255, 0.10);
-  border-left-color: rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-top-color: rgba(255, 255, 255, 0.11);
+  border-radius: 20px;
   box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.5),
+    0 18px 48px rgba(0, 0, 0, 0.32),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  transition: border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease, transform 0.25s ease;
 }
 
 .glass:hover {
-  background: rgba(255, 215, 0, 0.028);
-  border-color: rgba(255, 215, 0, 0.2);
-  border-top-color: rgba(255, 215, 0, 0.28);
+  background: rgba(255, 255, 255, 0.038);
+  border-color: rgba(255, 255, 255, 0.11);
   box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.5),
-    0 0 28px rgba(255, 215, 0, 0.07),
-    inset 0 1px 0 rgba(255, 215, 0, 0.04);
+    0 24px 56px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 /* Card with gold gradient border (for auth pages) */
 .glass-gold {
-  background: rgba(10, 10, 20, 0.92);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border-radius: 20px;
+  background: rgba(11, 13, 18, 0.88);
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  border-radius: 28px;
   position: relative;
   box-shadow:
-    0 24px 64px rgba(0, 0, 0, 0.7),
-    0 0 0 1px rgba(255, 215, 0, 0.18),
-    inset 0 1px 0 rgba(255, 215, 0, 0.08);
+    0 28px 80px rgba(0, 0, 0, 0.46),
+    0 0 0 1px rgba(255, 255, 255, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 /* Surface card — for nested content areas */
 .card-surface {
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 18px;
 }
 
 /* Highlighted card — gold tint */
 .card-gold {
-  background: rgba(255, 215, 0, 0.05);
-  border: 1px solid rgba(255, 215, 0, 0.18);
-  border-radius: 12px;
+  background: rgba(200, 165, 90, 0.08);
+  border: 1px solid rgba(200, 165, 90, 0.16);
+  border-radius: 18px;
 }
 
 /* ── Gold glow button ────────────────────────────────────────────────────────── */
 
 .btn-gold {
-  background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
-  color: #07070e;
-  font-weight: 700;
-  border-radius: 10px;
+  background: rgba(200, 165, 90, 0.14);
+  color: #ecd59d;
+  font-weight: 600;
+  border-radius: 999px;
   padding: 11px 22px;
-  border: none;
+  border: 1px solid rgba(200, 165, 90, 0.2);
   cursor: pointer;
-  transition: box-shadow 0.2s ease, transform 0.15s ease, opacity 0.2s ease;
-  box-shadow: 0 0 18px rgba(255, 215, 0, 0.35), 0 2px 8px rgba(0,0,0,0.4);
+  transition: box-shadow 0.2s ease, transform 0.15s ease, opacity 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
   letter-spacing: 0.01em;
 }
 
 .btn-gold:hover {
-  box-shadow: 0 0 32px rgba(255, 215, 0, 0.55), 0 4px 16px rgba(0,0,0,0.5);
+  background: rgba(200, 165, 90, 0.18);
+  border-color: rgba(200, 165, 90, 0.28);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.22);
   transform: translateY(-1px);
 }
 
 .btn-gold:active {
   transform: translateY(0);
-  box-shadow: 0 0 16px rgba(255, 215, 0, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
 }
 
 .btn-gold:disabled {
@@ -137,20 +136,20 @@ body {
 
 /* Outlined gold button */
 .btn-outline-gold {
-  background: rgba(255, 215, 0, 0.08);
-  color: #FFD700;
+  background: rgba(255, 255, 255, 0.03);
+  color: #e6cf98;
   font-weight: 600;
-  border-radius: 10px;
+  border-radius: 999px;
   padding: 10px 20px;
-  border: 1px solid rgba(255, 215, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   cursor: pointer;
   transition: background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
 }
 
 .btn-outline-gold:hover {
-  background: rgba(255, 215, 0, 0.14);
-  border-color: rgba(255, 215, 0, 0.6);
-  box-shadow: 0 0 20px rgba(255, 215, 0, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(200, 165, 90, 0.22);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.18);
   transform: translateY(-1px);
 }
 
@@ -164,18 +163,18 @@ body {
 
 .btn-ghost {
   background: transparent;
-  color: #777788;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 8px;
+  color: #9b9ba8;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
   padding: 8px 16px;
   cursor: pointer;
   transition: background 0.2s, border-color 0.2s, color 0.2s;
 }
 
 .btn-ghost:hover {
-  background: rgba(255, 215, 0, 0.06);
-  border-color: rgba(255, 215, 0, 0.3);
-  color: #FFD700;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 /* Danger button */
@@ -198,9 +197,9 @@ body {
 
 .input-glass {
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 10px;
-  padding: 11px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 12px 14px;
   color: #e8e8f0;
   outline: none;
   width: 100%;
@@ -209,9 +208,9 @@ body {
 }
 
 .input-glass:focus {
-  background: rgba(255, 215, 0, 0.03);
-  border-color: rgba(255, 215, 0, 0.5);
-  box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.07), 0 0 16px rgba(255, 215, 0, 0.06);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(200, 165, 90, 0.22);
+  box-shadow: 0 0 0 3px rgba(200, 165, 90, 0.06);
 }
 
 .input-glass::placeholder {
@@ -226,18 +225,18 @@ body {
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #555577;
+  color: #7f8190;
   margin-bottom: 7px;
 }
 
 /* ── Sidebar nav item ────────────────────────────────────────────────────────── */
 
 .nav-active {
-  color: #FFD700;
-  background: rgba(255, 215, 0, 0.07);
-  border-left: 2px solid #FFD700;
-  text-shadow: 0 0 10px rgba(255, 215, 0, 0.45);
-  box-shadow: inset 0 0 18px rgba(255, 215, 0, 0.04);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+  border-left: 2px solid rgba(200, 165, 90, 0.9);
+  text-shadow: none;
+  box-shadow: inset 0 0 18px rgba(255, 255, 255, 0.02);
 }
 
 /* ── Status badges ───────────────────────────────────────────────────────────── */
@@ -428,10 +427,10 @@ body {
   inset: 0;
   pointer-events: none;
   z-index: 9999;
-  opacity: 0.055;
+  opacity: 0.016;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='256' height='256' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
   background-repeat: repeat;
-  background-size: 256px 256px;
+  background-size: 320px 320px;
 }
 
 /* 移动端 + 降级运动偏好关闭 grain */

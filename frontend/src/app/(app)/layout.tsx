@@ -82,7 +82,7 @@ function CourseSidebar({
       <HoverLink
         href="/dashboard"
         className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs mb-2"
-        style={{ color: '#555' }}
+        style={{ color: 'rgba(255,255,255,0.42)' }}
         onClick={onNavClick}
       >
         <ArrowLeft size={13} className="flex-shrink-0" />
@@ -92,9 +92,9 @@ function CourseSidebar({
       {/* Course badge */}
       {!collapsed && course && (
         <div className="px-3 py-2.5 mb-1 rounded-xl"
-          style={{ background: 'rgba(255,215,0,0.05)', border: '1px solid rgba(255,215,0,0.1)' }}>
+          style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)' }}>
           <span className="text-xs font-bold px-1.5 py-0.5 rounded"
-            style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700' }}>
+            style={{ background: 'rgba(200,165,90,0.14)', color: '#e6cf98' }}>
             {course.code}
           </span>
           <p className="text-xs text-white font-medium mt-1.5 leading-tight">{course.name}</p>
@@ -103,13 +103,13 @@ function CourseSidebar({
       {collapsed && course && (
         <div className="flex items-center justify-center px-1 py-2 mb-1">
           <span className="text-xs font-bold px-1.5 py-0.5 rounded text-center"
-            style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', fontSize: 9 }}>
+            style={{ background: 'rgba(200,165,90,0.14)', color: '#e6cf98', fontSize: 9 }}>
             {course.code}
           </span>
         </div>
       )}
 
-      <div className="my-2" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }} />
+        <div className="my-2" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }} />
 
       {/* Feature links */}
       {FEATURES.filter(f => !(f.view === 'resources' && role === 'guest')).map(f => {
@@ -123,17 +123,17 @@ function CourseSidebar({
               className={`items-center gap-2.5 rounded-xl text-sm font-semibold ${collapsed ? 'justify-center px-2 py-3' : 'px-3 py-3'}`}
               style={{
                 background: isActive
-                  ? 'linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,180,0,0.1))'
-                  : 'rgba(255,215,0,0.07)',
-                color: '#FFD700',
-                border: `1px solid ${isActive ? 'rgba(255,215,0,0.45)' : 'rgba(255,215,0,0.18)'}`,
-                boxShadow: isActive ? '0 0 12px rgba(255,215,0,0.12), inset 0 0 20px rgba(255,215,0,0.04)' : 'none',
-                textShadow: isActive ? '0 0 12px rgba(255,215,0,0.55)' : 'none',
+                  ? 'rgba(255,255,255,0.075)'
+                  : 'rgba(255,255,255,0.03)',
+                color: isActive ? '#ffffff' : '#e6cf98',
+                border: `1px solid ${isActive ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.06)'}`,
+                boxShadow: isActive ? '0 14px 32px rgba(0,0,0,0.18)' : 'none',
+                textShadow: 'none',
               }}>
               <span className="text-lg leading-none flex-shrink-0">{f.emoji}</span>
               {!collapsed && <span className="flex-1">{label}</span>}
               {!collapsed && isActive && (
-                <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#FFD700' }} />
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#c8a55a' }} />
               )}
             </HoverLink>
           )
@@ -143,10 +143,10 @@ function CourseSidebar({
           <HoverLink key={f.view} href={href} onClick={onNavClick}
             className={`items-center gap-2.5 rounded-lg text-sm ${collapsed ? 'justify-center px-2 py-2' : 'px-3 py-2'}`}
             style={{
-              color: isActive ? '#FFD700' : '#666',
-              background: isActive ? 'rgba(255,215,0,0.08)' : 'transparent',
-              borderLeft: collapsed ? 'none' : `2px solid ${isActive ? '#FFD700' : 'transparent'}`,
-              textShadow: isActive ? '0 0 10px rgba(255,215,0,0.45)' : 'none',
+              color: isActive ? '#ffffff' : 'rgba(255,255,255,0.42)',
+              background: isActive ? 'rgba(255,255,255,0.05)' : 'transparent',
+              borderLeft: collapsed ? 'none' : `2px solid ${isActive ? 'rgba(200,165,90,0.9)' : 'transparent'}`,
+              textShadow: 'none',
             }}>
             <span className="text-sm leading-none flex-shrink-0">{f.emoji}</span>
             {!collapsed && label}
@@ -197,7 +197,7 @@ function DefaultSidebar({
         <div>
           <button onClick={() => setCoursesOpen(v => !v)}
             className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors"
-            style={{ color: '#777' }}>
+            style={{ color: 'rgba(255,255,255,0.48)' }}>
             <BookOpen size={16} />
             <span className="flex-1 text-left">{t('my_courses')}</span>
             <span style={{ fontSize: 10, color: '#555' }}>{coursesOpen ? '▲' : '▼'}</span>
@@ -211,12 +211,12 @@ function DefaultSidebar({
                   <HoverLink key={c.id} href={href} onClick={onNavClick}
                     className="items-center gap-2 px-3 py-1.5 rounded-lg text-xs truncate"
                     style={{
-                      color: active ? '#FFD700' : '#666',
-                      background: active ? 'rgba(255,215,0,0.06)' : 'transparent',
-                      textShadow: active ? '0 0 8px rgba(255,215,0,0.35)' : 'none',
+                      color: active ? '#fff' : 'rgba(255,255,255,0.42)',
+                      background: active ? 'rgba(255,255,255,0.05)' : 'transparent',
+                      textShadow: 'none',
                     }}>
                     <span className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                      style={{ background: active ? '#FFD700' : '#444' }} />
+                      style={{ background: active ? '#c8a55a' : 'rgba(255,255,255,0.22)' }} />
                     {c.code} {c.name}
                   </HoverLink>
                 )
@@ -231,7 +231,7 @@ function DefaultSidebar({
 
       {collapsed && (
         <div className="flex justify-center px-2 py-1">
-          <BookOpen size={16} style={{ color: '#555' }} />
+          <BookOpen size={16} style={{ color: 'rgba(255,255,255,0.32)' }} />
         </div>
       )}
     </nav>
@@ -256,13 +256,13 @@ function SidebarFooter({
           onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
           className="flex items-center justify-center w-8 h-8 rounded-lg text-xs transition-colors"
           title={lang === 'zh' ? 'Switch to English' : '切换中文'}
-          style={{ color: '#666', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+          style={{ color: 'rgba(255,255,255,0.58)', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
           🌐
         </button>
         <button onClick={logout}
           className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors"
           title={t('logout')}
-          style={{ color: '#555' }}>
+          style={{ color: 'rgba(255,255,255,0.42)' }}>
           <LogOut size={15} />
         </button>
       </div>
@@ -274,12 +274,12 @@ function SidebarFooter({
       <button
         onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
         className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs transition-colors"
-        style={{ color: '#666', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+        style={{ color: 'rgba(255,255,255,0.58)', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
         🌐 {lang === 'zh' ? 'Switch to English' : '切换为中文'}
       </button>
       <button onClick={logout}
         className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors"
-        style={{ color: '#555' }}>
+        style={{ color: 'rgba(255,255,255,0.42)' }}>
         <LogOut size={16} /> {t('logout')}
       </button>
     </div>
@@ -346,6 +346,12 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   useEffect(() => {
+    if (!sessionStorage.getItem('intro_visited')) {
+      router.replace('/home')
+    }
+  }, [])
+
+  useEffect(() => {
     if (!loading && !user) router.replace('/')
   }, [user, loading, router])
 
@@ -379,15 +385,21 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: '#08080f' }}>
+    <div
+      className="flex h-screen overflow-hidden"
+      style={{
+        background:
+          'radial-gradient(circle at top, rgba(20,28,42,0.72), transparent 28%), radial-gradient(circle at 85% 10%, rgba(200,165,90,0.08), transparent 18%), linear-gradient(180deg, #050608 0%, #080b12 50%, #050608 100%)',
+      }}
+    >
 
       {/* ── Desktop Sidebar (hidden on mobile) ── */}
       <aside className="hidden md:flex flex-col flex-shrink-0"
         style={{
           width: sidebarWidth,
           minWidth: sidebarWidth,
-          borderRight: '1px solid rgba(255,215,0,0.06)',
-          background: 'rgba(6,6,14,0.92)',
+          borderRight: '1px solid rgba(255,255,255,0.06)',
+          background: 'rgba(9,11,16,0.86)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           transition: 'width 0.25s cubic-bezier(0.4,0,0.2,1), min-width 0.25s cubic-bezier(0.4,0,0.2,1)',
@@ -422,9 +434,9 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
             className="flex items-center justify-center rounded-lg transition-all"
             style={{
               width: 28, height: 28, flexShrink: 0,
-              color: '#555',
+              color: 'rgba(255,255,255,0.48)',
               background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.08)',
             }}
             title={collapsed ? '展开侧边栏' : '收起侧边栏'}
           >
@@ -460,10 +472,10 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
         className="fixed inset-y-0 left-0 z-50 flex flex-col md:hidden"
         style={{
           width: 260,
-          background: 'rgba(6,6,14,0.98)',
+          background: 'rgba(9,11,16,0.96)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
-          borderRight: '1px solid rgba(255,215,0,0.08)',
+          borderRight: '1px solid rgba(255,255,255,0.08)',
           transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
           transition: 'transform 0.28s cubic-bezier(0.4,0,0.2,1)',
         }}>
@@ -485,7 +497,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
             minHeight: 60,
             paddingTop: 'env(safe-area-inset-top, 0px)',
             borderBottom: '1px solid rgba(255,215,0,0.06)',
-            background: 'rgba(6,6,14,0.92)',
+            background: 'rgba(9,11,16,0.88)',
             backdropFilter: 'blur(16px)',
             WebkitBackdropFilter: 'blur(16px)',
           }}>
@@ -495,9 +507,9 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
             className="flex items-center justify-center rounded-lg mr-3"
             style={{
               width: 36, height: 36,
-              color: '#FFD700',
-              background: 'rgba(255,215,0,0.08)',
-              border: '1px solid rgba(255,215,0,0.18)',
+              color: '#fff',
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.08)',
               flexShrink: 0,
             }}
             aria-label="打开菜单">
@@ -580,10 +592,10 @@ function FeedbackWidget() {
           width: 36,
           height: 80,
           background: 'rgba(255,215,0,0.12)',
-          border: '1px solid rgba(255,215,0,0.25)',
+          border: '1px solid rgba(200,165,90,0.25)',
           borderRight: 'none',
           borderRadius: '8px 0 0 8px',
-          color: '#FFD700',
+          color: '#e6cf98',
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
         }}>
@@ -600,12 +612,12 @@ function FeedbackWidget() {
           <div className="w-80 rounded-2xl p-5 space-y-4 shadow-2xl"
             style={{
               background: 'rgba(10,10,20,0.97)',
-              border: '1px solid rgba(255,215,0,0.2)',
+              border: '1px solid rgba(255,255,255,0.08)',
               backdropFilter: 'blur(20px)',
             }}>
             {/* Header */}
             <div className="flex items-center gap-2">
-              <MessageSquarePlus size={16} style={{ color: '#FFD700' }} />
+              <MessageSquarePlus size={16} style={{ color: '#c8a55a' }} />
               <span className="text-sm font-semibold text-white">意见反馈</span>
               <button onClick={() => setOpen(false)} className="ml-auto" style={{ color: '#555' }}>
                 <X size={14} />
@@ -647,7 +659,7 @@ function FeedbackWidget() {
                     onClick={submit}
                     disabled={sending || !text.trim()}
                     className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40 transition-all"
-                    style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.3)' }}>
+                    style={{ background: 'rgba(200,165,90,0.12)', color: '#e6cf98', border: '1px solid rgba(200,165,90,0.2)' }}>
                     {sending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
                     {sending ? '发送中…' : '提交'}
                   </button>

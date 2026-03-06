@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { ArrowRight, BookOpen, Layers3, Loader2, Shield } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import type { Course } from '@/lib/types'
-import { BookOpen, Loader2, ArrowRight, Layers } from 'lucide-react'
 import ExamCountdown from '@/components/ExamCountdown'
 
 export default function DashboardPage() {
@@ -14,133 +14,127 @@ export default function DashboardPage() {
   const { role } = useAuth()
 
   useEffect(() => {
-    api.courses.list()
+    api.courses
+      .list()
       .then(setCourses)
       .finally(() => setLoading(false))
   }, [])
 
-  const displayCourses = role === 'guest'
-    ? courses.filter(c => c.code === 'COMP9517')
-    : courses
+  const displayCourses = role === 'guest' ? courses.filter(c => c.code === 'COMP9517') : courses
 
   return (
-    <div className="p-6 md:p-8 overflow-y-auto flex-1 max-w-5xl mx-auto w-full">
-
-      {/* Header */}
-      <div className="mb-8 fade-in-up">
-        <div className="flex items-center gap-2 mb-1">
-          <Layers size={16} style={{ color: '#FFD700' }} />
-          <h1 className="text-xl font-bold text-white">课程列表</h1>
-        </div>
-        <p className="text-sm" style={{ color: '#444455' }}>
-          选择课程，上传资料并生成 AI 复习内容
-        </p>
-      </div>
-
-      {/* Guest banner */}
-      {role === 'guest' && (
-        <div className="mb-6 px-4 py-3 rounded-xl flex items-center justify-between flex-wrap gap-3 fade-in-up"
-          style={{
-            background: 'rgba(255,215,0,0.06)',
-            border: '1px solid rgba(255,215,0,0.18)',
-          }}>
-          <div className="flex items-center gap-2">
-            <span className="text-xs px-2 py-0.5 rounded font-semibold"
-              style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700' }}>游客</span>
-            <p className="text-sm" style={{ color: '#888' }}>
-              仅可访问 COMP9517 演示课程
+    <div className="mx-auto flex w-full max-w-[1240px] flex-1 flex-col overflow-y-auto px-5 py-8 sm:px-6 lg:py-10">
+      <section className="rounded-[32px] border border-white/8 bg-white/[0.03] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.28)] sm:p-8">
+        <div className="grid gap-8 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-white/58">
+              <Layers3 className="h-3.5 w-3.5 text-[#c8a55a]" />
+              Course workspace
+            </div>
+            <h1 className="mt-6 text-4xl font-semibold leading-[0.96] tracking-[-0.05em] text-white sm:text-5xl">
+              从课程开始，
+              <br />
+              把复习内容收进工作台
+            </h1>
+            <p className="mt-5 max-w-[560px] text-base leading-8 text-white/52">
+              选择课程后即可继续访问资料上传、闪卡、模拟题、错题集和 AI 问答。整个用户端页面语言已经与首页统一，不再是另一套视觉系统。
             </p>
           </div>
-          <Link href="/register"
-            className="text-xs px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5"
-            style={{ background: 'rgba(255,215,0,0.14)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.28)' }}>
-            注册解锁全部 <ArrowRight size={12} />
-          </Link>
-        </div>
-      )}
 
-      {/* Grid */}
-      {loading ? (
-        <div className="flex items-center justify-center py-24">
-          <Loader2 className="animate-spin" style={{ color: '#FFD700' }} size={28} />
-        </div>
-      ) : displayCourses.length === 0 ? (
-        <div className="text-center py-24 fade-in-up">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
-            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
-            <BookOpen size={28} style={{ color: '#2a2a40' }} />
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-[24px] border border-white/8 bg-black/18 p-5">
+              <p className="text-xs uppercase tracking-[0.18em] text-white/32">Courses</p>
+              <p className="mt-4 text-3xl font-semibold text-white">{displayCourses.length}</p>
+              <p className="mt-2 text-sm text-white/44">当前可访问课程</p>
+            </div>
+            <div className="rounded-[24px] border border-white/8 bg-black/18 p-5">
+              <p className="text-xs uppercase tracking-[0.18em] text-white/32">Guest scope</p>
+              <p className="mt-4 text-3xl font-semibold text-white">{role === 'guest' ? '1' : 'All'}</p>
+              <p className="mt-2 text-sm text-white/44">{role === 'guest' ? '仅开放演示课程' : '完整课程访问'}</p>
+            </div>
+            <div className="rounded-[24px] border border-[#c8a55a]/16 bg-[#c8a55a]/8 p-5">
+              <p className="text-xs uppercase tracking-[0.18em] text-white/32">Mode</p>
+              <p className="mt-4 text-3xl font-semibold text-white">{role === 'guest' ? 'Guest' : 'Full'}</p>
+              <p className="mt-2 text-sm text-white/44">{role === 'guest' ? 'COMP9517 demo' : '上传与生成已开启'}</p>
+            </div>
           </div>
-          <p className="text-base font-medium" style={{ color: '#444455' }}>暂无课程</p>
-          <p className="text-sm mt-1.5" style={{ color: '#333344' }}>课程由管理员统一管理，请联系管理员添加</p>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 fade-in-up">
-          {displayCourses.map((c, i) => (
-            <Link key={c.id} href={`/courses/${c.id}?view=flashcards`}
-              style={{ textDecoration: 'none', animationDelay: `${i * 0.05}s` }}
-              className="fade-in-up">
-              <div className="group h-full rounded-2xl p-5 cursor-pointer transition-all duration-250"
-                style={{
-                  background: 'rgba(255,255,255,0.025)',
-                  border: '1px solid rgba(255,255,255,0.07)',
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-                  minHeight: 148,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                }}
-                onMouseEnter={e => {
-                  const el = e.currentTarget
-                  el.style.background = 'rgba(255,215,0,0.04)'
-                  el.style.borderColor = 'rgba(255,215,0,0.22)'
-                  el.style.boxShadow = '0 4px 24px rgba(0,0,0,0.4), 0 0 24px rgba(255,215,0,0.07)'
-                  el.style.transform = 'translateY(-2px)'
-                }}
-                onMouseLeave={e => {
-                  const el = e.currentTarget
-                  el.style.background = 'rgba(255,255,255,0.025)'
-                  el.style.borderColor = 'rgba(255,255,255,0.07)'
-                  el.style.boxShadow = '0 4px 20px rgba(0,0,0,0.3)'
-                  el.style.transform = 'translateY(0)'
-                }}
+      </section>
+
+      {role === 'guest' ? (
+        <section className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-[28px] border border-[#c8a55a]/16 bg-[#c8a55a]/8 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <span className="rounded-full border border-[#c8a55a]/22 bg-[#c8a55a]/12 px-3 py-1 text-xs font-medium text-[#e6cf98]">
+              Guest
+            </span>
+            <p className="text-sm text-white/62">当前仅可访问 COMP9517 演示课程。注册后可上传完整资料并解锁全部学习模块。</p>
+          </div>
+          <Link href="/register" className="btn-gold inline-flex items-center gap-2 text-sm" style={{ textDecoration: 'none' }}>
+            注册解锁全部
+            <ArrowRight size={15} />
+          </Link>
+        </section>
+      ) : null}
+
+      <section className="mt-8">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-semibold tracking-[-0.03em] text-white">课程列表</h2>
+            <p className="mt-1 text-sm text-white/42">选择一个课程，进入统一的学习工作台。</p>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-24">
+            <Loader2 className="h-7 w-7 animate-spin text-[#c8a55a]" />
+          </div>
+        ) : displayCourses.length === 0 ? (
+          <div className="rounded-[28px] border border-white/8 bg-white/[0.03] px-6 py-20 text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-white/8 bg-black/16">
+              <BookOpen className="h-7 w-7 text-white/28" />
+            </div>
+            <p className="mt-5 text-base font-medium text-white/68">暂无课程</p>
+            <p className="mt-2 text-sm text-white/38">课程由管理员统一管理，请联系管理员添加。</p>
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {displayCourses.map((course) => (
+              <Link
+                key={course.id}
+                href={`/courses/${course.id}?view=flashcards`}
+                className="group rounded-[28px] border border-white/8 bg-white/[0.03] p-5 shadow-[0_16px_40px_rgba(0,0,0,0.18)] transition hover:border-white/12 hover:bg-white/[0.045] hover:shadow-[0_22px_48px_rgba(0,0,0,0.24)]"
+                style={{ textDecoration: 'none' }}
               >
-                <div>
-                  {/* Code badge */}
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-bold px-2.5 py-1 rounded-lg"
-                      style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.2)', letterSpacing: '0.04em' }}>
-                      {c.code}
+                <div className="flex items-center justify-between gap-4">
+                  <span className="rounded-full border border-[#c8a55a]/18 bg-[#c8a55a]/10 px-3 py-1 text-xs font-semibold tracking-[0.08em] text-[#e6cf98]">
+                    {course.code}
+                  </span>
+                  {role === 'guest' ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-white/8 bg-white/[0.04] px-2.5 py-1 text-[11px] text-white/46">
+                      <Shield className="h-3 w-3" />
+                      Demo
                     </span>
-                  </div>
-
-                  {/* Course name */}
-                  <h3 className="text-white font-semibold text-sm leading-snug">{c.name}</h3>
-
-                  <div className="mt-2 flex items-center gap-2 flex-wrap">
-                    <ExamCountdown examDate={c.exam_date} size="sm" />
-                    {!c.exam_date && (
-                      <p className="text-xs" style={{ color: '#33334a' }}>
-                        {new Date(c.created_at).toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })}
-                      </p>
-                    )}
-                  </div>
+                  ) : null}
                 </div>
 
-                {/* Enter CTA */}
-                <div className="flex items-center justify-between mt-4 pt-3"
-                  style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                  <span className="text-xs" style={{ color: '#33334a' }}>开始复习</span>
-                  <div className="flex items-center gap-1 text-xs font-semibold transition-all"
-                    style={{ color: '#FFD700' }}>
-                    <span>进入</span>
-                    <ArrowRight size={12} />
-                  </div>
+                <h3 className="mt-5 text-lg font-medium leading-7 text-white">{course.name}</h3>
+
+                <div className="mt-4 min-h-[32px]">
+                  <ExamCountdown examDate={course.exam_date} size="sm" />
                 </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
+
+                <div className="mt-6 flex items-center justify-between border-t border-white/6 pt-4 text-sm">
+                  <span className="text-white/38">进入学习工作台</span>
+                  <span className="inline-flex items-center gap-1.5 font-medium text-[#e6cf98]">
+                    打开
+                    <ArrowRight size={14} className="transition group-hover:translate-x-0.5" />
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   )
 }

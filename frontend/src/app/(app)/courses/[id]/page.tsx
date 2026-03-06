@@ -90,7 +90,7 @@ function CoursePageInner() {
   }
 
   return (
-    <div className="p-8 max-w-5xl mx-auto overflow-y-auto flex-1">
+    <div className="mx-auto w-full max-w-[1180px] flex-1 overflow-y-auto px-5 py-8 sm:px-6 lg:py-10">
       {view === 'flashcards' && <FlashcardsTab courseId={courseId} />}
       {view === 'mistakes'   && <MistakesTab courseId={courseId} />}
       {view === 'quiz'       && <QuizTab courseId={courseId} />}
@@ -530,8 +530,8 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
           {/* Reset bar */}
           <div className="flex">
             <button onClick={restart}
-              className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs"
-              style={{ color: '#444', border: '1px solid rgba(255,255,255,0.06)' }}>
+              className="ml-auto flex items-center gap-1 rounded-full px-3 py-1.5 text-xs"
+              style={{ color: 'rgba(255,255,255,0.44)', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)' }}>
               <RotateCcw size={11} /> {t('fc_reset')}
             </button>
           </div>
@@ -553,13 +553,13 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
               </p>
               <div className="flex gap-3 justify-center pt-2 flex-wrap">
                 <button onClick={restart}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium"
-                  style={{ background: 'rgba(255,255,255,0.06)', color: '#CCC', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  className="flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium"
+                  style={{ background: 'rgba(255,255,255,0.05)', color: '#ddd', border: '1px solid rgba(255,255,255,0.08)' }}>
                   <RotateCcw size={14} /> {lang === 'zh' ? '再做一次' : 'Redo'}
                 </button>
                 <a href={`/courses/${courseId}?view=generate`}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium"
-                  style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}>
+                  className="flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium"
+                  style={{ background: 'rgba(200,165,90,0.12)', color: '#e6cf98', border: '1px solid rgba(200,165,90,0.2)' }}>
                   <Zap size={14} /> {lang === 'zh' ? '再来一套' : 'Generate New'}
                 </a>
               </div>
@@ -573,7 +573,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                 </div>
                 <div className="h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
                   <div className="h-full rounded-full transition-all"
-                    style={{ width: `${((cardIndex + 1) / cards.length) * 100}%`, background: '#FFD700' }} />
+                    style={{ width: `${((cardIndex + 1) / cards.length) * 100}%`, background: '#c8a55a' }} />
                 </div>
               </div>
 
@@ -583,8 +583,8 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                   {card.type === 'vocab' && (
                     <div className="space-y-3">
                       <div
-                        className="glass rounded-2xl p-10 cursor-pointer min-h-52 flex flex-col items-center justify-center text-center"
-                        style={{ outline: '1px solid rgba(255,215,0,0.12)', userSelect: 'none' }}
+                        className="mx-auto flex min-h-[320px] w-full max-w-[680px] cursor-pointer flex-col items-center justify-center rounded-[32px] border border-white/8 bg-white/[0.03] p-10 text-center shadow-[0_20px_60px_rgba(0,0,0,0.24)] sm:p-14"
+                        style={{ userSelect: 'none' }}
                         onClick={() => setFlipped(f => !f)}>
                         <p className="text-xs mb-4" style={{ color: '#555' }}>
                           {flipped ? t('fc_back') : t('fc_front')} · {t('fc_click_tip')}
@@ -604,7 +604,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
 
                   {/* MCQ card */}
                   {card.type === 'mcq' && (
-                    <div className="glass rounded-2xl p-6 space-y-4">
+                    <div className="rounded-[30px] border border-white/8 bg-white/[0.03] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.2)] space-y-4 sm:p-6">
                       <p className="font-semibold text-white">{biText(card.question, biMode)}</p>
                       <div className="space-y-2">
                         {card.options.map((opt, j) => {
@@ -617,7 +617,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                           }
                           return (
                             <button key={j} onClick={() => { setChosen(label); setRevealed(true) }}
-                              className="w-full text-left px-4 py-2.5 rounded-xl text-sm transition-all"
+                              className="w-full text-left px-4 py-3 rounded-[18px] text-sm transition-all"
                               style={{ background: bg, border: `1px solid ${border}`, color: '#DDD' }}>
                               <span style={{ color: '#FFD700' }}>{label}.</span> {biText(opt, biMode)}
                             </button>
@@ -626,8 +626,8 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                       </div>
                       {/* Auto-show explanation on reveal */}
                       {revealed && (
-                        <p className="text-xs px-3 py-2 rounded-lg"
-                          style={{ background: 'rgba(255,215,0,0.06)', color: '#AAA' }}>
+                        <p className="text-xs px-3 py-2 rounded-2xl"
+                          style={{ background: 'rgba(200,165,90,0.08)', color: '#d6d6dc', border: '1px solid rgba(200,165,90,0.14)' }}>
                           💡 {biText(
                             card.explanation || (chosen === card.answer ? '回答正确！' : `正确答案是 ${card.answer}`),
                             biMode,
@@ -647,8 +647,8 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                   {/* Navigation */}
                   <div className="flex gap-2 justify-center flex-wrap">
                     <button onClick={prev} disabled={cardIndex === 0}
-                      className="px-4 py-2 rounded-lg text-sm disabled:opacity-30"
-                      style={{ background: 'rgba(255,255,255,0.05)', color: '#888', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      className="px-4 py-2 rounded-full text-sm disabled:opacity-30"
+                      style={{ background: 'rgba(255,255,255,0.05)', color: '#b3b3bc', border: '1px solid rgba(255,255,255,0.08)' }}>
                       {t('fc_prev')}
                     </button>
                     {card.type === 'vocab' && flipped && (
@@ -658,26 +658,26 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                             addMistake({ courseId, source: 'flashcard', question: card.front, correctAnswer: card.back })
                             next()
                           }}
-                          className="px-4 py-2 rounded-lg text-sm"
-                          style={{ background: 'rgba(255,68,68,0.1)', color: '#FF6666', border: '1px solid rgba(255,68,68,0.2)' }}>
+                          className="px-4 py-2 rounded-full text-sm"
+                          style={{ background: 'rgba(255,68,68,0.1)', color: '#ff8d8d', border: '1px solid rgba(255,68,68,0.18)' }}>
                           {t('fc_forgot')}
                         </button>
-                        <button onClick={next} className="px-4 py-2 rounded-lg text-sm"
-                          style={{ background: 'rgba(34,197,94,0.1)', color: '#22C55E', border: '1px solid rgba(34,197,94,0.2)' }}>
+                        <button onClick={next} className="px-4 py-2 rounded-full text-sm"
+                          style={{ background: 'rgba(255,255,255,0.06)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.08)' }}>
                           {t('fc_got_it')}
                         </button>
                       </>
                     )}
                     {card.type === 'vocab' && !flipped && (
-                      <button onClick={() => setFlipped(true)} className="px-4 py-2 rounded-lg text-sm"
-                        style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.2)' }}>
+                      <button onClick={() => setFlipped(true)} className="px-4 py-2 rounded-full text-sm"
+                        style={{ background: 'rgba(200,165,90,0.12)', color: '#e6cf98', border: '1px solid rgba(200,165,90,0.2)' }}>
                         {t('fc_flip')}
                       </button>
                     )}
                     {card.type === 'mcq' && !revealed && (
                       <button onClick={next} disabled={cardIndex === cards.length - 1}
-                        className="px-4 py-2 rounded-lg text-sm disabled:opacity-30"
-                        style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.2)' }}>
+                        className="px-4 py-2 rounded-full text-sm disabled:opacity-30"
+                        style={{ background: 'rgba(200,165,90,0.12)', color: '#e6cf98', border: '1px solid rgba(200,165,90,0.2)' }}>
                         {t('fc_skip')}
                       </button>
                     )}
@@ -694,8 +694,8 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                           }
                           next()
                         }}
-                        className="px-4 py-2 rounded-lg text-sm"
-                        style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.2)' }}>
+                        className="px-4 py-2 rounded-full text-sm"
+                        style={{ background: 'rgba(200,165,90,0.12)', color: '#e6cf98', border: '1px solid rgba(200,165,90,0.2)' }}>
                         {cardIndex === cards.length - 1 ? t('fc_done') : t('fc_next')}
                       </button>
                     )}
@@ -1856,14 +1856,13 @@ function QuizDisplay({
     <div className="space-y-5">
       {/* Score bar — visible once at least one question answered */}
       {answeredCount > 0 && (
-        <div className="sticky top-0 z-10 glass px-4 py-2.5 rounded-xl flex items-center gap-3"
-          style={{ border: '1px solid rgba(255,215,0,0.15)' }}>
-          <span className="text-xs font-semibold" style={{ color: '#FFD700' }}>
+        <div className="sticky top-4 z-10 flex items-center gap-3 rounded-[22px] border border-white/8 bg-[rgba(11,13,18,0.82)] px-4 py-3 backdrop-blur-xl">
+          <span className="text-xs font-semibold" style={{ color: '#e6cf98' }}>
             {correctCount} / {questions.length} {lang === 'zh' ? '正确' : 'correct'}
           </span>
           <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
             <div className="h-full rounded-full transition-all"
-              style={{ width: `${(answeredCount / questions.length) * 100}%`, background: '#FFD700', opacity: 0.6 }} />
+              style={{ width: `${(answeredCount / questions.length) * 100}%`, background: '#c8a55a', opacity: 0.85 }} />
           </div>
           <span className="text-xs" style={{ color: '#555' }}>{answeredCount}/{questions.length}</span>
         </div>
@@ -1877,7 +1876,7 @@ function QuizDisplay({
           : null
 
         return (
-          <div key={i} className="glass p-4 rounded-xl space-y-3">
+          <div key={i} className="rounded-[28px] border border-white/8 bg-white/[0.03] p-5 shadow-[0_18px_50px_rgba(0,0,0,0.18)] space-y-4 sm:p-6">
             {/* Question */}
             <p className="font-medium text-white text-sm">
               <span style={{ color: '#FFD700' }}>Q{i + 1}. </span>
@@ -1898,7 +1897,7 @@ function QuizDisplay({
                   <button key={j}
                     onClick={() => handleAnswer(i, label, q)}
                     disabled={!!show}
-                    className="w-full text-left px-3 py-2 rounded-lg text-sm transition-all disabled:cursor-default"
+                    className="w-full text-left px-4 py-3 rounded-[18px] text-sm transition-all disabled:cursor-default"
                     style={{ background: bg, border: `1px solid ${border}`, color: '#DDD' }}>
                     <span style={{ color: '#FFD700' }}>{label}.</span> {opt}
                   </button>
@@ -1909,8 +1908,8 @@ function QuizDisplay({
             {/* Explanation + sources (auto-show on answer) */}
             {show && (
               <div className="space-y-2">
-                <p className="text-xs px-3 py-2 rounded-lg"
-                  style={{ background: 'rgba(255,215,0,0.06)', color: '#AAA' }}>
+                <p className="text-xs px-3 py-2 rounded-2xl"
+                  style={{ background: 'rgba(200,165,90,0.08)', color: '#d6d6dc', border: '1px solid rgba(200,165,90,0.14)' }}>
                   💡 {q.explanation || (chosen === q.answer ? '回答正确！' : `正确答案是 ${q.answer}`)}
                 </p>
 
@@ -1962,9 +1961,8 @@ function QuizDisplay({
 
       {/* Final summary card */}
       {allDone && (
-        <div className="glass p-6 rounded-2xl text-center space-y-3"
-          style={{ border: '1px solid rgba(255,215,0,0.2)' }}>
-          <p className="text-3xl font-bold" style={{ color: '#FFD700' }}>
+        <div className="rounded-[30px] border border-white/8 bg-white/[0.03] p-6 text-center space-y-3">
+          <p className="text-3xl font-bold" style={{ color: '#e6cf98' }}>
             {correctCount} / {questions.length}
           </p>
           <p className="text-sm" style={{ color: '#AAA' }}>
@@ -1980,14 +1978,14 @@ function QuizDisplay({
           <div className="flex gap-3 justify-center flex-wrap">
             <button
               onClick={() => { setAnswers({}); setRevealed({}) }}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium"
-              style={{ background: 'rgba(255,255,255,0.06)', color: '#CCC', border: '1px solid rgba(255,255,255,0.1)' }}>
+              className="flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium"
+              style={{ background: 'rgba(255,255,255,0.05)', color: '#ddd', border: '1px solid rgba(255,255,255,0.08)' }}>
               <RotateCcw size={14} /> {lang === 'zh' ? '再做一次' : 'Redo'}
             </button>
             {courseId && (
               <a href={`/courses/${courseId}?view=generate`}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium"
-                style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}>
+                className="flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium"
+                style={{ background: 'rgba(200,165,90,0.12)', color: '#e6cf98', border: '1px solid rgba(200,165,90,0.2)' }}>
                 <Zap size={14} /> {lang === 'zh' ? '再来一套' : 'Generate New'}
               </a>
             )}

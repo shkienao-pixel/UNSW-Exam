@@ -1,182 +1,286 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useAuth } from '@/lib/auth-context'
-import { Loader2, Sparkles, Brain, BookOpen, Zap, Shield } from 'lucide-react'
-import CampusHeroCard from '@/components/CampusHeroCard'
+import { useRouter } from 'next/navigation'
+import {
+  ArrowRight,
+  BookOpen,
+  Brain,
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  Loader2,
+  PanelLeft,
+  Search,
+  Shield,
+  Sparkles,
+} from 'lucide-react'
 import ExamMasterLogo from '@/components/ExamMasterLogo'
-import ParticleText from '@/components/ParticleText'
+import { useAuth } from '@/lib/auth-context'
 
-// ── Hero AI Knowledge Nodes (outer bubbles in negative space) ─────────────────
+const NAV_ITEMS = ['能力', '工作流', '安全']
 
-type HeroNodePos = { top: string; left?: string; right?: string }
+const HERO_FACTS = [
+  { label: '已解析资料', value: '128 份' },
+  { label: '访客课程', value: 'COMP9517' },
+  { label: '双模型引擎', value: 'GPT + Gemini' },
+]
 
-const HERO_OUTER_NODES: Array<{
-  id: number; text: string; pos: HeroNodePos
-  svgX: number; svgY: number; cpX: number; cpY: number; srcX: number; srcY: number
-  floatDur: string; floatDelay: string; enterDelay: string
-}> = [
+const SIDEBAR_ITEMS = [
+  { label: '课程总览', active: false },
+  { label: 'Flashcards', active: true },
+  { label: 'Wrong Answer Sets', active: false },
+  { label: 'Practice Exams', active: false },
+]
+
+const REVIEW_ROWS = [
   {
-    id: 0, text: 'Explain Backprop?',
-    pos: { top: '32%', left: '3%' },
-    svgX: 4,  svgY: 32, cpX: 14, cpY: 44, srcX: 21, srcY: 56,
-    floatDur: '4.8s', floatDelay: '0s',    enterDelay: '0.4s',
+    title: 'Attention Mechanism 高频考点',
+    source: 'Lecture 10 + 2024 Past Paper',
+    state: '待重点复习',
+    accent: true,
   },
   {
-    id: 1, text: 'How to optimize RAG?',
-    pos: { top: '63%', left: '5%' },
-    svgX: 6,  svgY: 63, cpX: 14, cpY: 58, srcX: 21, srcY: 60,
-    floatDur: '6.5s', floatDelay: '1.3s', enterDelay: '0.7s',
+    title: 'Backpropagation 易错题',
+    source: 'Tutorial 05 + Wrong Answer Set',
+    state: '已整理',
   },
   {
-    id: 2, text: 'COMP9517 历年考点',
-    pos: { top: '28%', right: '3%' },
-    svgX: 96, svgY: 28, cpX: 86, cpY: 40, srcX: 79, srcY: 54,
-    floatDur: '5.2s', floatDelay: '0.7s', enterDelay: '0.55s',
-  },
-  {
-    id: 3, text: 'Attention Mechanism?',
-    pos: { top: '65%', right: '4%' },
-    svgX: 95, svgY: 65, cpX: 86, cpY: 60, srcX: 79, srcY: 59,
-    floatDur: '4.2s', floatDelay: '1.9s', enterDelay: '0.85s',
+    title: 'RAG 问答可追问材料',
+    source: 'Lecture Slides + Notes',
+    state: '生成中',
   },
 ]
 
-function HeroAINodes() {
-  const [hov, setHov] = useState<number | null>(null)
+const RIGHT_PANEL = [
+  { label: '今日计划', value: '错题回看 + 模拟题' },
+  { label: 'AI 问答', value: '可直接追问课程内容' },
+  { label: '当前产物', value: '36 张闪卡 + 12 道模拟题' },
+]
 
+const FEATURE_CARDS = [
+  {
+    icon: Brain,
+    title: 'AI 智能生成',
+    description: '上传课件和历年真题后，系统自动提炼考点，生成摘要、闪卡和模拟试题，直接围绕备考任务展开。',
+  },
+  {
+    icon: BookOpen,
+    title: '多模型 RAG 问答',
+    description: '基于已上传的课程资料和真题构建问答上下文，支持直接追问知识点，而不是给一段脱离材料的泛化回答。',
+  },
+  {
+    icon: Shield,
+    title: '错题集与复习追踪',
+    description: '把错题、薄弱点和复习节奏串成一条线，帮助你在考前快速知道该回看什么、先练什么。',
+  },
+]
+
+function ProductPreviewCard({
+  onGuestLogin,
+  guestLoading,
+}: {
+  onGuestLogin: () => void
+  guestLoading: boolean
+}) {
   return (
-    <div className="absolute inset-0 hidden md:block pointer-events-none" style={{ zIndex: 2 }}>
+    <div className="relative mx-auto w-full max-w-[860px]">
+      <div className="pointer-events-none absolute left-[-14%] top-[46%] hidden h-px w-[14%] bg-gradient-to-r from-transparent via-[#c8a55a]/12 to-transparent xl:block" />
+      <div className="pointer-events-none absolute right-[-14%] top-[46%] hidden h-px w-[14%] bg-gradient-to-l from-transparent via-[#c8a55a]/12 to-transparent xl:block" />
 
-      {/* SVG bezier lines + energy particles */}
-      <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none"
-        style={{ position: 'absolute', inset: 0 }}>
-        <defs>
-          <filter id="heroGlow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="0.5" result="blur" />
-            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-        </defs>
-        {HERO_OUTER_NODES.map((n, i) => {
-          const d = `M ${n.srcX} ${n.srcY} Q ${n.cpX} ${n.cpY} ${n.svgX} ${n.svgY}`
-          const isHov = hov === i
-          return (
-            <g key={i}>
-              <path d={d} fill="none"
-                stroke={isHov ? 'rgba(255,215,0,0.45)' : 'rgba(255,193,7,0.09)'}
-                strokeWidth={isHov ? 0.45 : 0.22}
-                strokeLinecap="round"
-                style={{
-                  transition: 'stroke 0.3s, stroke-width 0.3s',
-                  strokeDasharray: 200,
-                  strokeDashoffset: 200,
-                  animation: `heroLineGrow 1.1s ease-out ${0.3 + i * 0.18}s forwards`,
-                }}
-              />
-              <circle r="0.65" fill="rgba(255,230,80,0.92)" filter="url(#heroGlow)">
-                <animateMotion path={d}
-                  dur={`${2.6 + i * 0.6}s`}
-                  begin={`${1.1 + i * 0.4}s`}
-                  repeatCount="indefinite"
-                  calcMode="spline" keyTimes="0;1" keySplines="0.4 0 0.6 1"
-                />
-              </circle>
-            </g>
-          )
-        })}
-      </svg>
+      <div className="relative overflow-hidden rounded-[32px] border border-white/8 bg-[rgba(11,13,18,0.88)] shadow-[0_30px_100px_rgba(0,0,0,0.52)] backdrop-blur-2xl">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(200,165,90,0.08),transparent_24%),radial-gradient(circle_at_100%_0%,rgba(91,104,138,0.12),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.025),transparent_40%)]" />
 
-      {/* Floating question bubbles */}
-      {HERO_OUTER_NODES.map((n, i) => (
-        <div key={i} className="pointer-events-auto absolute"
-          style={{ ...n.pos, transform: 'translateY(-50%)' }}
-          onMouseEnter={() => setHov(i)}
-          onMouseLeave={() => setHov(null)}
-        >
-          {/* Balloon float wrapper */}
-          <div style={{
-            animation: `heroFloat${i} ${n.floatDur} ease-in-out ${n.floatDelay} infinite`,
-            animationPlayState: hov === i ? 'paused' : 'running',
-          }}>
-            <div style={{
-              padding: '5px 12px',
-              borderRadius: 10,
-              background: hov === i ? 'rgba(255,215,0,0.12)' : 'rgba(6,5,16,0.68)',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
-              border: `1px solid ${hov === i ? 'rgba(255,215,0,0.55)' : 'rgba(255,193,7,0.18)'}`,
-              color: hov === i ? '#FFD700' : 'rgba(175,175,198,0.78)',
-              fontSize: '0.68rem',
-              fontWeight: hov === i ? 600 : 400,
-              whiteSpace: 'nowrap',
-              boxShadow: hov === i
-                ? '0 0 18px rgba(255,215,0,0.2), 0 4px 16px rgba(0,0,0,0.6)'
-                : '0 3px 12px rgba(0,0,0,0.5)',
-              transform: hov === i ? 'scale(1.06)' : 'scale(1)',
-              transition: 'all 0.25s ease',
-              animation: `heroBubbleIn 0.6s cubic-bezier(0.34,1.56,0.64,1) ${n.enterDelay} both`,
-            }}>
-              {n.text}
+        <div className="relative flex items-center justify-between border-b border-white/7 px-5 py-4 sm:px-6">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-white/14" />
+              <span className="h-2.5 w-2.5 rounded-full bg-white/10" />
+              <span className="h-2.5 w-2.5 rounded-full bg-[#c8a55a]/55" />
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.24em] text-white/34">Exam Master</p>
+              <p className="text-sm font-medium text-white/82">Review workspace</p>
             </div>
           </div>
-        </div>
-      ))}
 
-      <style>{`
-        @keyframes heroLineGrow {
-          from { stroke-dashoffset: 200; }
-          to   { stroke-dashoffset: 0; }
-        }
-        @keyframes heroBubbleIn {
-          from { opacity: 0; transform: scale(0.3) translateY(10px); filter: blur(4px); }
-          to   { opacity: 1; transform: scale(1)   translateY(0);    filter: blur(0); }
-        }
-        @keyframes heroFloat0 {
-          0%,100% { transform: translateY(0px)   translateX(0px); }
-          33%     { transform: translateY(-20px) translateX(3px); }
-          66%     { transform: translateY(-9px)  translateX(-2px); }
-        }
-        @keyframes heroFloat1 {
-          0%,100% { transform: translateY(0px)   translateX(0px); }
-          40%     { transform: translateY(-24px) translateX(-3px); }
-          70%     { transform: translateY(-11px) translateX(2px); }
-        }
-        @keyframes heroFloat2 {
-          0%,100% { transform: translateY(0px)   translateX(0px); }
-          35%     { transform: translateY(-18px) translateX(2px); }
-          65%     { transform: translateY(-25px) translateX(-2px); }
-        }
-        @keyframes heroFloat3 {
-          0%,100% { transform: translateY(0px)   translateX(0px); }
-          45%     { transform: translateY(-15px) translateX(-2px); }
-          75%     { transform: translateY(-22px) translateX(3px); }
-        }
-      `}</style>
+          <div className="hidden items-center gap-2 rounded-full border border-white/8 bg-white/[0.03] px-3 py-1.5 text-xs text-white/46 sm:flex">
+            <Search className="h-3.5 w-3.5" />
+            Search notes, papers, mistakes
+          </div>
+        </div>
+
+        <div className="relative grid min-h-[540px] grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] xl:grid-cols-[188px_minmax(0,1fr)_228px]">
+          <aside className="border-b border-white/7 bg-black/14 p-4 md:col-span-2 xl:col-span-1 xl:border-b-0 xl:border-r">
+            <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
+              <div className="flex items-center gap-2 text-white/78">
+                <PanelLeft className="h-4 w-4 text-[#c8a55a]" />
+                <span className="text-sm font-medium">COMP9517</span>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-white/40">访客模式展示 COMP9517 的资料上传、生成和复习流程。</p>
+            </div>
+
+            <div className="mt-5 space-y-1.5">
+              {SIDEBAR_ITEMS.map((item) => (
+                <div
+                  key={item.label}
+                  className={`flex items-center justify-between rounded-2xl px-3 py-2.5 text-sm transition ${
+                    item.active
+                      ? 'border border-white/10 bg-white/[0.06] text-white'
+                      : 'border border-transparent text-white/42'
+                  }`}
+                >
+                  <span>{item.label}</span>
+                  {item.active ? <ChevronRight className="h-4 w-4 text-[#c8a55a]" /> : null}
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 rounded-2xl border border-[#c8a55a]/12 bg-[#c8a55a]/6 p-3">
+              <p className="text-xs uppercase tracking-[0.16em] text-[#dbc185]">Guest Demo</p>
+              <p className="mt-2 text-sm leading-6 text-white/56">注册后可上传你自己的课程资料；访客模式只开放预载课程体验。</p>
+            </div>
+          </aside>
+
+          <section className="p-4 sm:p-5 lg:p-6">
+            <div className="flex flex-col gap-4 border-b border-white/7 pb-5 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.22em] text-white/33">COMP9517 REVIEW</p>
+                <h3 className="mt-2 max-w-[18ch] text-[24px] font-semibold tracking-[-0.04em] text-white sm:text-[26px]">
+                  历年考点、闪卡与错题回看在同一块界面
+                </h3>
+                <p className="mt-2 max-w-xl text-sm leading-7 text-white/50">
+                  课件、tutorial、past paper 和错题记录会先被整理进同一个复习工作台，再触发 AI 生成与问答。
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 rounded-full border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-white/48">
+                <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                2 分钟前同步
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+              <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-white/33">资料来源</p>
+                <p className="mt-3 text-xl font-semibold tracking-[-0.03em] text-white">12</p>
+                <p className="mt-1 text-sm text-white/42">课件、习题、历年题</p>
+              </div>
+              <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-white/33">已生成</p>
+                <p className="mt-3 text-xl font-semibold tracking-[-0.03em] text-white">36</p>
+                <p className="mt-1 text-sm text-white/42">张闪卡</p>
+              </div>
+              <div className="rounded-[22px] border border-[#c8a55a]/15 bg-[#c8a55a]/7 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-white/33">模拟题覆盖</p>
+                <p className="mt-3 text-xl font-semibold tracking-[-0.03em] text-white">84%</p>
+                <div className="mt-3 h-1.5 rounded-full bg-white/8">
+                  <div className="h-full w-[84%] rounded-full bg-[#c8a55a]" />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-[26px] border border-white/8 bg-black/18 p-3 sm:p-4">
+              <div className="grid gap-3">
+                {REVIEW_ROWS.map((row) => (
+                  <div
+                    key={row.title}
+                    className={`rounded-[22px] border px-4 py-3 ${
+                      row.accent ? 'border-[#c8a55a]/15 bg-[#c8a55a]/7' : 'border-white/8 bg-white/[0.025]'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-medium text-white/86">{row.title}</p>
+                        <p className="mt-1 text-xs text-white/42">{row.source}</p>
+                      </div>
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                          row.accent ? 'bg-[#c8a55a]/14 text-[#dec48b]' : 'bg-white/[0.05] text-white/44'
+                        }`}
+                      >
+                        {row.state}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-white/33">Ask from your materials</p>
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm leading-7 text-white/56">
+                  直接问：Attention Mechanism 为什么是 COMP9517 历年高频点？系统会结合课件与真题上下文回答。
+                </p>
+                <button
+                  type="button"
+                  onClick={onGuestLogin}
+                  disabled={guestLoading}
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-medium text-white/78 transition hover:border-[#c8a55a]/18 hover:bg-[#c8a55a]/8 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {guestLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      正在进入
+                    </>
+                  ) : (
+                    <>
+                      进入访客体验
+                      <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <aside className="border-t border-white/7 bg-black/14 p-4 md:border-l md:border-t-0 xl:border-l">
+            <div className="rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-white/33">今日复习</p>
+              <div className="mt-4 space-y-4">
+                <div className="flex gap-3">
+                  <Clock3 className="mt-0.5 h-4 w-4 text-white/38" />
+                  <div>
+                    <p className="text-sm font-medium text-white/84">19:00 闪卡回看</p>
+                    <p className="mt-1 text-xs text-white/42">18 张高频考点闪卡</p>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <BookOpen className="mt-0.5 h-4 w-4 text-white/38" />
+                  <div>
+                    <p className="text-sm font-medium text-white/84">20:30 模拟题训练</p>
+                    <p className="mt-1 text-xs text-white/42">聚焦 2024 年 Q3 与 Q5</p>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-[#c8a55a]" />
+                  <div>
+                    <p className="text-sm font-medium text-white/84">21:15 错题整理</p>
+                    <p className="mt-1 text-xs text-white/42">AI 汇总薄弱点到错题集</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-white/33">当前状态</p>
+              <div className="mt-4 space-y-3">
+                {RIGHT_PANEL.map((item) => (
+                  <div key={item.label} className="rounded-2xl bg-black/16 px-3 py-3">
+                    <p className="text-xs uppercase tracking-[0.14em] text-white/30">{item.label}</p>
+                    <p className="mt-2 text-sm font-medium text-white/82">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
     </div>
   )
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-
-const FEATURES = [
-  {
-    icon: <Zap size={24} />,
-    title: 'AI 智能生成',
-    desc: '一键生成闪卡、模拟题、知识摘要，基于你上传的真题资料，精准覆盖考点。',
-  },
-  {
-    icon: <Brain size={24} />,
-    title: '多模型 RAG 问答',
-    desc: '向 AI 直接提问课程内容，GPT-4o + Gemini 2.0 双引擎实时检索知识库作答。',
-  },
-  {
-    icon: <BookOpen size={24} />,
-    title: '错题集 & 复习追踪',
-    desc: '自动记录错题，智能安排复习节奏，让每次练习都有针对性，考前不再慌乱。',
-  },
-]
 
 export default function LandingPage() {
   const { user, role, loading, guestLogin } = useAuth()
@@ -184,21 +288,21 @@ export default function LandingPage() {
   const [guestLoading, setGuestLoading] = useState(false)
   const [guestError, setGuestError] = useState('')
 
-  // Already logged-in non-guest users → go directly to dashboard
   useEffect(() => {
     if (!loading && user && role !== 'guest') {
       router.replace('/dashboard')
     }
-  }, [user, role, loading, router])
+  }, [loading, role, router, user])
 
   async function handleGuestLogin() {
     setGuestLoading(true)
     setGuestError('')
+
     try {
       await guestLogin()
       router.push('/dashboard')
     } catch {
-      setGuestError('游客登录失败，请稍后重试')
+      setGuestError('访客模式进入失败，请稍后再试。')
     } finally {
       setGuestLoading(false)
     }
@@ -206,143 +310,140 @@ export default function LandingPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#08080f' }}>
-        <Loader2 className="animate-spin" style={{ color: '#FFD700' }} size={32} />
+      <div className="flex min-h-screen items-center justify-center bg-[#050608]">
+        <Loader2 className="h-8 w-8 animate-spin text-[#c8a55a]" />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: '#08080f', color: '#fff' }}>
+    <div className="min-h-screen bg-[#050608] text-white">
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,rgba(20,28,42,0.78),transparent_30%),radial-gradient(circle_at_85%_10%,rgba(200,165,90,0.08),transparent_18%),linear-gradient(180deg,#050608_0%,#080b12_50%,#050608_100%)]" />
 
-      {/* ── Navbar ── */}
-      <nav className="flex items-center justify-between px-6 py-4 border-b"
-        style={{ borderColor: 'rgba(255,215,0,0.08)', backdropFilter: 'blur(16px)', position: 'sticky', top: 0, zIndex: 10, background: 'rgba(8,8,15,0.85)' }}>
-        <ExamMasterLogo height={28} />
-        <div className="flex items-center gap-3">
-          <Link href="/admin"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-            style={{ color: '#888', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)' }}>
-            <Shield size={13} />
-            管理后台
-          </Link>
-          <Link href="/login"
-            className="px-4 py-1.5 rounded-lg text-sm transition-all"
-            style={{ color: '#999', border: '1px solid rgba(255,255,255,0.1)' }}>
-            登录
-          </Link>
-          <Link href="/register"
-            className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-all"
-            style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.3)' }}>
-            注册
-          </Link>
+      <nav className="sticky top-0 z-30 border-b border-white/6 bg-[rgba(5,6,8,0.72)] backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1280px] items-center justify-between gap-6 px-5 py-4 sm:px-6">
+          <ExamMasterLogo height={29} />
+
+          <div className="hidden items-center gap-8 lg:flex">
+            {NAV_ITEMS.map((item) => (
+              <span key={item} className="text-sm text-white/42">
+                {item}
+              </span>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <Link
+              href="/admin"
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-medium text-white/58 transition hover:border-white/14 hover:bg-white/[0.05] hover:text-white/82"
+            >
+              <Shield className="h-3.5 w-3.5" />
+              管理后台
+            </Link>
+            <Link
+              href="/login"
+              className="rounded-full border border-white/10 px-4 py-2 text-sm text-white/66 transition hover:border-white/14 hover:bg-white/[0.04] hover:text-white"
+            >
+              登录
+            </Link>
+            <Link
+              href="/register"
+              className="rounded-full border border-[#c8a55a]/20 bg-[#c8a55a]/10 px-4 py-2 text-sm font-medium text-[#e6cf98] transition hover:border-[#c8a55a]/28 hover:bg-[#c8a55a]/14"
+            >
+              注册
+            </Link>
+          </div>
         </div>
       </nav>
 
-      {/* ── Hero ── */}
-      <section className="relative overflow-hidden flex-1 flex flex-col items-center justify-center text-center px-4 sm:px-6 pt-20 pb-10">
+      <main>
+        <section className="mx-auto grid min-h-[calc(100vh-81px)] max-w-[1280px] items-center gap-12 px-5 py-16 sm:px-6 xl:grid-cols-[minmax(0,0.76fr)_minmax(0,1.14fr)] xl:gap-16 xl:py-20">
+          <div className="max-w-[560px]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-white/58">
+              <Sparkles className="h-3.5 w-3.5 text-[#c8a55a]" />
+              数据驱动 · AI 助教 · 专为留学生打造
+            </div>
 
-        {/* AI knowledge nodes — outer negative-space bubbles (desktop only) */}
-        <HeroAINodes />
+            <h1 className="mt-7 text-[clamp(3rem,6vw,6rem)] font-semibold leading-[0.92] tracking-[-0.065em] text-white">
+              Exam Master
+            </h1>
 
-        {/* Badge */}
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-7 fade-in-up"
-          style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.2)' }}>
-          <Sparkles size={12} />
-          数据驱动 · AI 助教 · 专为留学生打造
-        </div>
+            <p className="mt-6 max-w-[500px] text-base leading-8 text-white/54 sm:text-lg">
+              上传课件与历年真题，AI 自动提炼考点，生成闪卡、模拟试题与知识摘要。你也可以直接追问课程内容，把问答、生成和复习追踪收进一个界面。
+            </p>
 
-        {/* Title — 粒子文字 */}
-        <div className="relative mb-4 fade-in-up w-full max-w-2xl" style={{ animationDelay: '0.05s' }}>
-          {/* 静态兜底（低透明度，保证可读性 + SEO）*/}
-          <h1
-            className="text-5xl md:text-7xl font-black leading-tight select-none"
-            style={{
-              background: 'linear-gradient(135deg, #FFD700 0%, #FFF3B0 50%, #FFD700 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-              opacity: 0.18,
-            }}
-            aria-label="Exam Master"
-          >
-            Exam Master
-          </h1>
-          {/* 粒子层（绝对覆盖，pointer-events none）*/}
-          <ParticleText
-            text="Exam Master"
-            className="w-full h-full"
-          />
-        </div>
-
-        {/* Subtitle */}
-        <p className="text-base md:text-lg mb-2 max-w-lg leading-relaxed fade-in-up"
-          style={{ color: '#444455', fontWeight: 300, animationDelay: '0.1s' }}>
-          上传课件与历年真题，AI 自动提炼考点，生成闪卡与模拟试题。
-        </p>
-
-        {guestError && (
-          <p className="text-sm mt-3 px-4 py-2 rounded-lg"
-            style={{ color: '#ff8080', background: 'rgba(255,100,100,0.1)', border: '1px solid rgba(255,100,100,0.2)' }}>
-            {guestError}
-          </p>
-        )}
-
-        {/* ── Campus Hero Card ── */}
-        <CampusHeroCard onGuestLogin={handleGuestLogin} guestLoading={guestLoading} />
-
-        {/* Footer hint */}
-        <p className="text-xs mt-2" style={{ color: '#2a2a3a' }}>
-          游客模式仅限 COMP9517 课程体验 · 注册解锁全部功能
-        </p>
-      </section>
-
-      {/* ── Features ── */}
-      <section className="px-6 py-16 border-t" style={{ borderColor: 'rgba(255,215,0,0.06)' }}>
-        <div className="max-w-4xl mx-auto">
-          <h2 className="text-2xl font-bold text-center mb-12 text-white">为什么选择 Exam Master？</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {FEATURES.map(f => (
-              <div key={f.title}
-                className="p-7 rounded-2xl transition-all duration-300 group"
-                style={{
-                  background: 'rgba(255,215,0,0.025)',
-                  border: '1px solid rgba(255,215,0,0.09)',
-                  backdropFilter: 'blur(8px)',
-                  cursor: 'default',
-                }}
-                onMouseEnter={e => {
-                  (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,215,0,0.055)'
-                  ;(e.currentTarget as HTMLDivElement).style.border = '1px solid rgba(212,168,67,0.22)'
-                  ;(e.currentTarget as HTMLDivElement).style.boxShadow = '0 0 28px rgba(212,168,67,0.08), 0 8px 32px rgba(0,0,0,0.4)'
-                  ;(e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)'
-                }}
-                onMouseLeave={e => {
-                  (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,215,0,0.025)'
-                  ;(e.currentTarget as HTMLDivElement).style.border = '1px solid rgba(255,215,0,0.09)'
-                  ;(e.currentTarget as HTMLDivElement).style.boxShadow = 'none'
-                  ;(e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)'
-                }}
+            <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+              <Link
+                href="/register"
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-[#c8a55a]/20 bg-[#c8a55a]/10 px-5 py-3 text-sm font-medium text-[#e6cf98] transition hover:border-[#c8a55a]/28 hover:bg-[#c8a55a]/14"
               >
-                <div className="mb-4" style={{ color: '#D4A843' }}>{f.icon}</div>
-                <h3 className="text-base font-semibold text-white mb-2">{f.title}</h3>
-                <p className="text-sm leading-relaxed" style={{ color: '#505060', fontWeight: 300 }}>{f.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+                创建账号
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+              <button
+                type="button"
+                onClick={handleGuestLogin}
+                disabled={guestLoading}
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-5 py-3 text-sm font-medium text-white/76 transition hover:border-white/14 hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {guestLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    正在进入演示
+                  </>
+                ) : (
+                  <>
+                    进入访客演示
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </button>
+            </div>
 
-      {/* ── Footer ── */}
-      <footer className="py-8 text-center border-t" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
-        <p className="text-xs" style={{ color: '#333' }}>
-          © 2026 Exam Master v0.7.0 · 专为 UNSW 学生打造
-          {' '}
-          <Link href="/admin"
-            style={{ color: '#222', textDecoration: 'none' }}
-            title="admin">⌘</Link>
-        </p>
-      </footer>
+            {guestError ? (
+              <div className="mt-4 rounded-2xl border border-red-400/18 bg-red-500/8 px-4 py-3 text-sm text-red-200/86">
+                {guestError}
+              </div>
+            ) : null}
+
+            <div className="mt-12 grid gap-3 sm:grid-cols-3">
+              {HERO_FACTS.map((item) => (
+                <div key={item.label} className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-white/30">{item.label}</p>
+                  <p className="mt-3 text-xl font-semibold tracking-[-0.04em] text-white">{item.value}</p>
+                </div>
+              ))}
+            </div>
+
+            <p className="mt-4 text-sm text-white/34">
+              访客模式仅限 COMP9517 课程体验；注册后可上传完整资料并解锁全部功能。
+            </p>
+          </div>
+
+          <ProductPreviewCard onGuestLogin={handleGuestLogin} guestLoading={guestLoading} />
+        </section>
+
+        <section className="mx-auto max-w-[1280px] px-5 pb-16 sm:px-6 lg:pb-24">
+          <div className="grid gap-4 lg:grid-cols-3">
+            {FEATURE_CARDS.map((feature) => {
+              const Icon = feature.icon
+
+              return (
+                <div
+                  key={feature.title}
+                  className="rounded-[28px] border border-white/8 bg-white/[0.03] p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+                >
+                  <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-black/18 text-[#c8a55a]">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <h2 className="mt-5 text-xl font-medium tracking-[-0.03em] text-white">{feature.title}</h2>
+                  <p className="mt-3 text-sm leading-7 text-white/50">{feature.description}</p>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      </main>
     </div>
   )
 }
