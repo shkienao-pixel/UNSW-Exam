@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>UNSW EXAM MASTER Preview v6</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:Inter,Arial,"Microsoft YaHei",sans-serif}
+  #stage{position:fixed;inset:0;background:#000;overflow:hidden}
+  .vignette{position:absolute;inset:0;background:radial-gradient(circle at center, rgba(255,255,255,.012), rgba(0,0,0,1) 64%)}
+  .grain{position:absolute;inset:0;opacity:.032;background-image:radial-gradient(circle, rgba(255,255,255,.65) 0.65px, transparent 0.85px);background-size:7px 7px;mix-blend-mode:soft-light;pointer-events:none}
+
+  .frame{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(84vw,1120px);height:min(64vh,520px);border-radius:30px;border:1.05px solid rgba(255,255,255,.14);box-shadow:0 0 24px rgba(255,255,255,.04), inset 0 0 18px rgba(255,255,255,.016);background:transparent;overflow:visible}
+  .frameGlow{position:absolute;inset:-2px;border-radius:32px;pointer-events:none;background:conic-gradient(from 0deg, rgba(255,90,90,0), rgba(255,65,120,.16), rgba(120,120,255,.14), rgba(60,255,220,.12), rgba(255,200,100,.12), rgba(255,90,90,0));filter:blur(20px);opacity:0;mix-blend-mode:screen}
+  .frameSweep{position:absolute;inset:-1px;border-radius:31px;pointer-events:none;background:linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,.08) 46%, rgba(255,255,255,0) 60%);filter:blur(10px);opacity:0;transform:translateX(-28%)}
+
+  .letter{position:absolute;left:0;top:0;color:#fff;font-weight:800;letter-spacing:.06em;white-space:pre;user-select:none;will-change:transform,opacity,filter;text-shadow:0 0 10px rgba(255,255,255,.10), 0 0 24px rgba(255,255,255,.05)}
+  .guideBall{position:absolute;left:0;top:0;width:26px;height:26px;border-radius:50%;background:#fff;transform:translate(-50%,-50%) scale(1,1);opacity:1;will-change:transform,opacity}
+  .guideBall::before,.guideBall::after{content:none}
+
+  .sparkle{position:absolute;left:0;top:0;width:26px;height:26px;transform:translate(-50%,-50%) scale(.2);opacity:0;pointer-events:none;filter:drop-shadow(0 0 7px rgba(255,255,255,.95)) drop-shadow(0 0 16px rgba(255,255,255,.28));}
+  .sparkle .coreH,.sparkle .coreV,.sparkle .diag1,.sparkle .diag2,.sparkle .miniA,.sparkle .miniB,.sparkle .miniC{position:absolute;left:50%;top:50%;display:block;background:#fff;border-radius:999px;transform-origin:center center}
+  .sparkle .coreV{width:2.8px;height:22px;transform:translate(-50%,-50%)}
+  .sparkle .coreH{width:22px;height:2.8px;transform:translate(-50%,-50%)}
+  .sparkle .diag1{width:2.1px;height:16px;transform:translate(-50%,-50%) rotate(45deg)}
+  .sparkle .diag2{width:2.1px;height:16px;transform:translate(-50%,-50%) rotate(-45deg)}
+  .sparkle .miniA{width:5px;height:5px;transform:translate(9px,-8px) rotate(45deg);background:#ffd88a;box-shadow:0 0 4px rgba(255,216,138,.35)}
+  .sparkle .miniB{width:3.8px;height:3.8px;transform:translate(-12px,8px) rotate(45deg);background:#d9e6ff;box-shadow:0 0 4px rgba(217,230,255,.28)}
+  .sparkle .miniC{width:2.8px;height:2.8px;transform:translate(11px,10px) rotate(45deg);background:#fff;box-shadow:0 0 3px rgba(255,255,255,.28)}
+
+  .flash{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(circle at center, rgba(255,42,42,.16), rgba(255,42,42,0) 48%);mix-blend-mode:screen}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="vignette"></div>
+  <div class="frame" id="frame">
+    <div class="frameGlow" id="frameGlow"></div>
+    <div class="frameSweep" id="frameSweep"></div>
+  </div>
+  <div class="flash" id="flash"></div>
+  <div class="grain"></div>
+</div>
+<script>
+const stage = document.getElementById('stage');
+const frame = document.getElementById('frame');
+const frameGlow = document.getElementById('frameGlow');
+const frameSweep = document.getElementById('frameSweep');
+const flash = document.getElementById('flash');
+
+const W = () => window.innerWidth;
+const H = () => window.innerHeight;
+const cx = () => W()/2;
+const cy = () => H()/2;
+const clamp = (x,a,b)=>Math.max(a,Math.min(b,x));
+const lerp = (a,b,t)=>a+(b-a)*t;
+const easeOutCubic = t => 1 - Math.pow(1-t,3);
+const easeInOutCubic = t => t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2;
+const easeOutQuint = t => 1 - Math.pow(1-t,5);
+const easeInOutQuint = t => t < .5 ? 16*t*t*t*t*t : 1 - Math.pow(-2*t+2,5)/2;
+const easeOutBack = t => {const c1=1.70158,c3=c1+1; return 1 + c3*Math.pow(t-1,3) + c1*Math.pow(t-1,2);};
+const rand = (a,b)=>a+Math.random()*(b-a);
+const isCN = s => /[\u4e00-\u9fff]/.test(s);
+const bezier = (p0,p1,p2,p3,t) => {
+  const mt = 1-t;
+  return mt*mt*mt*p0 + 3*mt*mt*t*p1 + 3*mt*t*t*p2 + t*t*t*p3;
+};
+function starTarget(){
+  return {x: Math.max(finalTextRightEdge() + 54, cx() + 470), y: H()*0.51 - 1};
+}
+function finalTextRightEdge(){
+  const size = 102;
+  const layout = wordLayout('EXAM MASTER', size);
+  return W()*0.5 + layout.total/2;
+}
+
+const ball = document.createElement('div');
+ball.className = 'guideBall';
+stage.appendChild(ball);
+const sparkle = document.createElement('div');
+sparkle.className = 'sparkle';
+sparkle.innerHTML = '<span class="coreH"></span><span class="coreV"></span><span class="diag1"></span><span class="diag2"></span><span class="miniA"></span><span class="miniB"></span><span class="miniC"></span>';
+stage.appendChild(sparkle);
+
+let entities = [];
+let ballWindows = [];
+let lastBall = {x: window.innerWidth/2, y: window.innerHeight/2, s:1.02, sx:1, sy:1, t:0, vx:0, vy:0};
+
+function wordLayout(word, size, gapMul=0.11){
+  const chars = [...word];
+  const gap = isCN(word) ? size*0.16 : size*gapMul;
+  const widths = chars.map(ch => ch===' ' ? size*0.44 : (/[A-Z0-9]/.test(ch) ? size*0.72 : size*0.94));
+  const total = widths.reduce((a,b)=>a+b,0) + gap*(chars.length-1);
+  return {chars,widths,gap,total};
+}
+
+function sideOffset(dir, distance){
+  return dir==='bottom' ? {x:0,y:distance}
+    : dir==='top' ? {x:0,y:-distance}
+    : dir==='left' ? {x:-distance,y:0}
+    : {x:distance,y:0};
+}
+function anchorForWord(x0, y0, total, side, size){
+  if(side==='top') return {x:x0 + total/2, y:y0 - size*.98};
+  if(side==='bottom') return {x:x0 + total/2, y:y0 + size*.98};
+  if(side==='left') return {x:x0 - size*.88, y:y0};
+  return {x:x0 + total + size*.88, y:y0};
+}
+
+function createArcControls(from, to, dir){
+  const dx = to.x - from.x, dy = to.y - from.y;
+  const dist = Math.hypot(dx,dy);
+  const nx = dist ? -dy/dist : 0;
+  const ny = dist ? dx/dist : 0;
+  const bend = Math.min(170, Math.max(70, dist * 0.18));
+  const dirBias = dir==='left' ? -1 : dir==='right' ? 1 : (Math.random()>.5 ? 1 : -1);
+  const verticalBias = dir==='top' ? -1 : dir==='bottom' ? 1 : (Math.random()>.5 ? 1 : -1);
+  const s1 = dir==='left'||dir==='right' ? dirBias : verticalBias;
+  return {
+    c1: {x: from.x + dx*0.22 + nx*bend*s1*0.7, y: from.y + dy*0.12 + ny*bend*s1*0.7},
+    c2: {x: from.x + dx*0.74 - nx*bend*s1*0.56, y: from.y + dy*0.88 - ny*bend*s1*0.56}
+  };
+}
+
+function spawnGuidedWord({word, start, build=1600, hold=900, fade=420, size, xRatio=.5, yRatio=.5, dir='bottom', color='#fff', pulse=false, red=false, finalHold=false, anchorSide}){
+  const {chars,widths,gap,total} = wordLayout(word, size);
+  const x0 = W()*xRatio - total/2;
+  const y0 = H()*yRatio;
+  const side = anchorSide || (dir==='bottom' ? 'top' : dir==='top' ? 'bottom' : dir==='left' ? 'right' : 'left');
+  const anchor = anchorForWord(x0, y0, total, side, size);
+  const outer = sideOffset(dir, dir==='left'||dir==='right' ? W()*0.32 : H()*0.30);
+  const soft = sideOffset(dir, dir==='left'||dir==='right' ? W()*0.11 : H()*0.11);
+  const endAnchor = anchorForWord(x0, y0, total, side, size*0.92);
+
+  let x = x0;
+  const step = Math.max(52, Math.min(88, build / Math.max(chars.length+1,6) * 0.56));
+  chars.forEach((ch, i) => {
+    const cxEnd = x + widths[i]/2;
+    const cyEnd = y0;
+    x += widths[i] + gap;
+    const local = anchorForWord(cxEnd-widths[i]/2, cyEnd, widths[i], side, size*.82);
+    const startX = local.x + outer.x + (dir==='top'||dir==='bottom' ? rand(-28,28) : rand(-16,16));
+    const startY = local.y + outer.y + (dir==='left'||dir==='right' ? rand(-26,26) : rand(-16,16));
+    const controls = createArcControls({x:startX,y:startY}, {x:cxEnd,y:cyEnd}, dir);
+    const leadDelay = i * step;
+    const arrival = start + leadDelay;
+    const duration = build * .76;
+    const el = document.createElement('div');
+    el.className = 'letter';
+    el.textContent = ch;
+    el.style.fontSize = size + 'px';
+    el.style.color = color;
+    el.style.opacity = '0';
+    stage.appendChild(el);
+    entities.push({type:'letter', el, start:arrival, build:duration, hold, fade, finalHold, startX, startY, c1:controls.c1, c2:controls.c2, endX:cxEnd, endY:cyEnd, dir, pulse, red, scale0: ch===' ' ? 1 : rand(.72,.88), rot0: rand(-8,8), side});
+  });
+
+  const ballControls = createArcControls({x:anchor.x + soft.x*1.95, y:anchor.y + soft.y*1.95}, {x:endAnchor.x, y:endAnchor.y}, dir);
+  ballWindows.push({
+    start:start-180, build:build+80, hold:hold*0.72, fade:Math.max(280,fade), red, side,
+    from:{x:anchor.x + soft.x*1.95, y:anchor.y + soft.y*1.95},
+    c1: ballControls.c1,
+    c2: ballControls.c2,
+    to:{x:endAnchor.x, y:endAnchor.y},
+    finalHold
+  });
+}
+
+const timeline = [
+  {word:'UNSW',   start:  450, build:1180, hold:880, fade:380, size:96, xRatio:.5, yRatio:.24, dir:'bottom', anchorSide:'top'},
+  {word:'EXAM',   start: 2350, build:1220, hold:930, fade:380, size:98, xRatio:.5, yRatio:.40, dir:'left', anchorSide:'right'},
+  {word:'MASTER', start: 4480, build:1320, hold:980, fade:420, size:84, xRatio:.5, yRatio:.56, dir:'right', anchorSide:'left'},
+  {word:'STUDY',  start: 6760, build:1220, hold:920, fade:380, size:88, xRatio:.5, yRatio:.72, dir:'top', anchorSide:'bottom'},
+  {word:'READY',  start: 8920, build:1180, hold:900, fade:400, size:82, xRatio:.5, yRatio:.86, dir:'bottom', anchorSide:'top'},
+  {word:'3周',    start:11280, build:1040, hold:720, fade:260, size:94, xRatio:.5, yRatio:.47, dir:'left', anchorSide:'right'},
+  {word:'2周',    start:12680, build:1040, hold:720, fade:260, size:104, xRatio:.5, yRatio:.47, dir:'right', anchorSide:'left'},
+  {word:'1周',    start:14080, build:1080, hold:1120, fade:300, size:118, xRatio:.5, yRatio:.47, dir:'bottom', anchorSide:'top', color:'#ff5151', red:true, pulse:true},
+  {word:'紧急复习',start:15820,build:1560, hold:1500, fade:420, size:128, xRatio:.5, yRatio:.50, dir:'bottom', anchorSide:'top', color:'#ff2f2f', red:true, pulse:true},
+  {word:'EXAM MASTER',start:18950,build:1420,hold:99999,fade:0,size:102,xRatio:.5,yRatio:.51,dir:'left',anchorSide:'right',finalHold:true}
+];
+
+timeline.forEach(spawnGuidedWord);
+const totalDuration = 25500;
+
+function renderLetter(o,t){
+  const {el,start,build,hold,fade,endX,endY,dir,pulse,red,finalHold,c1,c2,startX,startY} = o;
+  if(t < start-260){ el.style.opacity='0'; return 0; }
+  const p = clamp((t-start)/build,0,1);
+  let x,y,scale=1,rot=0,op=1,glow=0;
+  if(p < 1){
+    const e = easeOutBack(p);
+    const pe = easeInOutQuint(Math.min(p,1));
+    const grav = dir==='bottom' ? 28*(1-p)*(1-p) : dir==='top' ? -18*(1-p)*(1-p) : 0;
+    x = bezier(startX,c1.x,c2.x,endX,pe);
+    y = bezier(startY,c1.y,c2.y,endY,pe) + grav;
+    scale = lerp(o.scale0||.78,1,easeOutQuint(p));
+    rot = (o.rot0||0)*(1-p)*0.65;
+    op = clamp((t-start+150)/280,0,1);
+    glow = .75-op*.3;
+  } else {
+    const tt = t-start-build;
+    x = endX; y = endY;
+    const settle = Math.sin(Math.min(tt,420)/420*Math.PI) * 0.036 * Math.exp(-tt/680);
+    scale = 1 + settle + (pulse ? .07*Math.sin(Math.min(tt,720)/720*Math.PI) : 0);
+    op = finalHold ? 1 : (tt < hold ? 1 : 1 - clamp((tt-hold)/Math.max(1,fade),0,1));
+    glow = pulse ? .95*(.5+.5*Math.sin(t/92)**2) : .16;
+  }
+  el.style.opacity = op;
+  el.style.transform = `translate(${x}px,${y}px) translate(-50%,-50%) rotate(${rot}deg) scale(${scale})`;
+  el.style.filter = pulse || red
+    ? `drop-shadow(0 0 ${8+glow*8}px rgba(255,80,80,.95)) drop-shadow(0 0 ${18+glow*12}px rgba(255,40,40,.35))`
+    : `drop-shadow(0 0 ${3+glow*3}px rgba(255,255,255,.26))`;
+  return op;
+}
+
+function idleBallPosition(t){
+  const phase = t/1200;
+  return {
+    x: cx() + Math.cos(phase*0.55)*110 + Math.sin(phase*0.18)*22,
+    y: cy() - 120 + Math.sin(phase)*70 + Math.cos(phase*0.37)*10
+  };
+}
+
+function renderBall(t){
+  let active = null;
+  for (let i = ballWindows.length-1; i >= 0; i--) {
+    const w = ballWindows[i];
+    if (t >= w.start-260 && t <= w.start + w.build + w.hold + w.fade + 1600) { active = w; break; }
+  }
+  let tx, ty, ts=1.04, red=0;
+  if (!active) {
+    const idle = idleBallPosition(t);
+    tx = idle.x; ty = idle.y;
+    ts = 1.02 + 0.05*Math.sin(t/430);
+  } else {
+    const {start,build,hold,fade,from,c1,c2,to,red:isRed,finalHold} = active;
+    red = isRed ? 1 : 0;
+    const p = clamp((t-start)/build,0,1);
+    if (p < 1) {
+      const pe = easeInOutQuint(p);
+      tx = bezier(from.x,c1.x,c2.x,to.x,pe);
+      ty = bezier(from.y,c1.y,c2.y,to.y,pe);
+      const inertia = Math.sin(p*Math.PI)*(Math.abs(to.x-from.x)>Math.abs(to.y-from.y) ? -14 : 10);
+      ty += inertia;
+      ts = lerp(.96,1.12,easeOutQuint(p));
+    } else {
+      const tt = t-start-build;
+      if(finalHold){
+        tx = to.x + Math.cos(tt/820)*3;
+        ty = to.y + Math.sin(tt/520)*2.2;
+        ts = 1.1 + 0.03*Math.sin(tt/300);
+      } else {
+        const blend = clamp(tt / Math.max(hold+fade+360,1), 0, 1);
+        const idle = idleBallPosition(t);
+        const hoverX = to.x + Math.cos(tt/600)*2;
+        const hoverY = to.y + Math.sin(tt/430)*2.6;
+        tx = lerp(hoverX, idle.x, easeInOutCubic(blend));
+        ty = lerp(hoverY, idle.y, easeInOutCubic(blend));
+        ts = 1.08 + 0.04*Math.sin(tt/340);
+      }
+    }
+  }
+  const dt = Math.max(16, t - (lastBall.t || 0));
+  const smooth = active && active.finalHold ? 0.09 : 0.15;
+  const alpha = 1 - Math.pow(1 - smooth, dt / 16.6667);
+  const x = lastBall.x + (tx - lastBall.x) * alpha;
+  const y = lastBall.y + (ty - lastBall.y) * alpha;
+  const s = lastBall.s + (ts - lastBall.s) * Math.min(1, alpha*1.12);
+  const vx = (x - lastBall.x) / (dt/16.6667);
+  const vy = (y - lastBall.y) / (dt/16.6667);
+  const speed = Math.hypot(vx,vy);
+  let sx = 1, sy = 1;
+  if(speed > 0.01){
+    const stretch = Math.min(0.3, speed/28);
+    sx = 1 + stretch;
+    sy = 1 - stretch*0.52;
+  }
+  lastBall = {x, y, s, sx, sy, t, vx, vy};
+  ball.style.opacity = '1';
+  ball.style.filter = 'none';
+  ball.style.transform = `translate(${x}px,${y}px) translate(-50%,-50%) scale(${s*sx},${s*sy})`;
+  return {energy: 1, red, x, y, targetX:tx, targetY:ty, vx, vy, s};
+}
+
+function renderSparkle(t, ballState){
+  const start = 22350;
+  const spinStart = start - 760;
+  const target = starTarget();
+  const p = clamp((t-start)/920,0,1);
+  if(p<=0){ sparkle.style.opacity='0'; return; }
+  const e = easeOutBack(p);
+  const fromX = ballState?.x ?? target.x-28;
+  const fromY = ballState?.y ?? target.y+2;
+  const x = lerp(fromX, target.x, easeInOutCubic(p));
+  const y = lerp(fromY, target.y, easeInOutCubic(p));
+  let rot = 0;
+  if(t > spinStart && t < start){
+    const sp = clamp((t-spinStart)/(start-spinStart),0,1);
+    rot = 720 * easeInOutCubic(sp);
+  }
+  sparkle.style.opacity = String(p);
+  sparkle.style.transform = `translate(${x}px,${y}px) translate(-50%,-50%) scale(${lerp(.14,1,e)}) rotate(${rot}deg)`;
+  sparkle.style.filter = `drop-shadow(0 0 ${8+7*Math.sin(t/260)**2}px rgba(255,255,255,.95)) drop-shadow(0 0 ${13+10*Math.sin(t/320)**2}px rgba(255,255,255,.16))`;
+}
+
+let startTs = null;
+function frameLoop(ts){
+  if(!startTs) startTs = ts;
+  const t = ts - startTs;
+  let energy = 0, redEnergy = 0;
+  entities.forEach(o => {
+    const op = renderLetter(o,t);
+    const activeNow = t >= o.start-120 && t <= o.start + o.build + Math.min(o.hold,1300);
+    if(activeNow){ energy = Math.max(energy, op); if(o.red) redEnergy = Math.max(redEnergy, op); }
+  });
+
+  const ballState = renderBall(t);
+  energy = Math.max(energy, .85);
+  redEnergy = Math.max(redEnergy, ballState.red||0);
+
+  const pulse = .95 + 0.014*Math.sin(t/480);
+  frame.style.transform = `translate(-50%,-50%) scale(${pulse - 0.008*energy})`;
+  frameGlow.style.opacity = String(0.018 + energy*0.14 + redEnergy*0.14);
+  frameGlow.style.filter = `blur(${16 + energy*7}px)`;
+  frameSweep.style.opacity = String(Math.max(.08, energy*0.32));
+  frameSweep.style.transform = `translateX(${(-28 + (t/24)%154)}%)`;
+  flash.style.opacity = String(redEnergy*0.34*(0.45 + 0.55*Math.sin(t/95)**2));
+
+  const morph = clamp((t-21590)/1680,0,1);
+  if(morph > 0){
+    const target = starTarget();
+    const spinP = clamp((t-21590)/760,0,1);
+    const arriveP = clamp((t-22350)/920,0,1);
+    const radius = lerp(34, 10, easeInOutCubic(spinP));
+    const angle = Math.PI*4*spinP;
+    const orbitX = target.x + Math.cos(angle)*radius;
+    const orbitY = target.y + Math.sin(angle)*radius*0.74;
+    const bx = morph < 0.46 ? lerp(ballState.x||cx()+330, orbitX, easeInOutCubic(morph/0.46)) : lerp(orbitX, target.x, easeInOutCubic(arriveP));
+    const by = morph < 0.46 ? lerp(ballState.y||H()*0.51, orbitY, easeInOutCubic(morph/0.46)) : lerp(orbitY, target.y, easeInOutCubic(arriveP));
+    const bs = lerp(lastBall.s||1.08, 0.78, easeInOutCubic(morph));
+    const sx = lerp(lastBall.sx||1.0, 1.0, easeInOutCubic(morph));
+    const sy = lerp(lastBall.sy||1.0, 1.0, easeInOutCubic(morph));
+    ball.style.transform = `translate(${bx}px,${by}px) translate(-50%,-50%) scale(${bs*sx},${bs*sy})`;
+    ball.style.opacity = morph < 0.98 ? '1' : String(1-(morph-0.98)/0.02);
+    ball.style.filter = 'none';
+  }
+  renderSparkle(t, ballState);
+
+  if(t < totalDuration) requestAnimationFrame(frameLoop);
+}
+requestAnimationFrame(frameLoop);
+window.addEventListener('resize', ()=>location.reload());
+</script>
+</body>
+</html>
