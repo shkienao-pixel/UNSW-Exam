@@ -95,6 +95,8 @@ const CATEGORY_TABS: { key: DocType | 'all'; label: string }[] = [
   { key: 'other',      label: '其他'     },
 ]
 
+const UNLOCK_COST = 50
+
 // ── ... 菜单组件 ──────────────────────────────────────────────────────────────
 
 function DotMenu({
@@ -250,7 +252,7 @@ function ArtifactCard({
             style={{ background: 'rgba(255,165,0,0.12)', color: '#FFA500', border: '1px solid rgba(255,165,0,0.28)' }}
           >
             <Lock size={13} />
-            <span>1 积分解锁</span>
+            <span>50 积分深度解析</span>
           </button>
         ) : artifact.storage_url ? (
           <a
@@ -384,11 +386,24 @@ function UnlockModal({
 }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [stageText, setStageText] = useState('')
+
+  function sleep(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms))
+  }
 
   async function confirm() {
     setLoading(true)
     setError('')
     try {
+      // 增加“算力工作中”的体感
+      setStageText('AI 正在扫描知识点...')
+      await sleep(1200)
+      setStageText('正在构建逻辑索引...')
+      await sleep(1200)
+      setStageText('正在生成思维导图预览...')
+      await sleep(1100)
+
       const res = await api.artifacts.unlock(courseId, artifact.id)
       onUnlocked(artifact.id, res.storage_url)
       onClose()
@@ -396,6 +411,7 @@ function UnlockModal({
       setError(e instanceof Error ? e.message : '解锁失败，请稍后重试')
     } finally {
       setLoading(false)
+      setStageText('')
     }
   }
 
@@ -406,14 +422,24 @@ function UnlockModal({
         style={{ background: '#0e0e1c', border: '1px solid rgba(255,165,0,0.25)', boxShadow: '0 20px 60px rgba(0,0,0,0.7)' }}>
         <div className="flex items-center gap-2 mb-3">
           <Lock size={18} style={{ color: '#FFA500' }} />
-          <h3 className="text-base font-bold text-white">解锁文件访问</h3>
+          <h3 className="text-base font-bold text-white">AI 深度解析</h3>
         </div>
         <p className="text-sm mb-1" style={{ color: '#aaa' }}>文件：<span className="text-white font-medium">{artifact.file_name}</span></p>
         <p className="text-sm mb-4" style={{ color: '#777' }}>
           「{DOC_TYPE_LABELS[artifact.doc_type]}」类型文件需消耗{' '}
-          <span style={{ color: '#FFD700', fontWeight: 600 }}>1 积分</span>{' '}
-          永久解锁下载。
+          <span style={{ color: '#FFD700', fontWeight: 600 }}>{UNLOCK_COST} 积分</span>{' '}
+          进行深度解析。
         </p>
+        <div className="mb-4 space-y-1.5 rounded-xl px-3 py-2 text-xs" style={{ background: 'rgba(255,215,0,0.06)', border: '1px solid rgba(255,215,0,0.14)', color: '#aaa' }}>
+          <p>• 解锁全文阅读</p>
+          <p>• 自动提取核心考点</p>
+          <p>• 生成思维导图预览</p>
+        </div>
+        {loading && (
+          <p className="mb-3 rounded-lg px-3 py-2 text-xs" style={{ color: '#e6cf98', background: 'rgba(255,215,0,0.08)', border: '1px solid rgba(255,215,0,0.2)' }}>
+            {stageText || 'AI 正在处理...'}
+          </p>
+        )}
         {error && (
           <p className="text-xs mb-3 px-3 py-2 rounded-lg" style={{ color: '#ff8080', background: 'rgba(255,80,80,0.1)', border: '1px solid rgba(255,80,80,0.2)' }}>
             {error}
@@ -429,7 +455,7 @@ function UnlockModal({
             className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
             style={{ background: 'rgba(255,165,0,0.16)', color: '#FFA500', border: '1px solid rgba(255,165,0,0.32)' }}>
             {loading ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
-            {loading ? '解锁中...' : '确认解锁（-1 积分）'}
+            {loading ? '解析中...' : `确认深度解析（-${UNLOCK_COST} 积分）`}
           </button>
         </div>
       </div>
@@ -454,7 +480,8 @@ function UnlockAllModal({
 }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const canAfford = creditBalance >= lockedCount
+  const totalCost = lockedCount * UNLOCK_COST
+  const canAfford = creditBalance >= totalCost
 
   async function confirm() {
     setLoading(true)
@@ -478,7 +505,7 @@ function UnlockAllModal({
 
         <div className="flex items-center gap-2 mb-4">
           <Lock size={18} style={{ color: '#FFD700' }} />
-          <h3 className="text-base font-bold text-white">一键解锁全部付费文件</h3>
+          <h3 className="text-base font-bold text-white">一键深度解析全部文件</h3>
         </div>
 
         <div className="space-y-2 mb-4 px-3 py-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -488,7 +515,7 @@ function UnlockAllModal({
           </div>
           <div className="flex justify-between text-sm">
             <span style={{ color: '#888' }}>消耗积分</span>
-            <span className="font-semibold" style={{ color: '#FFD700' }}>{lockedCount} 积分</span>
+            <span className="font-semibold" style={{ color: '#FFD700' }}>{totalCost} 积分</span>
           </div>
           <div className="flex justify-between text-sm pt-1" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
             <span style={{ color: '#888' }}>当前余额</span>
@@ -496,6 +523,11 @@ function UnlockAllModal({
               {creditBalance} 积分{!canAfford && ' （不足）'}
             </span>
           </div>
+          {creditBalance >= 3000 && (
+            <div className="text-xs pt-1.5" style={{ color: '#e6cf98', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+              全课包解锁：立省 300 积分
+            </div>
+          )}
         </div>
 
         {!canAfford && (
@@ -520,7 +552,7 @@ function UnlockAllModal({
             className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-40"
             style={{ background: 'rgba(255,215,0,0.16)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.32)' }}>
             {loading ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
-            {loading ? '解锁中...' : `确认（-${lockedCount} 积分）`}
+            {loading ? '解析中...' : `确认（-${totalCost} 积分）`}
           </button>
         </div>
       </div>
@@ -561,6 +593,7 @@ export default function ResourceHubTab({
     () => artifacts.filter(a => a.is_locked).length,
     [artifacts]
   )
+  const unlockAllCost = lockedCount * UNLOCK_COST
 
   // ── 过滤 & 搜索 ────────────────────────────────────────────────
   const displayed = useMemo(() => {
@@ -604,7 +637,7 @@ export default function ResourceHubTab({
     setArtifacts(prev => prev.map(a =>
       a.id === id ? { ...a, is_locked: false, storage_url: url ?? a.storage_url } : a
     ))
-    onCreditSpent(1)
+    onCreditSpent(UNLOCK_COST)
   }
 
   // ── doc_type 修改回调 ─────────────────────────────────────────
@@ -681,17 +714,22 @@ export default function ResourceHubTab({
 
         {/* 一键解锁全部 */}
         {lockedCount > 0 && (
-          <button
-            onClick={() => setUnlockAllOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold flex-shrink-0 transition-all"
-            style={{
-              background: 'rgba(255,165,0,0.1)',
-              border: '1px solid rgba(255,165,0,0.28)',
-              color: '#FFA500',
-            }}>
-            <Lock size={12} />
-            一键解锁 ({lockedCount})
-          </button>
+          <div className="flex flex-col items-end gap-1">
+            <button
+              onClick={() => setUnlockAllOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold flex-shrink-0 transition-all"
+              style={{
+                background: 'rgba(255,165,0,0.1)',
+                border: '1px solid rgba(255,165,0,0.28)',
+                color: '#FFA500',
+              }}>
+              <Lock size={12} />
+              一键解锁 ({lockedCount} / {unlockAllCost}积分)
+            </button>
+            {creditBalance >= 3000 && (
+              <span className="text-[11px]" style={{ color: '#e6cf98' }}>全课包解锁：立省 300 积分</span>
+            )}
+          </div>
         )}
 
         {/* 上传按钮 */}

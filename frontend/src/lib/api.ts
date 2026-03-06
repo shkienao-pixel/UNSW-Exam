@@ -344,10 +344,10 @@ export const api = {
   credits: {
     balance: () => req<{ balance: number }>('/credits/balance'),
     transactions: () => req<{ id: string; amount: number; type: string; note: string | null; created_at: string }[]>('/credits/transactions'),
-    checkout: (successUrl: string, cancelUrl: string) =>
+    checkout: (successUrl: string, cancelUrl: string, pkg: '1000' | '3000' | '7000' = '1000') =>
       req<{ checkout_url: string; session_id: string }>('/credits/checkout', {
         method: 'POST',
-        body: JSON.stringify({ package: '10', success_url: successUrl, cancel_url: cancelUrl }),
+        body: JSON.stringify({ package: pkg, success_url: successUrl, cancel_url: cancelUrl }),
       }),
   },
 }

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { AuthProvider } from '@/lib/auth-context'
+import { LangProvider } from '@/lib/i18n'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -40,7 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Global grain overlay — 微噪点，仅桌面端，z-index 9999 */}
         <div aria-hidden className="grain-overlay" />
         <AuthProvider>
-          {children}
+          <LangProvider>{children}</LangProvider>
         </AuthProvider>
       </body>
     </html>

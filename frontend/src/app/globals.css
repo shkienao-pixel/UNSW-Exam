@@ -293,6 +293,17 @@ body {
   background: rgba(255, 215, 0, 0.32);
 }
 
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+
 /* ── Tab active ──────────────────────────────────────────────────────────────── */
 
 .tab-active {

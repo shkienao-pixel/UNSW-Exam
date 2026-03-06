@@ -1,37 +1,81 @@
 'use client'
 
-import { Suspense, useCallback, useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { CheckCircle, CreditCard, Loader2, Sparkles, XCircle } from 'lucide-react'
+import { CheckCircle, CreditCard, Loader2, Sparkles, Star, XCircle } from 'lucide-react'
 import { api } from '@/lib/api'
+import { useLang } from '@/lib/i18n'
 
 type Txn = { id: string; amount: number; type: string; note: string | null; created_at: string }
-
-const TYPE_LABELS: Record<string, string> = {
-  welcome_bonus: '新用户欢迎积分',
-  artifact_approved: '文件审核通过',
-  feedback_adopted: '反馈被采纳',
-  admin_grant: '管理员赠送',
-  purchase: '积分购买',
-  refund: '生成失败退款',
-  gen_flashcards: '生成闪卡',
-  gen_quiz: '生成模拟题',
-  gen_summary: '生成摘要',
-  gen_outline: '生成大纲',
-  gen_plan: '生成复习规划',
-  gen_ask: 'AI 问答',
-  unlock_upload: '解锁上传',
-}
+type PackageId = '1000' | '3000' | '7000'
 
 function CreditsPageInner() {
   const searchParams = useSearchParams()
+  const { t } = useLang()
+
   const [balance, setBalance] = useState<number | null>(null)
   const [txns, setTxns] = useState<Txn[]>([])
   const [loading, setLoading] = useState(true)
-  const [paying, setPaying] = useState(false)
+  const [payingPkg, setPayingPkg] = useState<PackageId | null>(null)
   const [payError, setPayError] = useState('')
 
   const payStatus = searchParams.get('pay')
+
+  const typeLabels = useMemo<Record<string, string>>(
+    () => ({
+      welcome_bonus: t('credits_type_welcome_bonus'),
+      artifact_approved: t('credits_type_artifact_approved'),
+      feedback_adopted: t('credits_type_feedback_adopted'),
+      admin_grant: t('credits_type_admin_grant'),
+      purchase: t('credits_type_purchase'),
+      refund: t('credits_type_refund'),
+      gen_flashcards: t('credits_type_gen_flashcards'),
+      gen_quiz: t('credits_type_gen_quiz'),
+      gen_summary: t('credits_type_gen_summary'),
+      gen_outline: t('credits_type_gen_outline'),
+      gen_plan: t('credits_type_gen_plan'),
+      gen_ask: t('credits_type_gen_ask'),
+      unlock_upload: t('credits_type_unlock_upload'),
+      unlock_all: t('credits_type_unlock_all'),
+    }),
+    [t]
+  )
+
+  const packages: Array<{
+    id: PackageId
+    name: string
+    tag: string
+    price: string
+    desc: string
+    bullets: string[]
+    highlight?: boolean
+  }> = [
+    {
+      id: '1000',
+      name: t('credits_pack_a_name'),
+      tag: t('credits_pack_a_tag'),
+      price: t('credits_pack_a_price'),
+      desc: t('credits_pack_a_desc'),
+      bullets: [t('credits_pack_a_b1'), t('credits_pack_a_b2'), t('credits_pack_a_b3')],
+    },
+    {
+      id: '3000',
+      name: t('credits_pack_b_name'),
+      tag: t('credits_pack_b_tag'),
+      price: t('credits_pack_b_price'),
+      desc: t('credits_pack_b_desc'),
+      bullets: [t('credits_pack_b_b1'), t('credits_pack_b_b2'), t('credits_pack_b_b3')],
+      highlight: true,
+    },
+    {
+      id: '7000',
+      name: t('credits_pack_c_name'),
+      tag: t('credits_pack_c_tag'),
+      price: t('credits_pack_c_price'),
+      desc: t('credits_pack_c_desc'),
+      bullets: [t('credits_pack_c_b1'), t('credits_pack_c_b2'), t('credits_pack_c_b3')],
+    },
+  ]
 
   const load = useCallback(async () => {
     try {
@@ -47,120 +91,176 @@ function CreditsPageInner() {
     load()
   }, [load])
 
-  async function handleCheckout() {
-    setPaying(true)
+  async function handleCheckout(pkg: PackageId) {
+    setPayingPkg(pkg)
     setPayError('')
     try {
       const origin = window.location.origin
-      const { checkout_url } = await api.credits.checkout(`${origin}/credits?pay=success`, `${origin}/credits?pay=cancel`)
+      const { checkout_url } = await api.credits.checkout(`${origin}/credits?pay=success`, `${origin}/credits?pay=cancel`, pkg)
       window.location.href = checkout_url
     } catch (e: unknown) {
-      setPayError(e instanceof Error ? e.message : '支付创建失败，请稍后重试。')
-      setPaying(false)
+      setPayError(e instanceof Error ? e.message : 'Checkout failed.')
+      setPayingPkg(null)
     }
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[1100px] flex-1 flex-col overflow-y-auto px-5 py-8 sm:px-6 lg:py-10">
+    <div className="mx-auto flex w-full max-w-[1240px] flex-1 flex-col overflow-y-auto px-5 py-8 sm:px-6 lg:py-10">
       <section className="rounded-[32px] border border-white/8 bg-white/[0.03] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.28)] sm:p-8">
-        <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-white/58">
               <CreditCard className="h-3.5 w-3.5 text-[#c8a55a]" />
-              Credits
+              {t('credits_badge')}
             </div>
-            <h1 className="mt-6 text-4xl font-semibold leading-[0.96] tracking-[-0.05em] text-white">积分与额度</h1>
-            <p className="mt-4 max-w-[460px] text-base leading-8 text-white/52">
-              用户端页面统一切到新的深色产品语言后，积分页也保持同一套层级。你可以在这里查看余额、购买额度以及每一次积分变化。
-            </p>
-
-            <div className="mt-8 rounded-[28px] border border-[#c8a55a]/16 bg-[#c8a55a]/8 p-6">
-              <p className="text-xs uppercase tracking-[0.18em] text-white/32">Current balance</p>
-              {loading ? (
-                <Loader2 className="mt-4 h-7 w-7 animate-spin text-[#c8a55a]" />
-              ) : (
-                <div className="mt-5 flex items-end gap-3">
-                  <span className="text-6xl font-semibold tracking-[-0.06em] text-white">{balance ?? 0}</span>
-                  <span className="pb-2 text-sm font-medium uppercase tracking-[0.2em] text-[#e6cf98]">credits</span>
-                </div>
-              )}
-            </div>
+            <h1 className="mt-5 text-4xl font-semibold leading-[0.96] tracking-[-0.05em] text-white">{t('credits_title')}</h1>
+            <p className="mt-4 max-w-[680px] text-base leading-8 text-white/52">{t('credits_sub')}</p>
           </div>
 
-          <div className="space-y-4">
-            {payStatus === 'success' ? (
-              <div className="flex items-start gap-3 rounded-[24px] border border-emerald-400/18 bg-emerald-500/8 px-4 py-4 text-sm text-emerald-200/88">
-                <CheckCircle className="mt-0.5 h-4 w-4" />
-                <div>
-                  <p className="font-medium">支付成功</p>
-                  <p className="mt-1 text-emerald-100/64">积分通常会在几秒内到账，如未到账请刷新页面。</p>
-                </div>
+          <div className="min-w-[250px] rounded-[26px] border border-[#c8a55a]/20 bg-[#c8a55a]/8 px-6 py-5">
+            <p className="text-xs uppercase tracking-[0.18em] text-white/32">{t('credits_balance_label')}</p>
+            {loading ? (
+              <Loader2 className="mt-4 h-7 w-7 animate-spin text-[#c8a55a]" />
+            ) : (
+              <div className="mt-4 flex items-end gap-3">
+                <span className="text-5xl font-semibold tracking-[-0.06em] text-white">{balance ?? 0}</span>
+                <span className="pb-2 text-sm font-medium uppercase tracking-[0.2em] text-[#e6cf98]">{t('credits_balance_unit')}</span>
               </div>
-            ) : null}
-
-            {payStatus === 'cancel' ? (
-              <div className="flex items-start gap-3 rounded-[24px] border border-red-400/18 bg-red-500/8 px-4 py-4 text-sm text-red-200/88">
-                <XCircle className="mt-0.5 h-4 w-4" />
-                <div>
-                  <p className="font-medium">支付已取消</p>
-                  <p className="mt-1 text-red-100/64">本次积分余额没有变化。</p>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="rounded-[28px] border border-white/8 bg-black/18 p-6">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.18em] text-white/32">Bundle</p>
-                  <p className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-white">10 Credits</p>
-                  <p className="mt-2 text-sm leading-7 text-white/48">可用于闪卡、模拟题、摘要、大纲与 AI 问答等生成请求。</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-3xl font-semibold tracking-[-0.04em] text-white">A$4.99</p>
-                  <p className="mt-1 text-xs text-white/36">A$0.50 / credit</p>
-                </div>
-              </div>
-
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                {[
-                  '生成闪卡 -1',
-                  '生成模拟题 -1',
-                  '生成摘要 -1',
-                  'AI 问答 -1',
-                ].map((item) => (
-                  <div key={item} className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-white/58">
-                    {item}
-                  </div>
-                ))}
-              </div>
-
-              {payError ? (
-                <div className="mt-5 rounded-2xl border border-red-400/18 bg-red-500/8 px-4 py-3 text-sm text-red-200/88">
-                  {payError}
-                </div>
-              ) : null}
-
-              <button type="button" onClick={handleCheckout} disabled={paying} className="btn-gold mt-6 flex w-full items-center justify-center gap-2 py-3.5 text-sm">
-                {paying ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    正在跳转支付
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-4 w-4" />
-                    立即购买 10 积分
-                  </>
-                )}
-              </button>
-            </div>
+            )}
           </div>
+        </div>
+
+        <div className="mt-6 space-y-3">
+          {payStatus === 'success' ? (
+            <div className="flex items-start gap-3 rounded-[20px] border border-emerald-400/18 bg-emerald-500/8 px-4 py-4 text-sm text-emerald-200/88">
+              <CheckCircle className="mt-0.5 h-4 w-4" />
+              <div>
+                <p className="font-medium">{t('credits_success_title')}</p>
+                <p className="mt-1 text-emerald-100/64">{t('credits_success_desc')}</p>
+              </div>
+            </div>
+          ) : null}
+
+          {payStatus === 'cancel' ? (
+            <div className="flex items-start gap-3 rounded-[20px] border border-red-400/18 bg-red-500/8 px-4 py-4 text-sm text-red-200/88">
+              <XCircle className="mt-0.5 h-4 w-4" />
+              <div>
+                <p className="font-medium">{t('credits_cancel_title')}</p>
+                <p className="mt-1 text-red-100/64">{t('credits_cancel_desc')}</p>
+              </div>
+            </div>
+          ) : null}
         </div>
       </section>
 
       <section className="mt-8">
-        <h2 className="text-xl font-semibold tracking-[-0.03em] text-white">积分流水</h2>
-        <p className="mt-1 text-sm text-white/42">每一次生成、购买、退款和奖励都会记录在这里。</p>
+        <h2 className="text-2xl font-semibold tracking-[-0.03em] text-white">{t('credits_packages_title')}</h2>
+        <p className="mt-1 text-sm text-white/42">{t('credits_packages_sub')}</p>
+        <div className="mt-5 grid gap-4 lg:grid-cols-3">
+          {packages.map((pkg) => (
+            <article
+              key={pkg.id}
+              className="rounded-[28px] border bg-white/[0.03] p-5 shadow-[0_14px_40px_rgba(0,0,0,0.2)]"
+              style={{
+                borderColor: pkg.highlight ? 'rgba(200,165,90,0.28)' : 'rgba(255,255,255,0.08)',
+                background: pkg.highlight ? 'linear-gradient(180deg, rgba(200,165,90,0.08), rgba(255,255,255,0.03))' : 'rgba(255,255,255,0.03)',
+              }}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="inline-flex rounded-full border border-white/12 bg-white/[0.03] px-3 py-1 text-xs font-medium text-white/58">
+                  {pkg.tag}
+                </span>
+                {pkg.highlight ? (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-[#c8a55a]/30 bg-[#c8a55a]/14 px-2.5 py-1 text-[11px] font-semibold text-[#e6cf98]">
+                    <Star className="h-3 w-3" />
+                    {t('credits_popular')}
+                  </span>
+                ) : null}
+              </div>
+
+              <h3 className="mt-4 text-2xl font-semibold tracking-[-0.03em] text-white">{pkg.name}</h3>
+              <p className="mt-2 text-sm text-white/46">{pkg.desc}</p>
+              <p className="mt-4 text-xl font-semibold text-[#f1ddb1]">{pkg.price}</p>
+
+              <ul className="mt-4 space-y-2 text-sm text-white/72">
+                {pkg.bullets.map((item) => (
+                  <li key={item} className="flex gap-2">
+                    <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-[#c8a55a] opacity-80" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <button
+                type="button"
+                onClick={() => handleCheckout(pkg.id)}
+                disabled={payingPkg !== null}
+                className="btn-gold mt-5 flex w-full items-center justify-center gap-2 py-3 text-sm"
+              >
+                {payingPkg === pkg.id ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {t('credits_cta_buying')}
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    {t('credits_cta_buy')}
+                  </>
+                )}
+              </button>
+            </article>
+          ))}
+        </div>
+
+        <div className="mt-4 space-y-1.5 text-xs text-white/34">
+          <p>{t('credits_hint_fx')}</p>
+          <p>{t('credits_hint_bonus')}</p>
+        </div>
+
+        {payError ? (
+          <div className="mt-4 rounded-2xl border border-red-400/18 bg-red-500/8 px-4 py-3 text-sm text-red-200/88">
+            {payError}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="mt-8 rounded-[28px] border border-white/8 bg-white/[0.03] p-6">
+        <h3 className="text-lg font-semibold text-white">{t('credits_estimator_title')}</h3>
+        <p className="mt-1 text-sm text-white/42">{t('credits_estimator_sub')}</p>
+        <div className="mt-4 overflow-hidden rounded-2xl border border-white/8">
+          <div className="grid grid-cols-[1.1fr_0.65fr_1.8fr] px-4 py-2.5 text-xs uppercase tracking-[0.08em] text-white/36">
+            <span>{t('credits_estimator_action')}</span>
+            <span>{t('credits_estimator_cost')}</span>
+            <span>{t('credits_estimator_value')}</span>
+          </div>
+          {[
+            [t('credits_estimator_item_1'), t('credits_estimator_cost_1'), t('credits_estimator_value_1')],
+            [t('credits_estimator_item_2'), t('credits_estimator_cost_2'), t('credits_estimator_value_2')],
+            [t('credits_estimator_item_3'), t('credits_estimator_cost_3'), t('credits_estimator_value_3')],
+          ].map(([name, cost, value], idx) => (
+            <div
+              key={name}
+              className="grid grid-cols-[1.1fr_0.65fr_1.8fr] gap-3 px-4 py-3 text-sm"
+              style={{ borderTop: idx === 0 ? 'none' : '1px solid rgba(255,255,255,0.06)' }}
+            >
+              <span className="text-white/74">{name}</span>
+              <span className="font-medium text-[#e6cf98]">{cost}</span>
+              <span className="text-white/56">{value}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-white/8 bg-black/20 p-4">
+          <h4 className="text-sm font-semibold text-white">{t('credits_faq_title')}</h4>
+          <p className="mt-2 text-sm text-white/58">{t('credits_faq_item_1')}</p>
+          <p className="mt-1.5 text-sm text-white/58">{t('credits_faq_item_2')}</p>
+        </div>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="text-xl font-semibold tracking-[-0.03em] text-white">{t('credits_txn_title')}</h2>
+        <p className="mt-1 text-sm text-white/42">{t('credits_txn_sub')}</p>
 
         {loading ? (
           <div className="flex items-center justify-center py-16">
@@ -168,14 +268,14 @@ function CreditsPageInner() {
           </div>
         ) : txns.length === 0 ? (
           <div className="mt-5 rounded-[28px] border border-white/8 bg-white/[0.03] px-6 py-16 text-center text-sm text-white/42">
-            暂无积分流水。
+            {t('credits_txn_empty')}
           </div>
         ) : (
           <div className="mt-5 space-y-3">
             {txns.map((txn) => (
               <div key={txn.id} className="flex flex-wrap items-center justify-between gap-4 rounded-[24px] border border-white/8 bg-white/[0.03] px-5 py-4">
                 <div>
-                  <p className="text-sm font-medium text-white">{TYPE_LABELS[txn.type] ?? txn.type}</p>
+                  <p className="text-sm font-medium text-white">{typeLabels[txn.type] ?? txn.type}</p>
                   {txn.note ? <p className="mt-1 text-sm text-white/42">{txn.note}</p> : null}
                   <p className="mt-2 text-xs text-white/32">
                     {new Date(txn.created_at).toLocaleString('zh-CN', {

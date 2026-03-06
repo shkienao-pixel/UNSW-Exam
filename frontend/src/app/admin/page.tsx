@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
+import ExamMasterLogo from '@/components/ExamMasterLogo'
+import { useLang } from '@/lib/i18n'
 import {
   Loader2, CheckCircle, XCircle, Trash2, Plus, RefreshCw,
   Users, BookOpen, FileText, Ticket, ChevronLeft, Key, DatabaseZap, Upload, MessageSquare, Sparkles,
@@ -13,22 +15,49 @@ const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 // ── Doc type constants (mirrored from types.ts) ────────────────────────────────
 type DocType = 'lecture' | 'tutorial' | 'revision' | 'past_exam' | 'assignment' | 'other'
 
-const DOC_TYPE_LABELS: Record<DocType, string> = {
-  lecture: '讲义', tutorial: '辅导/Lab', revision: '复习总结',
-  past_exam: '往年考题', assignment: '作业/Project', other: '其他',
+type UiLang = 'zh' | 'en'
+
+const DOC_TYPE_LABELS_BY_LANG: Record<UiLang, Record<DocType, string>> = {
+  zh: {
+    lecture: '讲义',
+    tutorial: '辅导/Lab',
+    revision: '复习总结',
+    past_exam: '往年考题',
+    assignment: '作业/Project',
+    other: '其他',
+  },
+  en: {
+    lecture: 'Lecture Notes',
+    tutorial: 'Tutorial / Lab',
+    revision: 'Revision Summary',
+    past_exam: 'Past Exam',
+    assignment: 'Assignment / Project',
+    other: 'Other',
+  },
 }
 const DOC_TYPE_COLORS: Record<DocType, string> = {
   lecture: '#60a5fa', tutorial: '#a78bfa', revision: '#4ade80',
   past_exam: '#f97316', assignment: '#facc15', other: '#6b7280',
 }
-const DOC_TYPE_OPTIONS: { value: DocType; label: string }[] = [
-  { value: 'lecture',    label: '📖 讲义 (Lecture)' },
-  { value: 'tutorial',   label: '🔬 辅导/Lab (Tutorial)' },
-  { value: 'revision',   label: '✅ 复习总结 (Revision)' },
-  { value: 'past_exam',  label: '📝 往年考题 (Past Exam)' },
-  { value: 'assignment', label: '📋 作业/Project (Assignment)' },
-  { value: 'other',      label: '📎 其他 (Other)' },
-]
+
+function tx(lang: UiLang, zh: string, en: string) {
+  return lang === 'zh' ? zh : en
+}
+
+function localeByLang(lang: UiLang) {
+  return lang === 'zh' ? 'zh-CN' : 'en-US'
+}
+
+function getDocTypeLabel(docType: DocType, lang: UiLang) {
+  return DOC_TYPE_LABELS_BY_LANG[lang][docType]
+}
+
+function getDocTypeOptions(lang: UiLang) {
+  return (Object.keys(DOC_TYPE_LABELS_BY_LANG[lang]) as DocType[]).map(value => ({
+    value,
+    label: DOC_TYPE_LABELS_BY_LANG[lang][value],
+  }))
+}
 
 async function adminReq<T>(secret: string, path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(API + path, {
@@ -65,14 +94,16 @@ interface AdminUploadItem { id: number; file: File; status: 'pending' | 'uploadi
 
 type Tab = 'courses' | 'artifacts' | 'users' | 'invites' | 'api-keys' | 'feedback'
 
-const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-  { id: 'courses',   label: '课程管理', icon: <BookOpen size={15} /> },
-  { id: 'artifacts', label: '文件审核', icon: <FileText size={15} /> },
-  { id: 'users',     label: '用户列表', icon: <Users size={15} /> },
-  { id: 'invites',   label: '邀请码',   icon: <Ticket size={15} /> },
-  { id: 'api-keys',  label: 'API 密钥', icon: <Key size={15} /> },
-  { id: 'feedback',  label: '用户反馈', icon: <MessageSquare size={15} /> },
-]
+function getTabs(t: (key: any) => string): { id: Tab; label: string; icon: React.ReactNode }[] {
+  return [
+    { id: 'courses', label: t('admin_tab_courses'), icon: <BookOpen size={15} /> },
+    { id: 'artifacts', label: t('admin_tab_artifacts'), icon: <FileText size={15} /> },
+    { id: 'users', label: t('admin_tab_users'), icon: <Users size={15} /> },
+    { id: 'invites', label: t('admin_tab_invites'), icon: <Ticket size={15} /> },
+    { id: 'api-keys', label: t('admin_tab_api_keys'), icon: <Key size={15} /> },
+    { id: 'feedback', label: t('admin_tab_feedback'), icon: <MessageSquare size={15} /> },
+  ]
+}
 
 // ── Courses tab ───────────────────────────────────────────────────────────────
 
@@ -83,6 +114,9 @@ function CourseDetailModal({
 }: {
   course: Course; secret: string; onClose: () => void; onDeleted: () => void; onUpdated: (c: Course) => void
 }) {
+  const { lang } = useLang()
+  const tt = (zh: string, en: string) => tx(lang, zh, en)
+  const locale = localeByLang(lang)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   // 考试日期编辑
   const toLocalInput = (iso?: string | null) => {
@@ -102,10 +136,22 @@ function CourseDetailModal({
         ? { exam_date: new Date(examInput).toISOString() }
         : { exam_date: null }
       const updated = await adminReq<Course>(secret, `/admin/courses/${course.id}/exam-date`, {
-        method: 'PATCH', body: JSON.stringify(body),
+        method: 'POST', body: JSON.stringify(body),
       })
       onUpdated(updated)
-    } catch (e: unknown) { setExamError(String(e)) }
+    } catch (e: unknown) {
+      const msg = String(e)
+      if (msg.includes('Failed to fetch')) {
+        setExamError(
+          tt(
+            '网络请求失败：请检查 NEXT_PUBLIC_API_URL、后端/反向代理是否放行该接口（/admin/courses/{id}/exam-date）。',
+            'Network request failed: check NEXT_PUBLIC_API_URL and whether backend/proxy allows /admin/courses/{id}/exam-date.',
+          ),
+        )
+      } else {
+        setExamError(msg)
+      }
+    }
     finally { setSavingExam(false) }
   }
 
@@ -124,7 +170,7 @@ function CourseDetailModal({
           <div className="flex items-center justify-between px-6 pt-5 pb-4"
             style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
             <h2 className="text-base font-bold text-white flex items-center gap-2">
-              <Info size={16} style={{ color: '#FFD700' }} /> 课程详情
+              <Info size={16} style={{ color: '#FFD700' }} /> {tt('课程详情', 'Course Details')}
             </h2>
             <button onClick={onClose} className="p-1.5 rounded-lg transition-colors"
               style={{ color: '#555' }}
@@ -148,10 +194,11 @@ function CourseDetailModal({
               </div>
               <div className="flex items-center gap-1.5 text-xs" style={{ color: '#555' }}>
                 <Calendar size={12} />
-                创建于 {new Date(course.created_at).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}
+                {tt('创建于', 'Created on')}{' '}
+                {new Date(course.created_at).toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' })}
               </div>
               <div className="text-xs pt-1" style={{ color: '#444', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                <span style={{ color: '#555' }}>课程 ID：</span>
+                <span style={{ color: '#555' }}>{tt('课程 ID：', 'Course ID:')}</span>
                 <span className="font-mono text-xs" style={{ color: '#3a3a5a' }}>{course.id}</span>
               </div>
             </div>
@@ -160,7 +207,7 @@ function CourseDetailModal({
             <div className="rounded-2xl p-4 space-y-3"
               style={{ background: 'rgba(255,212,0,0.03)', border: '1px solid rgba(255,212,0,0.12)' }}>
               <h4 className="text-sm font-semibold flex items-center gap-1.5" style={{ color: '#b08000' }}>
-                <CalendarDays size={14} /> 考试日期
+                <CalendarDays size={14} /> {tt('考试日期', 'Exam Date')}
               </h4>
               <div className="flex gap-2">
                 <input
@@ -175,13 +222,13 @@ function CourseDetailModal({
                   disabled={savingExam}
                   className="px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 transition-all"
                   style={{ background: 'rgba(255,212,0,0.15)', color: '#FFD400', border: '1px solid rgba(255,212,0,0.25)' }}>
-                  {savingExam ? '保存中…' : '保存'}
+                  {savingExam ? tt('保存中…', 'Saving...') : tt('保存', 'Save')}
                 </button>
                 {examInput && (
                   <button onClick={() => setExamInput('')}
                     className="px-3 py-2 rounded-lg text-xs"
                     style={{ color: '#555', border: '1px solid rgba(255,255,255,0.08)' }}>
-                    清除
+                    {tt('清除', 'Clear')}
                   </button>
                 )}
               </div>
@@ -192,10 +239,14 @@ function CourseDetailModal({
             <div className="rounded-2xl p-4"
               style={{ background: 'rgba(239,68,68,0.04)', border: '1px dashed rgba(239,68,68,0.35)' }}>
               <h4 className="text-sm font-bold mb-1 flex items-center gap-1.5" style={{ color: '#EF4444' }}>
-                <AlertTriangle size={14} /> 危险操作区
+                <AlertTriangle size={14} /> {tt('危险操作区', 'Danger Zone')}
               </h4>
               <p className="text-xs mb-4 leading-relaxed" style={{ color: '#7a3030' }}>
-                删除课程将<strong style={{ color: '#cc4444' }}>不可恢复地清空</strong>该课程下的所有课件文件、AI 闪卡、错题集与 RAG 向量索引。
+                {tt('删除课程将', 'Deleting this course will')}{' '}
+                <strong style={{ color: '#cc4444' }}>
+                  {tt('不可恢复地清空', 'permanently remove')}
+                </strong>
+                {tt('该课程下的所有课件文件、AI 闪卡、错题集与 RAG 向量索引。', ' all files, flashcards, mistake sets, and RAG vectors under this course.')}
               </p>
               <button
                 onClick={() => setShowDeleteConfirm(true)}
@@ -209,7 +260,7 @@ function CourseDetailModal({
                   e.currentTarget.style.background = 'rgba(239,68,68,0.12)'
                   e.currentTarget.style.borderColor = 'rgba(239,68,68,0.3)'
                 }}>
-                <Trash2 size={14} /> 删除该课程
+                <Trash2 size={14} /> {tt('删除该课程', 'Delete Course')}
               </button>
             </div>
           </div>
@@ -236,6 +287,8 @@ function DeleteConfirmModal({
 }: {
   course: Course; secret: string; onClose: () => void; onDeleted: () => void
 }) {
+  const { lang } = useLang()
+  const tt = (zh: string, en: string) => tx(lang, zh, en)
   const [codeInput, setCodeInput] = useState('')
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
@@ -266,27 +319,31 @@ function DeleteConfirmModal({
             <AlertTriangle size={20} style={{ color: '#EF4444' }} />
           </div>
           <div>
-            <h3 className="text-base font-bold" style={{ color: '#EF4444' }}>此操作不可逆转！</h3>
-            <p className="text-xs" style={{ color: '#774444' }}>无法撤销，请仔细阅读以下警告</p>
+            <h3 className="text-base font-bold" style={{ color: '#EF4444' }}>{tt('此操作不可逆转！', 'This action is irreversible!')}</h3>
+            <p className="text-xs" style={{ color: '#774444' }}>{tt('无法撤销，请仔细阅读以下警告', 'Cannot be undone. Please read carefully.')}</p>
           </div>
         </div>
 
         {/* 警告文案 */}
         <div className="rounded-xl p-3 mb-5 text-xs leading-relaxed"
           style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.18)', color: '#aa5555' }}>
-          删除课程 <span style={{ color: '#FFD700', fontWeight: 600 }}>「{course.code} · {course.name}」</span> 将同时清空其下所有的：
+          {tt('删除课程', 'Delete course')}{' '}
+          <span style={{ color: '#FFD700', fontWeight: 600 }}>「{course.code} · {course.name}」</span>{' '}
+          {tt('将同时清空其下所有的：', 'and remove all related data:')}
           <ul className="mt-1.5 ml-3 space-y-0.5 list-disc" style={{ color: '#884444' }}>
-            <li>全部课件文件（Supabase Storage + 数据库记录）</li>
-            <li>AI 生成的闪卡与模拟题</li>
-            <li>所有用户的错题记录</li>
-            <li>RAG 向量索引（ChromaDB chunks）</li>
+            <li>{tt('全部课件文件（Supabase Storage + 数据库记录）', 'All files (Supabase Storage + DB records)')}</li>
+            <li>{tt('AI 生成的闪卡与模拟题', 'AI-generated flashcards and quizzes')}</li>
+            <li>{tt('所有用户的错题记录', 'All user mistake records')}</li>
+            <li>{tt('RAG 向量索引（ChromaDB chunks）', 'RAG vector index (ChromaDB chunks)')}</li>
           </ul>
         </div>
 
         {/* 输入校验 */}
         <div className="mb-4">
           <label className="block text-xs font-medium mb-1.5" style={{ color: '#aa5555' }}>
-            请输入课程代码 <span style={{ color: '#EF4444', fontWeight: 700 }}>「{course.code}」</span> 以确认删除：
+            {tt('请输入课程代码', 'Enter course code')}{' '}
+            <span style={{ color: '#EF4444', fontWeight: 700 }}>「{course.code}」</span>{' '}
+            {tt('以确认删除：', 'to confirm deletion:')}
           </label>
           <input
             autoFocus
@@ -314,7 +371,7 @@ function DeleteConfirmModal({
           <button onClick={onClose} disabled={deleting}
             className="flex-1 py-2.5 rounded-xl text-sm transition-all"
             style={{ background: 'rgba(255,255,255,0.05)', color: '#666', border: '1px solid rgba(255,255,255,0.08)' }}>
-            取消
+            {tt('取消', 'Cancel')}
           </button>
           <button
             onClick={handleDelete}
@@ -327,7 +384,7 @@ function DeleteConfirmModal({
               cursor: confirmed ? 'pointer' : 'not-allowed',
             }}>
             {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-            {deleting ? '删除中...' : '确认删除'}
+            {deleting ? tt('删除中...', 'Deleting...') : tt('确认删除', 'Confirm Delete')}
           </button>
         </div>
       </div>
@@ -338,10 +395,14 @@ function DeleteConfirmModal({
 // ── 课程管理 Tab ────────────────────────────────────────────────────────────────
 
 function CoursesTab({ secret }: { secret: string }) {
+  const { lang } = useLang()
+  const tt = (zh: string, en: string) => tx(lang, zh, en)
+  const locale = localeByLang(lang)
   const [courses, setCourses] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
   const [code, setCode] = useState('')
   const [name, setName] = useState('')
+  const [examInput, setExamInput] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null)
@@ -359,11 +420,16 @@ function CoursesTab({ secret }: { secret: string }) {
     if (!code.trim() || !name.trim()) return
     setCreating(true)
     try {
+      const payload: { code: string; name: string; exam_date?: string } = {
+        code: code.trim(),
+        name: name.trim(),
+      }
+      if (examInput) payload.exam_date = new Date(examInput).toISOString()
       await adminReq(secret, '/admin/courses', {
         method: 'POST',
-        body: JSON.stringify({ code: code.trim(), name: name.trim() }),
+        body: JSON.stringify(payload),
       })
-      setCode(''); setName('')
+      setCode(''); setName(''); setExamInput('')
       await load()
     } catch (e: unknown) { setError(String(e)) }
     finally { setCreating(false) }
@@ -386,15 +452,22 @@ function CoursesTab({ secret }: { secret: string }) {
       {error && <ErrorBox msg={error} />}
       <div className="card-gold p-5 rounded-2xl">
         <h3 className="text-sm font-semibold mb-4 flex items-center gap-2" style={{ color: '#FFD700' }}>
-          <Plus size={14} /> 新建课程
+          <Plus size={14} /> {tt('新建课程', 'Create Course')}
         </h3>
         <div className="flex gap-3 flex-wrap">
-          <input value={code} onChange={e => setCode(e.target.value)} placeholder="课程代码 (如 COMP9517)"
+          <input value={code} onChange={e => setCode(e.target.value)} placeholder={tt('课程代码 (如 COMP9517)', 'Course code (e.g. COMP9517)')}
             className="input-glass px-3 py-2 rounded-lg text-sm outline-none flex-1 min-w-32" />
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="课程名称"
+          <input value={name} onChange={e => setName(e.target.value)} placeholder={tt('课程名称', 'Course name')}
             className="input-glass px-3 py-2 rounded-lg text-sm outline-none flex-1 min-w-40" />
+          <input
+            type="datetime-local"
+            value={examInput}
+            onChange={e => setExamInput(e.target.value)}
+            title={tt('考试时间（可选）', 'Exam datetime (optional)')}
+            className="input-glass px-3 py-2 rounded-lg text-sm outline-none min-w-52"
+          />
           <ActionBtn onClick={create} loading={creating} disabled={!code.trim() || !name.trim()} icon={<Plus size={14} />}>
-            创建
+            {tt('创建', 'Create')}
           </ActionBtn>
         </div>
       </div>
@@ -420,14 +493,22 @@ function CoursesTab({ secret }: { secret: string }) {
                 style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}>
                 {c.code}
               </span>
-              <span className="text-sm text-white flex-1">{c.name}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-white truncate">{c.name}</p>
+                <p className="text-xs mt-0.5 truncate" style={{ color: '#666' }}>
+                  {tt('考试：', 'Exam: ')}
+                  {c.exam_date
+                    ? new Date(c.exam_date).toLocaleString(locale)
+                    : tt('未设置', 'Not set')}
+                </p>
+              </div>
               <span className="text-xs flex-shrink-0" style={{ color: '#555' }}>
-                {new Date(c.created_at).toLocaleDateString('zh-CN')}
+                {tt('创建于', 'Created')}{' '}{new Date(c.created_at).toLocaleDateString(locale)}
               </span>
               <ChevronRight size={14} style={{ color: '#444', flexShrink: 0 }} />
             </button>
           ))}
-          {courses.length === 0 && <Empty text="暂无课程" />}
+          {courses.length === 0 && <Empty text={tt('暂无课程', 'No courses yet')} />}
         </div>
       )}
     </div>
@@ -437,6 +518,10 @@ function CoursesTab({ secret }: { secret: string }) {
 // ── Artifacts tab (按课程隔离) ─────────────────────────────────────────────────
 
 function ArtifactsTab({ secret }: { secret: string }) {
+  const { lang } = useLang()
+  const tt = (zh: string, en: string) => tx(lang, zh, en)
+  const locale = localeByLang(lang)
+  const docTypeOptions = getDocTypeOptions(lang)
   const [courses, setCourses] = useState<Course[]>([])
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null)
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
@@ -499,14 +584,14 @@ function ArtifactsTab({ secret }: { secret: string }) {
         body: JSON.stringify({ doc_type: newDocType }),
       })
       setArtifacts(prev => prev.map(a => a.id === artifactId ? { ...a, doc_type: newDocType } : a))
-      showToast('✅ 标签已更新')
+      showToast(tt('✅ 标签已更新', '✅ Label updated'))
     } catch (e: unknown) {
       // 区分网络错误和服务端错误，给出友好提示
       const msg = String(e)
       if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
-        showToast('⚠️ 分类更新失败，请检查网络或服务端状态')
+        showToast(tt('⚠️ 分类更新失败，请检查网络或服务端状态', '⚠️ Category update failed. Check network/server status.'))
       } else {
-        showToast(`⚠️ 分类更新失败：${msg.replace(/^Error:\s*/, '').slice(0, 60)}`)
+        showToast(tt('⚠️ 分类更新失败：', '⚠️ Category update failed: ') + msg.replace(/^Error:\s*/, '').slice(0, 60))
       }
     } finally {
       setUpdatingDocType(null)
@@ -547,19 +632,29 @@ function ArtifactsTab({ secret }: { secret: string }) {
 
   async function reindex() {
     if (!selectedCourse) return
-    if (!confirm(`重新索引「${selectedCourse.code}」的所有已批准文件？\n\n这将重新清洗、分块、向量化所有文件，可能需要数分钟。`)) return
+    if (!confirm(
+      tt(
+        `重新索引「${selectedCourse.code}」的所有已批准文件？\n\n这将重新清洗、分块、向量化所有文件，可能需要数分钟。`,
+        `Reindex all approved files in "${selectedCourse.code}"?\n\nThis will re-clean, chunk, and vectorize all files and may take several minutes.`,
+      ),
+    )) return
     setReindexing(true); setReindexResult(''); setError('')
     try {
       const res = await adminReq<{ ok: boolean; processed: number; chunks: number; errors: number }>(
         secret, `/admin/courses/${selectedCourse.id}/reindex`, { method: 'POST' }
       )
-      setReindexResult(`完成：处理 ${res.processed} 个文件，生成 ${res.chunks} 个 chunk，失败 ${res.errors} 个`)
+      setReindexResult(
+        tt(
+          `完成：处理 ${res.processed} 个文件，生成 ${res.chunks} 个 chunk，失败 ${res.errors} 个`,
+          `Done: processed ${res.processed} files, generated ${res.chunks} chunks, failed ${res.errors}`,
+        ),
+      )
     } catch (e: unknown) { setError(String(e)) }
     finally { setReindexing(false) }
   }
 
   async function reject(id: number) {
-    const reason = prompt('拒绝原因（可留空）') ?? ''
+    const reason = prompt(tt('拒绝原因（可留空）', 'Reject reason (optional)')) ?? ''
     try {
       await adminReq(secret, `/admin/artifacts/${id}/reject`, {
         method: 'PATCH', body: JSON.stringify({ reason }),
@@ -570,11 +665,16 @@ function ArtifactsTab({ secret }: { secret: string }) {
 
   async function deleteArtifact(id: number, fileName: string) {
     if (!selectedCourse) return
-    if (!confirm(`确认删除「${fileName}」？\n此操作不可恢复，相关向量索引也将一并清除。`)) return
+    if (!confirm(
+      tt(
+        `确认删除「${fileName}」？\n此操作不可恢复，相关向量索引也将一并清除。`,
+        `Delete "${fileName}"?\nThis is irreversible and related vectors will also be removed.`,
+      ),
+    )) return
     try {
       await adminReq(secret, `/admin/artifacts/${id}?course_id=${selectedCourse.id}`, { method: 'DELETE' })
       setArtifacts(prev => prev.filter(a => a.id !== id))
-      showToast('🗑️ 文件已删除')
+      showToast(tt('🗑️ 文件已删除', '🗑️ File deleted'))
     } catch (e: unknown) { setError(String(e)) }
   }
 
@@ -589,7 +689,7 @@ function ArtifactsTab({ secret }: { secret: string }) {
     return (
       <div className="space-y-4 fade-in-up">
         {error && <ErrorBox msg={error} />}
-        <p className="text-sm" style={{ color: '#666' }}>选择课程后查看该课程的待审文件</p>
+        <p className="text-sm" style={{ color: '#666' }}>{tt('选择课程后查看该课程的待审文件', 'Select a course to review its pending files')}</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {courses.map(c => (
             <button key={c.id} onClick={() => setSelectedCourse(c)}
@@ -608,7 +708,7 @@ function ArtifactsTab({ secret }: { secret: string }) {
               <span className="text-sm text-white">{c.name}</span>
             </button>
           ))}
-          {courses.length === 0 && <Empty text="暂无课程" />}
+          {courses.length === 0 && <Empty text={tt('暂无课程', 'No courses yet')} />}
         </div>
       </div>
     )
@@ -639,7 +739,7 @@ function ArtifactsTab({ secret }: { secret: string }) {
           style={{ color: '#555' }}
           onMouseEnter={e => (e.currentTarget.style.color = '#FFD700')}
           onMouseLeave={e => (e.currentTarget.style.color = '#555')}>
-          <ChevronLeft size={14} /> 所有课程
+          <ChevronLeft size={14} /> {tt('所有课程', 'All Courses')}
         </button>
         <span style={{ color: '#333' }}>/</span>
         <span className="text-sm font-semibold" style={{ color: '#FFD700' }}>
@@ -654,7 +754,7 @@ function ArtifactsTab({ secret }: { secret: string }) {
                 color: statusFilter === s ? statusColors[s] : '#555',
                 border: `1px solid ${statusFilter === s ? `${statusColors[s]}50` : 'rgba(255,255,255,0.07)'}`,
               }}>
-              {s === 'pending' ? '待审核' : s === 'approved' ? '已批准' : '已拒绝'}
+              {s === 'pending' ? tt('待审核', 'Pending') : s === 'approved' ? tt('已批准', 'Approved') : tt('已拒绝', 'Rejected')}
             </button>
           ))}
           <button onClick={() => loadFiles(selectedCourse.id, statusFilter)}
@@ -662,19 +762,19 @@ function ArtifactsTab({ secret }: { secret: string }) {
             style={{ color: '#555' }}
             onMouseEnter={e => (e.currentTarget.style.color = '#FFD700')}
             onMouseLeave={e => (e.currentTarget.style.color = '#555')}
-            title="刷新列表">
+            title={tt('刷新列表', 'Refresh list')}>
             <RefreshCw size={14} />
           </button>
           <button
             onClick={reindex}
             disabled={reindexing}
-            title="重新索引该课程（清洗+分块+向量化所有已批准文件）"
+            title={tt('重新索引该课程（清洗+分块+向量化所有已批准文件）', 'Reindex this course (clean + chunk + vectorize all approved files)')}
             className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all duration-150 disabled:opacity-50"
             style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.3)' }}
             onMouseEnter={e => { if (!reindexing) (e.currentTarget as HTMLElement).style.background = 'rgba(255,215,0,0.18)' }}
             onMouseLeave={e => { if (!reindexing) (e.currentTarget as HTMLElement).style.background = 'rgba(255,215,0,0.1)' }}>
             {reindexing ? <Loader2 size={12} className="animate-spin" /> : <DatabaseZap size={12} />}
-            {reindexing ? '索引中…' : '重新索引'}
+            {reindexing ? tt('索引中…', 'Reindexing...') : tt('重新索引', 'Reindex')}
           </button>
         </div>
       </div>
@@ -682,13 +782,13 @@ function ArtifactsTab({ secret }: { secret: string }) {
       {/* 管理员直接上传区（免审核，立即 approved） */}
       <div className="p-4 rounded-2xl space-y-3" style={cardStyle}>
         <p className="text-xs font-semibold flex items-center gap-1.5" style={{ color: '#FFD700' }}>
-          <Upload size={12} /> 管理员直传（跳过审核，立即索引）
+          <Upload size={12} /> {tt('管理员直传（跳过审核，立即索引）', 'Admin direct upload (skip review, index now)')}
         </p>
         <div className="flex gap-3 items-center flex-wrap">
           <select value={uploadDocType} onChange={e => setUploadDocType(e.target.value as DocType)}
             className="text-sm rounded-lg px-3 py-1.5 outline-none flex-1 min-w-40 transition-all duration-150"
             style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,215,0,0.2)', color: DOC_TYPE_COLORS[uploadDocType] }}>
-            {DOC_TYPE_OPTIONS.map(o => (
+            {docTypeOptions.map(o => (
               <option key={o.value} value={o.value} style={{ background: '#0d0d1a', color: '#fff' }}>{o.label}</option>
             ))}
           </select>
@@ -698,7 +798,7 @@ function ArtifactsTab({ secret }: { secret: string }) {
             onMouseEnter={e => { if (!isUploading) (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(255,215,0,0.22), rgba(255,215,0,0.12))' }}
             onMouseLeave={e => { if (!isUploading) (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,215,0,0.08))' }}>
             {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-            {isUploading ? '上传中…' : '选择文件上传（可多选）'}
+            {isUploading ? tt('上传中…', 'Uploading...') : tt('选择文件上传（可多选）', 'Choose files to upload (multi-select)')}
           </button>
           <input ref={fileInputRef} type="file" accept=".pdf,.docx,.doc,.py,.txt,.ipynb" multiple className="hidden"
             onChange={e => { const files = Array.from(e.target.files ?? []); if (files.length > 0) startUpload(files); e.target.value = '' }} />
@@ -708,14 +808,17 @@ function ArtifactsTab({ secret }: { secret: string }) {
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-xs" style={{ color: '#666' }}>
-                上传进度：{uploadQueue.filter(q => q.status === 'done').length}/{uploadQueue.length} 完成
+                {tt('上传进度：', 'Upload progress:')}
+                {uploadQueue.filter(q => q.status === 'done').length}/{uploadQueue.length}
+                {' '}
+                {tt('完成', 'done')}
               </span>
               {uploadQueue.every(q => q.status === 'done' || q.status === 'error') && (
                 <button onClick={() => setUploadQueue([])} className="text-xs px-2 py-0.5 rounded"
                   style={{ color: '#555' }}
                   onMouseEnter={e => (e.currentTarget.style.color = '#aaa')}
                   onMouseLeave={e => (e.currentTarget.style.color = '#555')}>
-                  清除记录
+                  {tt('清除记录', 'Clear')}
                 </button>
               )}
             </div>
@@ -744,7 +847,7 @@ function ArtifactsTab({ secret }: { secret: string }) {
       {/* 已批准时显示 doc_type 横向子过滤 */}
       {statusFilter === 'approved' && (
         <div className="flex gap-2 flex-wrap">
-          {([{ value: 'all', label: '全部' }, ...DOC_TYPE_OPTIONS] as { value: DocType | 'all'; label: string }[]).map(o => {
+          {([{ value: 'all', label: tt('全部', 'All') }, ...docTypeOptions] as { value: DocType | 'all'; label: string }[]).map(o => {
             const isActive = docTypeFilter === o.value
             const color = o.value === 'all' ? '#FFD700' : DOC_TYPE_COLORS[o.value as DocType]
             return (
@@ -791,21 +894,21 @@ function ArtifactsTab({ secret }: { secret: string }) {
                     style={{ color: '#60a5fa', opacity: 0.9, textDecoration: 'none' }}
                     onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
                     onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
-                    title="在新标签页预览文件">
+                    title={tt('在新标签页预览文件', 'Preview file in new tab')}>
                     {a.file_name}
                   </a>
                 ) : (
                   <p className="text-sm text-white truncate">{a.file_name}</p>
                 )}
                 <p className="text-xs mt-0.5" style={{ color: '#555' }}>
-                  {new Date(a.created_at).toLocaleString('zh-CN')}
+                  {new Date(a.created_at).toLocaleString(locale)}
                   {a.reject_reason && <span style={{ color: '#ff8080' }}> · {a.reject_reason}</span>}
                 </p>
               </div>
               {/* doc_type 内联下拉（已批准时可修改；其他状态仅显示） */}
               {a.status === 'rejected' ? (
                 <div className="flex flex-col items-end flex-shrink-0 gap-0.5">
-                  <span className="badge-danger">已失效</span>
+                  <span className="badge-danger">{tt('已失效', 'Invalid')}</span>
                   {a.reject_reason && (
                     <span className="text-xs max-w-32 truncate" style={{ color: '#ff8080' }}
                       title={a.reject_reason}>
@@ -829,7 +932,7 @@ function ArtifactsTab({ secret }: { secret: string }) {
                       border: `1px solid ${DOC_TYPE_COLORS[a.doc_type ?? 'lecture']}40`,
                       opacity: updatingDocType === a.id ? 0.5 : 1,
                     }}>
-                    {DOC_TYPE_OPTIONS.map(o => (
+                    {docTypeOptions.map(o => (
                       <option key={o.value} value={o.value}
                         style={{ background: '#1a1a1a', color: '#ccc' }}>
                         {o.label}
@@ -843,7 +946,7 @@ function ArtifactsTab({ secret }: { secret: string }) {
                   color: DOC_TYPE_COLORS[a.doc_type],
                   border: `1px solid ${DOC_TYPE_COLORS[a.doc_type]}40`,
                 }}>
-                  {DOC_TYPE_LABELS[a.doc_type]}
+                  {getDocTypeLabel(a.doc_type, lang)}
                 </span>
               ) : null}
               {/* 状态 badge — pill 样式 */}
@@ -853,13 +956,13 @@ function ArtifactsTab({ secret }: { secret: string }) {
                   color: statusColors[a.status],
                   border: `1px solid ${statusColors[a.status]}40`,
                 }}>
-                {a.status === 'pending' ? '待审' : a.status === 'approved' ? '已批准' : '已拒绝'}
+                {a.status === 'pending' ? tt('待审', 'Pending') : a.status === 'approved' ? tt('已批准', 'Approved') : tt('已拒绝', 'Rejected')}
               </span>
               {statusFilter === 'pending' && (
                 <div className="flex gap-1 flex-shrink-0">
                   <button onClick={() => approve(a.id)}
                     className="p-1.5 rounded-lg transition-colors duration-150"
-                    title="批准"
+                    title={tt('批准', 'Approve')}
                     style={{ color: '#4ade80' }}
                     onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(74,222,128,0.12)' }}
                     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
@@ -867,7 +970,7 @@ function ArtifactsTab({ secret }: { secret: string }) {
                   </button>
                   <button onClick={() => reject(a.id)}
                     className="p-1.5 rounded-lg transition-colors duration-150"
-                    title="拒绝"
+                    title={tt('拒绝', 'Reject')}
                     style={{ color: '#ff7070' }}
                     onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,112,112,0.12)' }}
                     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
@@ -881,8 +984,14 @@ function ArtifactsTab({ secret }: { secret: string }) {
           {displayedArtifacts.length === 0 && (
             <Empty text={
               statusFilter === 'approved' && docTypeFilter !== 'all'
-                ? `${selectedCourse.code} 暂无「${DOC_TYPE_LABELS[docTypeFilter as DocType]}」类文件`
-                : `${selectedCourse.code} 暂无${statusFilter === 'pending' ? '待审核' : statusFilter === 'approved' ? '已批准' : '已拒绝'}文件`
+                ? tt(
+                  `${selectedCourse.code} 暂无「${getDocTypeLabel(docTypeFilter as DocType, lang)}」类文件`,
+                  `${selectedCourse.code} has no "${getDocTypeLabel(docTypeFilter as DocType, lang)}" files`,
+                )
+                : tt(
+                  `${selectedCourse.code} 暂无${statusFilter === 'pending' ? '待审核' : statusFilter === 'approved' ? '已批准' : '已拒绝'}文件`,
+                  `${selectedCourse.code} has no ${statusFilter} files`,
+                )
             } />
           )}
         </div>
@@ -907,6 +1016,8 @@ function PointsAdjustModal({
   onClose: () => void
   onSuccess: (userId: string, newBalance: number) => void
 }) {
+  const { lang } = useLang()
+  const tt = (zh: string, en: string) => tx(lang, zh, en)
   const [action, setAction] = useState<'add' | 'deduct'>('add')
   const [amount, setAmount] = useState('50')
   const [note, setNote] = useState('')
@@ -915,7 +1026,7 @@ function PointsAdjustModal({
 
   async function confirm() {
     const n = parseInt(amount, 10)
-    if (!n || n <= 0) { setError('请输入正整数金额'); return }
+    if (!n || n <= 0) { setError(tt('请输入正整数金额', 'Please enter a positive integer')); return }
     setLoading(true); setError('')
     try {
       const res = await adminReq<{ ok: boolean; balance: number }>(
@@ -926,7 +1037,7 @@ function PointsAdjustModal({
       onSuccess(user.id, res.balance)
       onClose()
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '操作失败')
+      setError(e instanceof Error ? e.message : tt('操作失败', 'Operation failed'))
     } finally {
       setLoading(false)
     }
@@ -949,7 +1060,7 @@ function PointsAdjustModal({
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2">
             <SlidersHorizontal size={17} style={{ color: '#FFD700' }} />
-            <h3 className="text-base font-bold text-white">调整用户积分</h3>
+            <h3 className="text-base font-bold text-white">{tt('调整用户积分', 'Adjust User Credits')}</h3>
           </div>
           <button onClick={() => !loading && onClose()} style={{ color: '#555' }}>
             <X size={16} />
@@ -966,15 +1077,15 @@ function PointsAdjustModal({
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-white truncate">{user.email}</p>
             <p className="text-xs mt-0.5 flex items-center gap-1.5" style={{ color: '#888' }}>
-              <span>当前余额：</span>
-              <span className="font-semibold" style={{ color: '#FFD700' }}>⚡ {currentCredits} 积分</span>
+              <span>{tt('当前余额：', 'Current balance:')}</span>
+              <span className="font-semibold" style={{ color: '#FFD700' }}>⚡ {currentCredits} {tt('积分', 'credits')}</span>
             </p>
           </div>
         </div>
 
         {/* 操作类型切换 */}
         <div className="mb-4">
-          <p className="text-xs mb-2 font-medium" style={{ color: '#666' }}>操作类型</p>
+          <p className="text-xs mb-2 font-medium" style={{ color: '#666' }}>{tt('操作类型', 'Action')}</p>
           <div className="grid grid-cols-2 gap-2">
             {(['add', 'deduct'] as const).map(a => (
               <button key={a} onClick={() => setAction(a)}
@@ -990,7 +1101,7 @@ function PointsAdjustModal({
                     ? `1px solid ${a === 'add' ? 'rgba(74,222,128,0.35)' : 'rgba(239,68,68,0.35)'}`
                     : '1px solid rgba(255,255,255,0.07)',
                 }}>
-                {a === 'add' ? '➕ 赠送 / 增加' : '➖ 扣除'}
+                {a === 'add' ? tt('➕ 赠送 / 增加', '➕ Add') : tt('➖ 扣除', '➖ Deduct')}
               </button>
             ))}
           </div>
@@ -998,7 +1109,7 @@ function PointsAdjustModal({
 
         {/* 变动数量 */}
         <div className="mb-4">
-          <p className="text-xs mb-2 font-medium" style={{ color: '#666' }}>变动数量（积分）</p>
+          <p className="text-xs mb-2 font-medium" style={{ color: '#666' }}>{tt('变动数量（积分）', 'Amount (credits)')}</p>
           <input
             type="number"
             min={1}
@@ -1012,13 +1123,13 @@ function PointsAdjustModal({
             }}
             onFocus={e => (e.currentTarget.style.borderColor = 'rgba(255,215,0,0.45)')}
             onBlur={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)')}
-            placeholder="输入正整数"
+            placeholder={tt('输入正整数', 'Positive integer')}
           />
         </div>
 
         {/* 备注 */}
         <div className="mb-5">
-          <p className="text-xs mb-2 font-medium" style={{ color: '#666' }}>备注 / 原因（可选）</p>
+          <p className="text-xs mb-2 font-medium" style={{ color: '#666' }}>{tt('备注 / 原因（可选）', 'Note / reason (optional)')}</p>
           <input
             type="text"
             value={note}
@@ -1031,15 +1142,15 @@ function PointsAdjustModal({
             }}
             onFocus={e => (e.currentTarget.style.borderColor = 'rgba(255,215,0,0.45)')}
             onBlur={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)')}
-            placeholder="如：内测奖励、Bug 补偿、充值到账..."
+            placeholder={tt('如：内测奖励、Bug 补偿、充值到账...', 'e.g. beta reward, bug compensation')}
           />
         </div>
 
         {/* 执行后预览余额 */}
         <div className="mb-4 px-4 py-2.5 rounded-xl flex justify-between items-center text-sm"
           style={{ background: 'rgba(255,215,0,0.05)', border: '1px solid rgba(255,215,0,0.12)' }}>
-          <span style={{ color: '#777' }}>执行后余额</span>
-          <span className="font-bold" style={{ color: '#FFD700' }}>⚡ {previewBalance} 积分</span>
+          <span style={{ color: '#777' }}>{tt('执行后余额', 'Balance after')}</span>
+          <span className="font-bold" style={{ color: '#FFD700' }}>⚡ {previewBalance} {tt('积分', 'credits')}</span>
         </div>
 
         {error && (
@@ -1054,13 +1165,13 @@ function PointsAdjustModal({
           <button onClick={() => !loading && onClose()} disabled={loading}
             className="flex-1 py-2.5 rounded-xl text-sm"
             style={{ background: 'rgba(255,255,255,0.05)', color: '#666', border: '1px solid rgba(255,255,255,0.08)' }}>
-            取消
+            {tt('取消', 'Cancel')}
           </button>
           <button onClick={confirm} disabled={loading}
             className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
             style={{ background: 'rgba(255,215,0,0.18)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.35)' }}>
             {loading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
-            {loading ? '执行中...' : '确认执行'}
+            {loading ? tt('执行中...', 'Applying...') : tt('确认执行', 'Confirm')}
           </button>
         </div>
       </div>
@@ -1084,6 +1195,9 @@ function Toast({ message, onDone }: { message: string; onDone: () => void }) {
 }
 
 function UsersTab({ secret }: { secret: string }) {
+  const { lang } = useLang()
+  const tt = (zh: string, en: string) => tx(lang, zh, en)
+  const locale = localeByLang(lang)
   const [users, setUsers] = useState<User[]>([])
   const [credits, setCredits] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
@@ -1112,7 +1226,11 @@ function UsersTab({ secret }: { secret: string }) {
   function handleAdjustSuccess(userId: string, newBalance: number) {
     setCredits(prev => ({ ...prev, [userId]: newBalance }))
     const u = users.find(u => u.id === userId)
-    setToast(u ? `已成功更新 ${u.email} 的积分余额为 ${newBalance}` : '积分已更新')
+    setToast(
+      u
+        ? tt(`已成功更新 ${u.email} 的积分余额为 ${newBalance}`, `Updated ${u.email} credits to ${newBalance}`)
+        : tt('积分已更新', 'Credits updated'),
+    )
   }
 
   const userWithCredits = users.map(u => ({ ...u, credits: credits[u.id] ?? 0 }))
@@ -1155,8 +1273,8 @@ function UsersTab({ secret }: { secret: string }) {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-white truncate">{u.email}</p>
                   <p className="text-xs mt-0.5" style={{ color: '#555' }}>
-                    注册 {new Date(u.created_at).toLocaleDateString('zh-CN')}
-                    {u.last_sign_in_at && ` · 最近登录 ${new Date(u.last_sign_in_at).toLocaleDateString('zh-CN')}`}
+                    {tt('注册', 'Registered')} {new Date(u.created_at).toLocaleDateString(locale)}
+                    {u.last_sign_in_at && ` · ${tt('最近登录', 'Last sign-in')} ${new Date(u.last_sign_in_at).toLocaleDateString(locale)}`}
                   </p>
                 </div>
 
@@ -1169,13 +1287,13 @@ function UsersTab({ secret }: { secret: string }) {
 
                 {/* 验证状态 */}
                 <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium flex-shrink-0 ${u.email_confirmed ? 'badge-success' : 'badge-warning'}`}>
-                  {u.email_confirmed ? '已验证' : '未验证'}
+                  {u.email_confirmed ? tt('已验证', 'Verified') : tt('未验证', 'Unverified')}
                 </span>
 
                 {/* 调整积分按钮 */}
                 <button
                   onClick={() => setAdjustTarget(u)}
-                  title="调整积分"
+                  title={tt('调整积分', 'Adjust credits')}
                   className="flex-shrink-0 p-1.5 rounded-lg transition-all"
                   style={{ color: '#555', border: '1px solid rgba(255,255,255,0.07)' }}
                   onMouseEnter={e => {
@@ -1192,9 +1310,9 @@ function UsersTab({ secret }: { secret: string }) {
                 </button>
               </div>
             ))}
-            {users.length === 0 && <Empty text="暂无用户" />}
+            {users.length === 0 && <Empty text={tt('暂无用户', 'No users yet')} />}
           </div>
-          <p className="text-xs" style={{ color: '#444' }}>共 {users.length} 个用户</p>
+          <p className="text-xs" style={{ color: '#444' }}>{tt('共', 'Total')} {users.length} {tt('个用户', 'users')}</p>
         </>
       )}
     </div>
@@ -1204,6 +1322,9 @@ function UsersTab({ secret }: { secret: string }) {
 // ── Invites tab ───────────────────────────────────────────────────────────────
 
 function InvitesTab({ secret }: { secret: string }) {
+  const { lang } = useLang()
+  const tt = (zh: string, en: string) => tx(lang, zh, en)
+  const locale = localeByLang(lang)
   const [invites, setInvites] = useState<Invite[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -1234,7 +1355,7 @@ function InvitesTab({ secret }: { secret: string }) {
   }
 
   async function del(id: string) {
-    if (!confirm('确认删除该邀请码？')) return
+    if (!confirm(tt('确认删除该邀请码？', 'Delete this invite code?'))) return
     try { await adminReq(secret, `/admin/invites/${id}`, { method: 'DELETE' }); await load() }
     catch (e: unknown) { setError(String(e)) }
   }
@@ -1249,17 +1370,17 @@ function InvitesTab({ secret }: { secret: string }) {
       {error && <ErrorBox msg={error} />}
       <div className="card-gold p-5 rounded-2xl">
         <h3 className="text-sm font-semibold mb-4 flex items-center gap-2" style={{ color: '#FFD700' }}>
-          <Ticket size={14} /> 生成邀请码
+          <Ticket size={14} /> {tt('生成邀请码', 'Create Invite')}
         </h3>
         <div className="flex gap-3 flex-wrap items-center">
-          <input value={note} onChange={e => setNote(e.target.value)} placeholder="备注（如：学生姓名）"
+          <input value={note} onChange={e => setNote(e.target.value)} placeholder={tt('备注（如：学生姓名）', 'Note (e.g. student name)')}
             className="input-glass px-3 py-2 rounded-lg text-sm outline-none flex-1 min-w-40" />
           <div className="flex items-center gap-2">
-            <span className="text-xs whitespace-nowrap" style={{ color: '#666' }}>最多使用次数</span>
+            <span className="text-xs whitespace-nowrap" style={{ color: '#666' }}>{tt('最多使用次数', 'Max uses')}</span>
             <input value={maxUses} onChange={e => setMaxUses(e.target.value)} type="number" min={1} max={100}
               className="input-glass px-3 py-2 rounded-lg text-sm outline-none w-16 text-center" />
           </div>
-          <ActionBtn onClick={create} loading={creating} icon={<Plus size={14} />}>生成</ActionBtn>
+          <ActionBtn onClick={create} loading={creating} icon={<Plus size={14} />}>{tt('生成', 'Create')}</ActionBtn>
         </div>
       </div>
       {loading ? <Spinner /> : (
@@ -1280,20 +1401,20 @@ function InvitesTab({ secret }: { secret: string }) {
                 style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)', minWidth: 90 }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,215,0,0.2)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,215,0,0.12)')}
-                title="点击复制">
-                {copied === inv.code ? '✓ 已复制' : inv.code}
+                title={tt('点击复制', 'Click to copy')}>
+                {copied === inv.code ? tt('✓ 已复制', '✓ Copied') : inv.code}
               </button>
-              <span className="text-sm flex-1 truncate" style={{ color: '#888' }}>{inv.note || '—'}</span>
+              <span className="text-sm flex-1 truncate" style={{ color: '#888' }}>{inv.note || tt('—', '—')}</span>
               <span className={`text-xs flex-shrink-0 px-2.5 py-0.5 rounded-full font-medium ${inv.use_count >= inv.max_uses ? 'badge-danger' : 'badge-success'}`}>
-                {inv.use_count}/{inv.max_uses} 次
+                {inv.use_count}/{inv.max_uses} {tt('次', 'uses')}
               </span>
               <span className="text-xs flex-shrink-0" style={{ color: '#444' }}>
-                {new Date(inv.created_at).toLocaleDateString('zh-CN')}
+                {new Date(inv.created_at).toLocaleDateString(locale)}
               </span>
               <DeleteBtn onClick={() => del(inv.id)} />
             </div>
           ))}
-          {invites.length === 0 && <Empty text="暂无邀请码" />}
+          {invites.length === 0 && <Empty text={tt('暂无邀请码', 'No invites yet')} />}
         </div>
       )}
     </div>
@@ -1309,6 +1430,9 @@ const PROVIDER_LABELS: Record<string, { name: string; color: string; hint: strin
 }
 
 function ApiKeysTab({ secret }: { secret: string }) {
+  const { lang } = useLang()
+  const tt = (zh: string, en: string) => tx(lang, zh, en)
+  const locale = localeByLang(lang)
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -1347,7 +1471,7 @@ function ApiKeysTab({ secret }: { secret: string }) {
   }
 
   async function del(id: number) {
-    if (!confirm('确认删除该 API 密钥？')) return
+    if (!confirm(tt('确认删除该 API 密钥？', 'Delete this API key?'))) return
     try {
       await adminReq(secret, `/admin/api-keys/${id}`, { method: 'DELETE' })
       await load()
@@ -1368,7 +1492,7 @@ function ApiKeysTab({ secret }: { secret: string }) {
       {/* 添加新密钥 */}
       <div className="card-gold p-5 rounded-2xl space-y-4">
         <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: '#FFD700' }}>
-          <Key size={14} /> 添加 / 更换 API 密钥
+          <Key size={14} /> {tt('添加 / 更换 API 密钥', 'Add / Replace API Key')}
         </h3>
         <div className="flex gap-2 flex-wrap">
           {(['openai', 'gemini', 'deepseek'] as const).map(p => (
@@ -1388,23 +1512,26 @@ function ApiKeysTab({ secret }: { secret: string }) {
             value={apiKey}
             onChange={e => setApiKey(e.target.value)}
             type="password"
-            placeholder={`API Key（${PROVIDER_LABELS[provider].hint}）`}
+            placeholder={tt(`API Key（${PROVIDER_LABELS[provider].hint}）`, `API Key (${PROVIDER_LABELS[provider].hint})`)}
             className="input-glass px-3 py-2 rounded-lg text-sm font-mono outline-none"
           />
           <div className="flex gap-3">
             <input
               value={label}
               onChange={e => setLabel(e.target.value)}
-              placeholder="备注标签（可选，如：Production Key）"
+              placeholder={tt('备注标签（可选，如：Production Key）', 'Label (optional, e.g. Production Key)')}
               className="input-glass px-3 py-2 rounded-lg text-sm outline-none flex-1"
             />
             <ActionBtn onClick={add} loading={adding} disabled={!apiKey.trim()} icon={<Plus size={14} />}>
-              添加并激活
+              {tt('添加并激活', 'Add and activate')}
             </ActionBtn>
           </div>
         </div>
         <p className="text-xs" style={{ color: '#555' }}>
-          添加后会自动设为该服务商的当前激活密钥，旧密钥保留（可手动切换）。密钥在界面中仅显示脱敏信息。
+          {tt(
+            '添加后会自动设为该服务商的当前激活密钥，旧密钥保留（可手动切换）。密钥在界面中仅显示脱敏信息。',
+            'New key is activated automatically for the provider. Old keys are kept and can be switched manually. Only masked info is shown in UI.',
+          )}
         </p>
       </div>
 
@@ -1418,11 +1545,11 @@ function ApiKeysTab({ secret }: { secret: string }) {
                   style={{ background: `${info.color}20`, color: info.color, border: `1px solid ${info.color}40` }}>
                   {info.name}
                 </span>
-                <span className="text-xs" style={{ color: '#444' }}>{pKeys.length} 个密钥</span>
+                <span className="text-xs" style={{ color: '#444' }}>{pKeys.length} {tt('个密钥', 'keys')}</span>
               </div>
               {pKeys.length === 0 ? (
                 <div className="px-4 py-3 rounded-xl text-xs" style={{ ...rowStyle, color: '#555' }}>
-                  未配置 · 将从环境变量读取
+                  {tt('未配置 · 将从环境变量读取', 'Not configured · fallback to environment variable')}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -1442,7 +1569,8 @@ function ApiKeysTab({ secret }: { secret: string }) {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-white truncate">{k.label}</p>
                         <p className="text-xs mt-0.5" style={{ color: '#555' }}>
-                          {k.is_active ? '✓ 当前激活' : '未激活'} · 更新 {new Date(k.updated_at).toLocaleDateString('zh-CN')}
+                          {k.is_active ? tt('✓ 当前激活', '✓ Active') : tt('未激活', 'Inactive')} · {tt('更新', 'Updated')}{' '}
+                          {new Date(k.updated_at).toLocaleDateString(locale)}
                         </p>
                       </div>
                       {!k.is_active && (
@@ -1451,12 +1579,12 @@ function ApiKeysTab({ secret }: { secret: string }) {
                           style={{ background: `${info.color}18`, color: info.color, border: `1px solid ${info.color}40` }}
                           onMouseEnter={e => (e.currentTarget.style.background = `${info.color}30`)}
                           onMouseLeave={e => (e.currentTarget.style.background = `${info.color}18`)}>
-                          激活
+                          {tt('激活', 'Activate')}
                         </button>
                       )}
                       {k.is_active && (
                         <span className="badge-success text-xs px-2.5 py-0.5 rounded-full flex-shrink-0">
-                          激活中
+                          {tt('激活中', 'Active')}
                         </span>
                       )}
                       <DeleteBtn onClick={() => del(k.id)} />
@@ -1477,13 +1605,20 @@ function ApiKeysTab({ secret }: { secret: string }) {
 type FeedbackStatus = 'pending' | 'in_progress' | 'resolved' | 'adopted'
 interface FeedbackItem { id: string; user_id: string | null; content: string; page_url: string; status: FeedbackStatus; created_at: string }
 
-const STATUS_LABEL: Record<FeedbackStatus, string> = { pending: '待处理', in_progress: '处理中', resolved: '已解决', adopted: '已采纳' }
+const STATUS_LABEL_BY_LANG: Record<UiLang, Record<FeedbackStatus, string>> = {
+  zh: { pending: '待处理', in_progress: '处理中', resolved: '已解决', adopted: '已采纳' },
+  en: { pending: 'Pending', in_progress: 'In Progress', resolved: 'Resolved', adopted: 'Adopted' },
+}
 const STATUS_COLOR: Record<FeedbackStatus, string> = { pending: '#f97316', in_progress: '#60a5fa', resolved: '#4ade80', adopted: '#FFD700' }
 const STATUS_NEXT:  Record<FeedbackStatus, FeedbackStatus | null> = { pending: 'in_progress', in_progress: 'resolved', resolved: null, adopted: null }
 
 interface AiSummaryResult { summary: string; feedback_count: number; analyzed_at: string }
 
 function FeedbackTab({ secret }: { secret: string }) {
+  const { lang } = useLang()
+  const tt = (zh: string, en: string) => tx(lang, zh, en)
+  const locale = localeByLang(lang)
+  const statusLabel = (status: FeedbackStatus) => STATUS_LABEL_BY_LANG[lang][status]
   const [items, setItems] = useState<FeedbackItem[]>([])
   const [filter, setFilter] = useState<FeedbackStatus | 'all'>('all')
   const [loading, setLoading] = useState(true)
@@ -1556,19 +1691,19 @@ function FeedbackTab({ secret }: { secret: string }) {
           onMouseLeave={e => { if (!aiLoading) (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(139,92,246,0.18), rgba(59,130,246,0.18))' }}
         >
           {aiLoading
-            ? <><Loader2 size={14} className="animate-spin" />正在分析…</>
-            : <><Sparkles size={14} />✨ AI 生成今日洞察 (DeepSeek 分析)</>
+            ? <><Loader2 size={14} className="animate-spin" />{tt('正在分析…', 'Analyzing...')}</>
+            : <><Sparkles size={14} />{tt('✨ AI 生成今日洞察 (DeepSeek 分析)', '✨ Generate today insights (DeepSeek)')}</>
           }
         </button>
         {aiResult && (
           <span className="text-xs" style={{ color: '#555' }}>
-            分析了 {aiResult.feedback_count} 条反馈 · {new Date(aiResult.analyzed_at).toLocaleString('zh-CN')}
+            {tt('分析了', 'Analyzed')} {aiResult.feedback_count} {tt('条反馈', 'feedbacks')} · {new Date(aiResult.analyzed_at).toLocaleString(locale)}
           </span>
         )}
       </div>
 
       {/* AI 错误提示 */}
-      {aiError && <ErrorBox msg={`AI 分析失败：${aiError}`} />}
+      {aiError && <ErrorBox msg={`${tt('AI 分析失败：', 'AI analysis failed: ')}${aiError}`} />}
 
       {/* AI 结果卡片 */}
       {aiResult && (
@@ -1578,14 +1713,14 @@ function FeedbackTab({ secret }: { secret: string }) {
         }}>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: '#c4b5fd' }}>
-              <Sparkles size={14} /> DeepSeek 今日分析报告
+              <Sparkles size={14} /> {tt('DeepSeek 今日分析报告', 'DeepSeek Daily Report')}
             </h3>
             <button onClick={() => setAiResult(null)}
               className="text-xs px-2 py-0.5 rounded-lg transition-colors duration-150"
               style={{ color: '#555', background: 'rgba(255,255,255,0.05)' }}
               onMouseEnter={e => (e.currentTarget.style.color = '#aaa')}
               onMouseLeave={e => (e.currentTarget.style.color = '#555')}>
-              收起
+              {tt('收起', 'Collapse')}
             </button>
           </div>
           <div className="prose prose-sm prose-invert max-w-none text-sm leading-relaxed"
@@ -1611,7 +1746,7 @@ function FeedbackTab({ secret }: { secret: string }) {
                 ? s === 'all' ? 'rgba(255,215,0,0.3)' : `${STATUS_COLOR[s as FeedbackStatus]}50`
                 : 'rgba(255,255,255,0.07)'}`,
             }}>
-            {s === 'all' ? `全部 (${items.length})` : `${STATUS_LABEL[s as FeedbackStatus]} (${items.filter(i => i.status === s).length})`}
+            {s === 'all' ? `${tt('全部', 'All')} (${items.length})` : `${statusLabel(s as FeedbackStatus)} (${items.filter(i => i.status === s).length})`}
           </button>
         ))}
         <button onClick={load}
@@ -1619,7 +1754,7 @@ function FeedbackTab({ secret }: { secret: string }) {
           style={{ color: '#555' }}
           onMouseEnter={e => (e.currentTarget.style.color = '#FFD700')}
           onMouseLeave={e => (e.currentTarget.style.color = '#555')}
-          title="刷新">
+          title={tt('刷新', 'Refresh')}>
           <RefreshCw size={14} />
         </button>
       </div>
@@ -1635,14 +1770,14 @@ function FeedbackTab({ secret }: { secret: string }) {
                   color: STATUS_COLOR[item.status],
                   border: `1px solid ${STATUS_COLOR[item.status]}40`,
                 }}>
-                  {STATUS_LABEL[item.status]}
+                  {statusLabel(item.status)}
                 </span>
                 <span className="text-xs font-mono px-2 py-0.5 rounded-lg truncate max-w-xs"
                   style={{ background: 'rgba(255,255,255,0.04)', color: '#666', border: '1px solid rgba(255,255,255,0.06)' }}>
                   📍 {item.page_url}
                 </span>
                 <span className="text-xs ml-auto" style={{ color: '#444' }}>
-                  {new Date(item.created_at).toLocaleString('zh-CN')}
+                  {new Date(item.created_at).toLocaleString(locale)}
                 </span>
               </div>
 
@@ -1659,7 +1794,9 @@ function FeedbackTab({ secret }: { secret: string }) {
                       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.1)'; (e.currentTarget as HTMLElement).style.color = '#fff' }}
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLElement).style.color = '#aaa' }}>
                       <CheckCircle size={12} />
-                      标记为「{STATUS_LABEL[STATUS_NEXT[item.status]!]}」
+                      {tt('标记为「', 'Mark as "')}
+                      {statusLabel(STATUS_NEXT[item.status]!)}
+                      {tt('」', '"')}
                     </button>
                   )}
                   {item.status === 'in_progress' && (
@@ -1668,14 +1805,22 @@ function FeedbackTab({ secret }: { secret: string }) {
                       style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.3)' }}
                       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,215,0,0.18)' }}
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,215,0,0.1)' }}>
-                      ✦ 采纳反馈 (+1 积分)
+                      {tt('✦ 采纳反馈 (+1 积分)', '✦ Adopt feedback (+1 credit)')}
                     </button>
                   )}
                 </div>
               )}
             </div>
           ))}
-          {displayed.length === 0 && <Empty text={`暂无${filter === 'all' ? '' : STATUS_LABEL[filter as FeedbackStatus] + '的'}反馈`} />}
+          {displayed.length === 0 && (
+            <Empty
+              text={
+                filter === 'all'
+                  ? tt('暂无反馈', 'No feedback yet')
+                  : tt(`暂无${statusLabel(filter as FeedbackStatus)}反馈`, `No ${statusLabel(filter as FeedbackStatus)} feedback`)
+              }
+            />
+          )}
         </div>
       )}
     </div>
@@ -1762,36 +1907,53 @@ export default function AdminPage() {
   const [tab, setTab] = useState<Tab>('courses')
   const [secretInput, setSecretInput] = useState('')
   const [secret, setSecret] = useState('')
+  const { t, lang, setLang } = useLang()
+  const tabs = getTabs(t)
 
   if (!secret) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-8"
-        style={{ background: '#08080f' }}>
-        <div className="w-full max-w-sm p-8 rounded-2xl space-y-6 fade-in-up"
+      <div className="flex min-h-screen items-center justify-center p-8"
+        style={{
+          background:
+            'radial-gradient(circle at top, rgba(20,28,42,0.72), transparent 28%), radial-gradient(circle at 85% 10%, rgba(200,165,90,0.08), transparent 18%), linear-gradient(180deg, #050608 0%, #080b12 50%, #050608 100%)',
+        }}>
+        <div className="w-full max-w-md rounded-[28px] p-8 space-y-6 fade-in-up"
           style={{
-            background: 'rgba(255,215,0,0.05)',
-            border: '1px solid rgba(255,215,0,0.18)',
-            boxShadow: '0 0 40px rgba(255,215,0,0.06)',
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            boxShadow: '0 24px 80px rgba(0,0,0,0.45)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
           }}>
           <div>
+            <div className="mb-4 flex items-center justify-between">
+              <ExamMasterLogo height={28} />
+              <button
+                onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+                className="rounded-full border border-white/12 px-3 py-1 text-xs text-white/62 transition hover:bg-white/[0.05]"
+              >
+                {lang === 'zh' ? 'English Version' : '中文'}
+              </button>
+            </div>
+
             <div className="flex items-center gap-3 mb-2">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
                 style={{ background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.25)' }}>
                 <Shield size={20} style={{ color: '#FFD700' }} />
               </div>
-              <div className="text-xl font-bold" style={{ color: '#FFD700' }}>管理后台</div>
+              <div className="text-xl font-bold" style={{ color: '#FFD700' }}>{t('admin_title')}</div>
             </div>
-            <p className="text-sm" style={{ color: '#555' }}>请输入管理员密钥进入</p>
-            <p className="text-xs mt-1 font-mono" style={{ color: '#333' }}>API: {API}</p>
+            <p className="text-sm" style={{ color: 'rgba(255,255,255,0.52)' }}>{t('admin_enter_desc')}</p>
+            <p className="text-xs mt-1 font-mono" style={{ color: 'rgba(255,255,255,0.3)' }}>API: {API}</p>
           </div>
           <div className="relative">
-            <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: '#555' }} />
+            <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'rgba(255,255,255,0.42)' }} />
             <input
               type="password"
               value={secretInput}
               onChange={e => setSecretInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && setSecret(secretInput.trim())}
-              placeholder="Admin Secret"
+              placeholder={t('admin_secret_ph')}
               className="w-full pl-9 pr-4 py-3 rounded-xl text-sm outline-none transition-all duration-150"
               style={{
                 background: 'rgba(255,255,255,0.06)',
@@ -1818,7 +1980,7 @@ export default function AdminPage() {
             onMouseEnter={e => (e.currentTarget.style.background = 'linear-gradient(135deg, rgba(255,215,0,0.32), rgba(255,215,0,0.18))')}
             onMouseLeave={e => (e.currentTarget.style.background = 'linear-gradient(135deg, rgba(255,215,0,0.22), rgba(255,215,0,0.12))')}>
             <Zap size={15} />
-            进入管理后台
+            {t('admin_enter_btn')}
           </button>
         </div>
       </div>
@@ -1826,43 +1988,56 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto" style={{ minHeight: '100vh' }}>
-      {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
+    <div
+      className="mx-auto flex min-h-screen w-full max-w-[1240px] flex-col px-5 py-8 sm:px-6 lg:py-10"
+      style={{
+        background:
+          'radial-gradient(circle at top, rgba(20,28,42,0.62), transparent 26%), radial-gradient(circle at 84% 12%, rgba(200,165,90,0.08), transparent 20%)',
+      }}
+    >
+      <div className="mb-6 flex items-center justify-between rounded-[24px] border border-white/8 bg-white/[0.03] px-5 py-4">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center"
             style={{ background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.22)' }}>
             <Shield size={16} style={{ color: '#FFD700' }} />
           </div>
           <div>
-            <h1 className="text-lg font-bold" style={{ color: '#FFD700' }}>管理后台</h1>
-            <p className="text-xs mt-0.5" style={{ color: '#555' }}>课程 · 文件审核 · 用户 · 邀请码 · API密钥</p>
+            <h1 className="text-lg font-bold" style={{ color: '#FFD700' }}>{t('admin_title')}</h1>
+            <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.42)' }}>{t('admin_sub')}</p>
           </div>
         </div>
-        <button onClick={() => setSecret('')}
-          className="text-xs px-3 py-1.5 rounded-lg transition-all duration-150"
-          style={{ color: '#555', border: '1px solid rgba(255,255,255,0.07)' }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#ff7070'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,112,112,0.3)' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#555'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.07)' }}>
-          退出
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+            className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/62 transition hover:bg-white/[0.05]"
+          >
+            {lang === 'zh' ? 'English Version' : '中文'}
+          </button>
+          <button onClick={() => setSecret('')}
+            className="text-xs px-3 py-1.5 rounded-lg transition-all duration-150"
+            style={{ color: '#555', border: '1px solid rgba(255,255,255,0.07)' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#ff7070'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,112,112,0.3)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#555'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.07)' }}>
+            {t('admin_logout')}
+          </button>
+        </div>
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex gap-1 mb-6 flex-wrap p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+      <div className="mb-6 flex gap-1 rounded-xl border border-white/8 bg-white/[0.03] p-1 flex-wrap">
+        {tabs.map(item => (
+          <button key={item.id} onClick={() => setTab(item.id)}
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 relative"
             style={{
-              background: tab === t.id ? 'rgba(255,215,0,0.1)' : 'transparent',
-              color: tab === t.id ? '#FFD700' : '#444',
-              border: tab === t.id ? '1px solid rgba(255,215,0,0.25)' : '1px solid transparent',
-              textShadow: tab === t.id ? '0 0 12px rgba(255,215,0,0.4)' : 'none',
+              background: tab === item.id ? 'rgba(255,215,0,0.1)' : 'transparent',
+              color: tab === item.id ? '#FFD700' : '#444',
+              border: tab === item.id ? '1px solid rgba(255,215,0,0.25)' : '1px solid transparent',
+              textShadow: tab === item.id ? '0 0 12px rgba(255,215,0,0.4)' : 'none',
             }}
-            onMouseEnter={e => { if (tab !== t.id) { (e.currentTarget as HTMLElement).style.color = '#888' } }}
-            onMouseLeave={e => { if (tab !== t.id) { (e.currentTarget as HTMLElement).style.color = '#444' } }}>
-            {t.icon} {t.label}
-            {tab === t.id && (
+            onMouseEnter={e => { if (tab !== item.id) { (e.currentTarget as HTMLElement).style.color = '#888' } }}
+            onMouseLeave={e => { if (tab !== item.id) { (e.currentTarget as HTMLElement).style.color = '#444' } }}>
+            {item.icon} {item.label}
+            {tab === item.id && (
               <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full"
                 style={{ background: '#FFD700', boxShadow: '0 0 6px rgba(255,215,0,0.6)' }} />
             )}
@@ -1870,12 +2045,14 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {tab === 'courses'   && <CoursesTab   secret={secret} />}
-      {tab === 'artifacts' && <ArtifactsTab secret={secret} />}
-      {tab === 'users'     && <UsersTab     secret={secret} />}
-      {tab === 'invites'   && <InvitesTab   secret={secret} />}
-      {tab === 'api-keys'  && <ApiKeysTab   secret={secret} />}
-      {tab === 'feedback'  && <FeedbackTab  secret={secret} />}
+      <div className="rounded-[24px] border border-white/8 bg-white/[0.03] p-5 shadow-[0_20px_64px_rgba(0,0,0,0.26)]">
+        {tab === 'courses'   && <CoursesTab   secret={secret} />}
+        {tab === 'artifacts' && <ArtifactsTab secret={secret} />}
+        {tab === 'users'     && <UsersTab     secret={secret} />}
+        {tab === 'invites'   && <InvitesTab   secret={secret} />}
+        {tab === 'api-keys'  && <ApiKeysTab   secret={secret} />}
+        {tab === 'feedback'  && <FeedbackTab  secret={secret} />}
+      </div>
     </div>
   )
 }

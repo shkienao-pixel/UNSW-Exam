@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth-context'
 import ExamMasterLogo from '@/components/ExamMasterLogo'
 import { api } from '@/lib/api'
 import type { Course } from '@/lib/types'
-import { LangProvider, useLang } from '@/lib/i18n'
+import { useLang } from '@/lib/i18n'
 import { GenerationProvider } from '@/lib/generation-context'
 import FloatingProgress from '@/components/FloatingProgress'
 import ExamCountdown from '@/components/ExamCountdown'
@@ -19,15 +19,15 @@ import {
 // ── Feature navigation config ─────────────────────────────────────────────────
 
 const FEATURES = [
-  { view: 'resources',  emoji: '📚', zh: '课程资料',  en: 'Resources', featured: true  },
-  { view: 'flashcards', emoji: '🃏', zh: '闪卡',    en: 'Flashcards', featured: true  },
-  { view: 'mistakes',   emoji: '📝', zh: '错题集',   en: 'Mistakes',   featured: true  },
-  { view: 'quiz',       emoji: '🎯', zh: '模拟题',   en: 'Quiz'                        },
-  { view: 'summary',    emoji: '📄', zh: '摘要',     en: 'Summary'                     },
-  { view: 'outline',    emoji: '📋', zh: '大纲',     en: 'Outline'                     },
-  { view: 'ask',        emoji: '💬', zh: 'AI 问答',  en: 'AI Q&A'                      },
-  { view: 'generate',   emoji: '⚡', zh: 'AI 生成',  en: 'AI Generate'                 },
-  { view: 'scope',      emoji: '⚙️', zh: 'Scope',   en: 'Scope'                       },
+  { view: 'resources', labelKey: 'files', featured: true },
+  { view: 'flashcards', labelKey: 'flashcards', featured: true },
+  { view: 'mistakes', labelKey: 'mistakes', featured: true },
+  { view: 'quiz', labelKey: 'quiz' },
+  { view: 'summary', labelKey: 'summary' },
+  { view: 'outline', labelKey: 'outline' },
+  { view: 'ask', labelKey: 'ask' },
+  { view: 'generate', labelKey: 'generate' },
+  { view: 'scope', labelKey: 'scope' },
 ]
 
 // ── Hover-scale link wrapper ──────────────────────────────────────────────────
@@ -95,6 +95,8 @@ function SidebarHeader({
   credits?: number | null
   onToggleCollapse?: () => void
 }) {
+  const { t } = useLang()
+  const lowCredits = (credits ?? 0) < 100
   return (
     <div className="border-b border-white/7 p-3">
       <div className={`${SIDEBAR_CARD} ${collapsed ? 'flex flex-col items-center gap-2 p-2.5' : 'p-3'}`}>
@@ -104,8 +106,8 @@ function SidebarHeader({
           {onToggleCollapse ? (
             <button
               onClick={onToggleCollapse}
-              className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/8 bg-white/[0.04] text-white/56 transition hover:border-white/12 hover:bg-white/[0.06] hover:text-white/80"
-              title={collapsed ? '展开侧边栏' : '收起侧边栏'}
+              className={`flex items-center justify-center border border-white/8 bg-white/[0.04] text-white/56 transition hover:border-white/12 hover:bg-white/[0.06] hover:text-white/80 ${collapsed ? 'h-10 w-10 rounded-2xl' : 'h-8 w-8 rounded-xl'}`}
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
               <ChevronLeft
                 size={14}
@@ -122,10 +124,22 @@ function SidebarHeader({
           <div className="mt-3 space-y-2">
             <p className="truncate text-xs text-white/34">{user?.email}</p>
             {role !== 'guest' && credits !== null && credits !== undefined ? (
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-[#c8a55a]/15 bg-[#c8a55a]/10 px-2.5 py-1 text-xs font-semibold text-[#e6cf98] shadow-[0_0_22px_rgba(200,165,90,0.08)]">
-                <Sparkles className="h-3.5 w-3.5 animate-pulse text-[#e6cf98]" />
-                <span>{credits} 积分</span>
-              </div>
+              <>
+                <div
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-semibold shadow-[0_0_22px_rgba(200,165,90,0.08)] ${lowCredits ? 'animate-pulse' : ''}`}
+                  style={{
+                    border: `1px solid ${lowCredits ? 'rgba(239,68,68,0.35)' : 'rgba(200,165,90,0.18)'}`,
+                    background: lowCredits ? 'rgba(239,68,68,0.1)' : 'rgba(200,165,90,0.1)',
+                    color: lowCredits ? '#fca5a5' : '#e6cf98',
+                  }}
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span className="text-base leading-none">{credits} 积分</span>
+                </div>
+                {lowCredits && (
+                  <p className="text-[11px] text-red-300/85">{t('sidebar_low_credits')}</p>
+                )}
+              </>
             ) : null}
           </div>
         ) : null}
@@ -143,16 +157,16 @@ function CourseSidebar({
   onNavClick?: () => void
 }) {
   const searchParams = useSearchParams()
-  const { lang, t } = useLang()
+  const { t } = useLang()
   const { role } = useAuth()
   const currentView = searchParams.get('view') || 'flashcards'
 
   return (
-    <nav className="flex flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-3 py-4">
+    <nav className={`no-scrollbar flex flex-1 flex-col overflow-y-auto overflow-x-hidden ${collapsed ? 'items-center gap-2 px-2 py-3' : 'gap-2 px-3 py-4'}`}>
       {/* Back */}
       <HoverLink
         href="/dashboard"
-        className={`mb-1 flex items-center gap-2 rounded-[18px] border border-white/6 bg-white/[0.02] px-3 py-2.5 text-xs text-white/46 transition hover:border-white/10 hover:bg-white/[0.04] hover:text-white/72 ${collapsed ? 'justify-center' : ''}`}
+        className={`flex items-center gap-2 rounded-[14px] border border-white/6 bg-white/[0.02] text-xs text-white/46 transition hover:border-white/10 hover:bg-white/[0.04] hover:text-white/72 ${collapsed ? 'h-11 w-11 justify-center px-0 py-0' : 'mb-1 px-3 py-2.5'}`}
         onClick={onNavClick}
       >
         <ArrowLeft size={13} className="flex-shrink-0" />
@@ -171,29 +185,19 @@ function CourseSidebar({
           <p className="mt-2 text-sm font-medium leading-tight text-white/86">{course.name}</p>
         </div>
       )}
-      {collapsed && course && (
-        <div className={`${SIDEBAR_CARD} mb-1 flex items-center justify-center px-1 py-3`}>
-          <span
-            className="rounded-md px-1.5 py-0.5 text-center text-xs font-bold"
-            style={{ background: 'rgba(200,165,90,0.14)', color: '#e6cf98', fontSize: 9 }}
-          >
-            {course.code}
-          </span>
-        </div>
-      )}
 
       {/* Feature links */}
       {FEATURES.filter(f => !(f.view === 'resources' && role === 'guest')).map(f => {
         const isActive = currentView === f.view
         const href = `/courses/${courseId}?view=${f.view}`
-        const label = lang === 'zh' ? f.zh : f.en
+        const label = t(f.labelKey as any)
         const featureMeta = FEATURE_ICON_MAP[f.view as keyof typeof FEATURE_ICON_MAP]
         const Icon = featureMeta.icon
 
         if (f.featured) {
           return (
             <HoverLink key={f.view} href={href} onClick={onNavClick}
-              className={`items-center gap-2.5 rounded-[20px] text-sm font-semibold ${collapsed ? 'justify-center px-2 py-3' : 'px-3 py-3'}`}
+              className={`items-center rounded-[14px] text-sm font-semibold ${collapsed ? 'h-11 w-11 justify-center px-0 py-0' : 'gap-2.5 px-3 py-3'}`}
               style={{
                 background: isActive
                   ? 'linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.035))'
@@ -204,10 +208,10 @@ function CourseSidebar({
                 textShadow: 'none',
               }}>
               <span
-                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-white/6"
+                className={`flex flex-shrink-0 items-center justify-center border border-white/6 ${collapsed ? 'h-7 w-7 rounded-lg' : 'h-8 w-8 rounded-xl'}`}
                 style={{ color: featureMeta.tint, background: featureMeta.bg }}
               >
-                <Icon size={16} />
+                <Icon size={collapsed ? 14 : 16} />
               </span>
               {!collapsed && <span className="flex-1">{label}</span>}
               {!collapsed && isActive && (
@@ -219,7 +223,7 @@ function CourseSidebar({
 
         return (
           <HoverLink key={f.view} href={href} onClick={onNavClick}
-            className={`items-center gap-2.5 rounded-[18px] text-sm ${collapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'}`}
+            className={`items-center rounded-[14px] text-sm ${collapsed ? 'h-11 w-11 justify-center px-0 py-0' : 'gap-2.5 px-3 py-2.5'}`}
             style={{
               color: isActive ? '#ffffff' : 'rgba(255,255,255,0.44)',
               background: isActive ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.01)',
@@ -258,7 +262,7 @@ function DefaultSidebar({
     const active = pathname === href
     return (
       <HoverLink href={href} onClick={onNavClick}
-        className={`items-center text-sm ${collapsed ? 'justify-center rounded-[18px] px-2 py-2.5' : 'gap-3 rounded-[18px] px-3 py-2.5'}`}
+        className={`items-center text-sm ${collapsed ? 'h-11 w-11 justify-center rounded-[14px] px-0 py-0' : 'gap-3 rounded-[18px] px-3 py-2.5'}`}
         style={{
           color: active ? '#ffffff' : 'rgba(255,255,255,0.5)',
           background: active ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.01)',
@@ -267,7 +271,7 @@ function DefaultSidebar({
           textShadow: 'none',
         }}>
         <span
-          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-white/6"
+          className={`flex flex-shrink-0 items-center justify-center border border-white/6 ${collapsed ? 'h-7 w-7 rounded-lg' : 'h-8 w-8 rounded-xl'}`}
           style={{
             color: active ? '#e6cf98' : 'rgba(255,255,255,0.58)',
             background: active ? 'rgba(200,165,90,0.12)' : 'rgba(255,255,255,0.03)',
@@ -281,7 +285,7 @@ function DefaultSidebar({
   }
 
   return (
-    <nav className="flex-1 space-y-2 overflow-y-auto overflow-x-hidden px-3 py-4">
+    <nav className={`no-scrollbar flex-1 overflow-y-auto overflow-x-hidden ${collapsed ? 'space-y-2 px-2 py-3' : 'space-y-2 px-3 py-4'}`}>
       {navItem('/dashboard', <LayoutDashboard size={16} />, t('dashboard'))}
       {role !== 'guest' && navItem('/credits', <CreditCard size={16} />, '积分 & 充值')}
 
@@ -417,7 +421,7 @@ function SidebarShell({
   )
 }
 
-// ── Root layout (inner — inside LangProvider) ─────────────────────────────────
+// ── Root layout (inner app shell) ─────────────────────────────────────────────
 
 function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -462,7 +466,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const courseId = courseMatch?.[1] ?? null
   const currentCourse = courseId ? courses.find(c => c.id === courseId) : undefined
 
-  const sidebarWidth = collapsed ? 56 : 240
+  const sidebarWidth = collapsed ? 80 : 240
 
   const sidebarProps = {
     courseId, currentCourse, courses, pathname, collapsed, user, logout, role, credits,
@@ -478,7 +482,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
     >
 
       {/* ── Desktop Sidebar (hidden on mobile) ── */}
-      <aside className="hidden md:flex flex-col flex-shrink-0"
+      <aside className="no-scrollbar hidden md:flex flex-col flex-shrink-0"
         style={{
           width: sidebarWidth,
           minWidth: sidebarWidth,
@@ -770,10 +774,8 @@ function FeedbackWidget() {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <LangProvider>
-      <GenerationProvider>
-        <AppLayoutInner>{children}</AppLayoutInner>
-      </GenerationProvider>
-    </LangProvider>
+    <GenerationProvider>
+      <AppLayoutInner>{children}</AppLayoutInner>
+    </GenerationProvider>
   )
 }

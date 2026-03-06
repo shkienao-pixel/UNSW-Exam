@@ -29,6 +29,7 @@ _DOC_TYPE_LABELS: dict[str, str] = {
 class CourseCreate(BaseModel):
     code: str = Field(min_length=1, max_length=32)
     name: str = Field(min_length=1, max_length=120)
+    exam_date: Optional[datetime] = None
 
 
 class CourseOut(BaseModel):

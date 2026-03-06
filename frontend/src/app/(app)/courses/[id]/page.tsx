@@ -12,7 +12,7 @@ import {
   FileText, Upload, Loader2, Zap, History, Settings2,
   CheckSquare, ChevronDown, MessageSquare, BookOpen, Send, RotateCcw,
   ExternalLink, Trash2, Languages, HelpCircle, ImagePlus, X, Sparkles,
-  Code, Lock,
+  Code, Lock, Target, Layers3, ListTree,
 } from 'lucide-react'
 import { addMistake } from '@/lib/mistakes-store'
 import MistakesView from '@/components/MistakesView'
@@ -394,7 +394,7 @@ function SummaryTab({ courseId }: { courseId: string }) {
   return (
     <TypedOutputsView
       courseId={courseId} outputType="summary"
-      icon={<span>📄</span>} title={t('summary_title')} subtitle={t('summary_sub')}
+      icon={<FileText size={20} style={{ color: '#FFD700' }} />} title={t('summary_title')} subtitle={t('summary_sub')}
       emptyTitle={t('empty_summary')} emptyLinkLabel={t('empty_summary_btn')}
       renderContent={output => (
         <ContentTranslationPanel content={output.content || ''} courseId={courseId} />
@@ -416,7 +416,7 @@ function QuizTab({ courseId }: { courseId: string }) {
   return (
     <TypedOutputsView
       courseId={courseId} outputType="quiz"
-      icon={<span>🎯</span>} title={t('quiz_title')} subtitle={t('quiz_sub')}
+      icon={<Target size={20} style={{ color: '#FFD700' }} />} title={t('quiz_title')} subtitle={t('quiz_sub')}
       emptyTitle={t('empty_quiz')} emptyLinkLabel={t('empty_quiz_btn')}
       renderContent={output => {
         let questions: QuizQuestion[] = []
@@ -497,7 +497,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-white flex items-center gap-2">🃏 {t('flashcards_title')}</h2>
+          <h2 className="text-2xl font-bold text-white flex items-center gap-2"><Layers3 size={22} style={{ color: '#FFD700' }} /> {t('flashcards_title')}</h2>
           <p className="text-sm mt-0.5" style={{ color: '#555' }}>{t('flashcards_sub')}</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 pt-1">
@@ -818,7 +818,7 @@ function AskTab({ courseId, scopeSets, artifacts }: {
     } catch (err: unknown) {
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: `❌ ${err instanceof Error ? err.message : '请求失败'}`,
+        content: err instanceof Error ? err.message : '请求失败',
       }])
     } finally { setLoading(false) }
   }
@@ -956,7 +956,8 @@ function AskTab({ courseId, scopeSets, artifacts }: {
               {m.role === 'assistant' && m.contextMode === 'revision' && (
                 <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px]"
                   style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)', color: '#a5b4fc' }}>
-                  📚 仅复习资料检索
+                  <BookOpen size={10} />
+                  <span>仅复习资料检索</span>
                 </div>
               )}
 
@@ -1042,8 +1043,8 @@ function AskTab({ courseId, scopeSets, artifacts }: {
         <span className="text-xs mr-1" style={{ color: '#555' }}>检索范围：</span>
         {(
           [
-            { mode: 'all'      as const, label: '🌐 全库提问', title: '在所有已上传资料中检索' },
-            { mode: 'revision' as const, label: '📚 仅复习资料', title: '仅在「复习总结」类型文件中检索' },
+            { mode: 'all'      as const, label: '全库提问', title: '在所有已上传资料中检索' },
+            { mode: 'revision' as const, label: '仅复习资料', title: '仅在「复习总结」类型文件中检索' },
           ] as const
         ).map(({ mode, label, title }) => {
           const active = contextMode === mode
@@ -1075,7 +1076,7 @@ function AskTab({ courseId, scopeSets, artifacts }: {
         })}
         {contextMode === 'revision' && revisionCount === 0 && (
           <span className="text-xs" style={{ color: '#F87171' }}>
-            ⚠️ 暂无复习资料，请先上传
+            暂无复习资料，请先上传
           </span>
         )}
         {contextMode === 'revision' && revisionCount > 0 && (
@@ -1170,10 +1171,10 @@ function GenerateTab({ courseId, scopeSets, setScopeSets, artifacts, setOutputs 
   const approvedCount = approvedArtifacts.length
 
   const genTypes = [
-    { key: 'summary'    as GenType, emoji: '📄', labelKey: 'gen_summary'    as const, descKey: 'gen_desc_summary'    as const },
-    { key: 'quiz'       as GenType, emoji: '🎯', labelKey: 'gen_quiz'       as const, descKey: 'gen_desc_quiz'       as const },
-    { key: 'outline'    as GenType, emoji: '📋', labelKey: 'gen_outline'    as const, descKey: 'gen_desc_outline'    as const },
-    { key: 'flashcards' as GenType, emoji: '🃏', labelKey: 'gen_flashcards' as const, descKey: 'gen_desc_flashcards' as const },
+    { key: 'summary' as GenType, icon: <FileText size={18} style={{ color: '#FFD700' }} />, labelKey: 'gen_summary' as const, descKey: 'gen_desc_summary' as const },
+    { key: 'quiz' as GenType, icon: <Target size={18} style={{ color: '#FFD700' }} />, labelKey: 'gen_quiz' as const, descKey: 'gen_desc_quiz' as const },
+    { key: 'outline' as GenType, icon: <ListTree size={18} style={{ color: '#FFD700' }} />, labelKey: 'gen_outline' as const, descKey: 'gen_desc_outline' as const },
+    { key: 'flashcards' as GenType, icon: <Layers3 size={18} style={{ color: '#FFD700' }} />, labelKey: 'gen_flashcards' as const, descKey: 'gen_desc_flashcards' as const },
   ]
 
   function toggleNewScopeFile(id: number) {
@@ -1248,7 +1249,7 @@ function GenerateTab({ courseId, scopeSets, setScopeSets, artifacts, setOutputs 
           <button key={g.key} onClick={() => { setGenType(g.key); setGenSuccess(null) }}
             className="glass p-4 text-left transition-all rounded-xl"
             style={{ outline: genType === g.key ? '1px solid #FFD700' : 'none' }}>
-            <div className="text-xl mb-1">{g.emoji}</div>
+            <div className="mb-1 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-white/[0.03]">{g.icon}</div>
             <div className="font-medium text-sm text-white">{t(g.labelKey)}</div>
             <div className="text-xs mt-0.5" style={{ color: '#666' }}>{t(g.descKey)}</div>
           </button>
@@ -1350,14 +1351,14 @@ function GenerateTab({ courseId, scopeSets, setScopeSets, artifacts, setOutputs 
       {error && (
         <div className="text-sm px-3 py-2 rounded-lg"
           style={{ background: 'rgba(255,68,68,0.1)', color: '#FF6666', border: '1px solid rgba(255,68,68,0.2)' }}>
-          ❌ {error}
+          {error}
         </div>
       )}
 
       {genSuccess && (
         <div className="flex items-center gap-3 text-sm px-4 py-3 rounded-xl"
           style={{ background: 'rgba(34,197,94,0.08)', color: '#22C55E', border: '1px solid rgba(34,197,94,0.2)' }}>
-          ✅ {t('gen_done_prefix')}
+          {t('gen_done_prefix')}
           <a href={`/courses/${courseId}?view=${genSuccess}`}
             className="font-semibold underline hover:opacity-80">
             {viewLabels[genSuccess]}
@@ -1371,11 +1372,11 @@ function GenerateTab({ courseId, scopeSets, setScopeSets, artifacts, setOutputs 
 
 // ── 历史输出 Tab ──────────────────────────────────────────────────────────────
 
-const OUTPUT_TYPE_CONFIG: Record<string, { label: string; icon: string; color: string; bg: string }> = {
-  summary:    { label: '知识摘要', icon: '📄', color: '#60A5FA', bg: 'rgba(96,165,250,0.08)'  },
-  quiz:       { label: '模拟题目', icon: '🎯', color: '#34D399', bg: 'rgba(52,211,153,0.08)'  },
-  outline:    { label: '课程大纲', icon: '📋', color: '#A78BFA', bg: 'rgba(167,139,250,0.08)' },
-  flashcards: { label: '闪卡套组', icon: '🃏', color: '#F59E0B', bg: 'rgba(245,158,11,0.08)'  },
+const OUTPUT_TYPE_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string; bg: string }> = {
+  summary:    { label: '知识摘要', icon: <FileText size={16} style={{ color: '#60A5FA' }} />, color: '#60A5FA', bg: 'rgba(96,165,250,0.08)'  },
+  quiz:       { label: '模拟题目', icon: <Target size={16} style={{ color: '#34D399' }} />, color: '#34D399', bg: 'rgba(52,211,153,0.08)'  },
+  outline:    { label: '课程大纲', icon: <ListTree size={16} style={{ color: '#A78BFA' }} />, color: '#A78BFA', bg: 'rgba(167,139,250,0.08)' },
+  flashcards: { label: '闪卡套组', icon: <Layers3 size={16} style={{ color: '#F59E0B' }} />, color: '#F59E0B', bg: 'rgba(245,158,11,0.08)'  },
 }
 
 function OutputsTab({ courseId, outputs, setOutputs }: {
@@ -1433,7 +1434,9 @@ function OutputsTab({ courseId, outputs, setOutputs }: {
                 <button key={type} onClick={() => selectType(type)}
                   className="text-left p-4 rounded-xl transition-all"
                   style={{ background: isActive ? cfg.bg : 'rgba(255,255,255,0.03)', border: `1px solid ${isActive ? cfg.color : 'rgba(255,255,255,0.06)'}` }}>
-                  <div className="text-2xl mb-2">{cfg.icon}</div>
+                  <div className="mb-2 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-white/[0.03]">
+                    {cfg.icon}
+                  </div>
                   <div className="text-sm font-semibold text-white mb-0.5">{cfg.label}</div>
                   {typeOutputs.length > 0
                     ? <div className="text-xs" style={{ color: cfg.color }}>{typeOutputs.length} 份</div>
@@ -1458,7 +1461,9 @@ function OutputsTab({ courseId, outputs, setOutputs }: {
                     style={{ background: selected?.id === o.id ? 'rgba(255,215,0,0.07)' : 'rgba(255,255,255,0.03)', border: `1px solid ${selected?.id === o.id ? 'rgba(255,215,0,0.3)' : 'rgba(255,255,255,0.06)'}` }}
                     onClick={() => setSelected(o)}>
                     <div className="flex items-center justify-between gap-1">
-                      <span className="text-xs font-medium" style={{ color: cfg?.color ?? '#FFD700' }}>{cfg?.icon} {cfg?.label ?? o.output_type}</span>
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium" style={{ color: cfg?.color ?? '#FFD700' }}>
+                        {cfg?.icon} {cfg?.label ?? o.output_type}
+                      </span>
                       <button onClick={e => { e.stopPropagation(); handleDelete(o.id) }} style={{ color: '#FF4444', opacity: 0.6 }}>
                         <Trash2 size={11} />
                       </button>
@@ -1492,12 +1497,12 @@ function OutputsTab({ courseId, outputs, setOutputs }: {
 // ── 文件上传 Tab ──────────────────────────────────────────────────────────────
 
 const DOC_TYPE_OPTIONS: { value: DocType; label: string }[] = [
-  { value: 'lecture',    label: '📖 讲义 (Lecture)' },
-  { value: 'tutorial',   label: '🔬 辅导/Lab (Tutorial)' },
-  { value: 'revision',   label: '✅ 复习总结 (Revision)' },
-  { value: 'past_exam',  label: '📝 往年考题 (Past Exam)' },
-  { value: 'assignment', label: '📋 作业/Project (Assignment)' },
-  { value: 'other',      label: '📎 其他 (Other)' },
+  { value: 'lecture',    label: 'Lecture Notes' },
+  { value: 'tutorial',   label: 'Tutorial / Lab' },
+  { value: 'revision',   label: 'Revision Summary' },
+  { value: 'past_exam',  label: 'Past Exam' },
+  { value: 'assignment', label: 'Assignment / Project' },
+  { value: 'other',      label: 'Other' },
 ]
 
 function FilesTab({ courseId, artifacts, setArtifacts, fileInputRef }: {
@@ -1565,7 +1570,7 @@ function FilesTab({ courseId, artifacts, setArtifacts, fileInputRef }: {
               文件：<span className="text-white font-medium">{unlockTarget.file_name}</span>
             </p>
             <p className="text-sm mb-4" style={{ color: '#888' }}>
-              此「{DOC_TYPE_LABELS[unlockTarget.doc_type]}」需消耗 <span style={{ color: '#FFD700', fontWeight: 600 }}>1 积分</span> 永久解锁下载。
+              此「{DOC_TYPE_LABELS[unlockTarget.doc_type]}」需消耗 <span style={{ color: '#FFD700', fontWeight: 600 }}>50 积分</span> 深度解析。
             </p>
             {unlockError && (
               <p className="text-xs mb-3 px-3 py-2 rounded-lg" style={{ color: '#ff8080', background: 'rgba(255,80,80,0.1)', border: '1px solid rgba(255,80,80,0.2)' }}>
@@ -1582,7 +1587,7 @@ function FilesTab({ courseId, artifacts, setArtifacts, fileInputRef }: {
                 className="flex-1 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
                 style={{ background: 'rgba(255,165,0,0.18)', color: '#FFA500', border: '1px solid rgba(255,165,0,0.35)' }}>
                 {unlocking ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
-                {unlocking ? '解锁中...' : '确认解锁（-1 积分）'}
+                {unlocking ? '解析中...' : '确认深度解析（-50 积分）'}
               </button>
             </div>
           </div>
@@ -1695,10 +1700,10 @@ function FilesTab({ courseId, artifacts, setArtifacts, fileInputRef }: {
               {a.is_locked ? (
                 <button
                   onClick={() => { setUnlockTarget(a); setUnlockError('') }}
-                  title="花 1 积分解锁下载"
+                  title="花 50 积分深度解析"
                   className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition-all hover:opacity-80 flex-shrink-0"
                   style={{ background: 'rgba(255,165,0,0.1)', color: '#FFA500', border: '1px solid rgba(255,165,0,0.25)' }}>
-                  <Lock size={11} /> 解锁
+                  <Lock size={11} /> 深度解析
                 </button>
               ) : a.storage_url ? (
                 <a href={a.storage_url} target="_blank" rel="noopener noreferrer" title={t('view_file')}

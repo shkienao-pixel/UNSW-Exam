@@ -335,7 +335,7 @@ def admin_create_course(
     supabase: Client = Depends(get_db),
 ) -> dict[str, Any]:
     """Create a shared course (admin only)."""
-    return create_course(supabase, code=body.code, name=body.name)
+    return create_course(supabase, code=body.code, name=body.name, exam_date=body.exam_date)
 
 
 @router.patch("/courses/{course_id}/exam-date", response_model=CourseOut)
@@ -346,6 +346,18 @@ def admin_set_exam_date(
     supabase: Client = Depends(get_db),
 ) -> dict[str, Any]:
     """Set or clear the exam date for a course (admin only)."""
+    from app.services.course_service import set_exam_date
+    return set_exam_date(supabase, course_id, body.exam_date)
+
+
+@router.post("/courses/{course_id}/exam-date", response_model=CourseOut)
+def admin_set_exam_date_post(
+    course_id: str,
+    body: ExamDateUpdate,
+    _: None = Depends(_require_admin),
+    supabase: Client = Depends(get_db),
+) -> dict[str, Any]:
+    """POST alias for exam-date update (works in proxies that block PATCH)."""
     from app.services.course_service import set_exam_date
     return set_exam_date(supabase, course_id, body.exam_date)
 

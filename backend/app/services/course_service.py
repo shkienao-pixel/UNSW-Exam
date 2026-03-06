@@ -55,7 +55,11 @@ def get_course(supabase: Client, course_id: str, user_id: str | None = None) -> 
 
 
 def create_course(
-    supabase: Client, code: str, name: str, created_by: str | None = None
+    supabase: Client,
+    code: str,
+    name: str,
+    created_by: str | None = None,
+    exam_date: datetime | None = None,
 ) -> dict[str, Any]:
     """Admin only: create a shared course."""
     normalized = _normalize_course_code(code)
@@ -69,6 +73,8 @@ def create_course(
         "created_at": now,
         "updated_at": now,
     }
+    if exam_date is not None:
+        payload["exam_date"] = exam_date.isoformat()
     if created_by:
         payload["created_by"] = created_by
 

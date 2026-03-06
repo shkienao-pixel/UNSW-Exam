@@ -42,8 +42,8 @@ def get_artifacts(
 ) -> list[dict[str, Any]]:
     """List artifacts for a course. Defaults to approved only.
 
-    past_exam / assignment files uploaded by others are 'locked' by default:
-    storage_url is hidden and is_locked=True until the user unlocks with 1 credit.
+    Files uploaded by others are locked by default:
+    storage_url is hidden and is_locked=True until the user unlocks with credits.
     Files the user uploaded themselves are always accessible.
     """
     get_course(supabase, course_id)
@@ -126,7 +126,7 @@ def unlock_artifact(
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_db),
 ) -> dict[str, Any]:
-    """花 1 积分解锁 past_exam / assignment 文件的下载权限（幂等：已解锁则直接返回）。"""
+    """花积分解锁文件的深度解析权限（幂等：已解锁则直接返回）。"""
     get_course(supabase, course_id)
     user_id = current_user["id"]
 
@@ -152,8 +152,16 @@ def unlock_artifact(
     if art.get("user_id") == user_id:
         return {"ok": True, "already_unlocked": True, "storage_url": art.get("storage_url")}
 
-    # 扣 1 积分（余额不足抛 InsufficientCreditsError → main.py 统一处理为 402）
-    credit_service.spend(supabase, user_id, 1, "unlock_upload", ref_id=str(artifact_id), note=f"解锁文件 {art['file_name']}")
+    # 扣积分（余额不足抛 InsufficientCreditsError → main.py 统一处理为 402）
+    unlock_cost = credit_service.COSTS.get("unlock_upload", 50)
+    credit_service.spend(
+        supabase,
+        user_id,
+        unlock_cost,
+        "unlock_upload",
+        ref_id=str(artifact_id),
+        note=f"深度解析文件 {art['file_name']}",
+    )
 
     # 写入解锁记录
     try:
@@ -197,12 +205,13 @@ def unlock_all_artifacts(
     if not to_unlock:
         return {"ok": True, "locked_count": locked_total, "unlocked_count": 0, "credits_spent": 0}
 
-    cost = len(to_unlock)
+    unlock_cost = credit_service.COSTS.get("unlock_upload", 50)
+    cost = len(to_unlock) * unlock_cost
 
     # 积分不足抛 InsufficientCreditsError → main.py 统一处理为 402
     credit_service.spend(
         supabase, user_id, cost, "unlock_all",
-        note=f"一键解锁课程 {course_id[:8]} 全部 {cost} 个付费文件",
+        note=f"一键深度解析课程 {course_id[:8]} 共 {len(to_unlock)} 份文件",
     )
 
     for a in to_unlock:
@@ -213,7 +222,7 @@ def unlock_all_artifacts(
         except Exception:
             pass  # 唯一约束冲突忽略
 
-    return {"ok": True, "locked_count": locked_total, "unlocked_count": cost, "credits_spent": cost}
+    return {"ok": True, "locked_count": locked_total, "unlocked_count": len(to_unlock), "credits_spent": cost}
 
 
 @router.patch("/{course_id}/artifacts/{artifact_id}/doc-type", response_model=ArtifactOut)

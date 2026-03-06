@@ -2,7 +2,7 @@
 
 积分类型（type 字段）：
   Earn: welcome_bonus | artifact_approved | feedback_adopted | admin_grant | purchase | refund
-  Spend: gen_flashcards | gen_quiz | gen_summary | gen_outline | gen_plan | gen_ask | unlock_upload
+  Spend: gen_flashcards | gen_quiz | gen_summary | gen_outline | gen_plan | gen_ask | unlock_upload | unlock_all
 """
 from __future__ import annotations
 
@@ -19,12 +19,14 @@ logger = logging.getLogger(__name__)
 # ── 消费定价表 ────────────────────────────────────────────────
 COSTS: dict[str, int] = {
     "gen_flashcards":  1,
-    "gen_quiz":        1,
+    "gen_quiz":        120,
     "gen_summary":     1,
     "gen_outline":     5,
     "gen_plan":        5,
-    "gen_ask":         1,
-    "unlock_upload":   1,
+    # 深度追问按 10 次 30 积分折算：单次约 3 积分
+    "gen_ask":         3,
+    # 单文件深度解析（解锁 + 考点提取）
+    "unlock_upload":   50,
 }
 
 
