@@ -85,7 +85,7 @@ function ProductPreviewCard({
   guestLoading: boolean
 }) {
   return (
-    <div className="relative mx-auto w-full max-w-[860px]">
+    <div className="relative w-full max-w-[860px]">
       <div className="pointer-events-none absolute left-[-14%] top-[46%] hidden h-px w-[14%] bg-gradient-to-r from-transparent via-[#c8a55a]/12 to-transparent xl:block" />
       <div className="pointer-events-none absolute right-[-14%] top-[46%] hidden h-px w-[14%] bg-gradient-to-l from-transparent via-[#c8a55a]/12 to-transparent xl:block" />
 
@@ -357,7 +357,7 @@ export default function LandingPage() {
       </nav>
 
       <main>
-        <section className="mx-auto grid min-h-[calc(100vh-81px)] max-w-[1280px] items-center gap-12 px-5 py-16 sm:px-6 xl:grid-cols-[minmax(0,0.76fr)_minmax(0,1.14fr)] xl:gap-16 xl:py-20">
+        <section className="mx-auto flex min-h-[calc(100vh-81px)] max-w-[1280px] flex-col justify-center gap-12 px-5 py-16 sm:px-6 xl:py-20">
           <div className="max-w-[560px]">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-white/58">
               <Sparkles className="h-3.5 w-3.5 text-[#c8a55a]" />
@@ -368,9 +368,14 @@ export default function LandingPage() {
               Exam Master
             </h1>
 
-            <p className="mt-6 max-w-[500px] text-base leading-8 text-white/54 sm:text-lg">
-              上传课件与历年真题，AI 自动提炼考点，生成闪卡、模拟试题与知识摘要。你也可以直接追问课程内容，把问答、生成和复习追踪收进一个界面。
-            </p>
+            <div className="mt-6 max-w-[620px] space-y-3">
+              <p className="text-lg font-medium leading-8 text-white/82 sm:text-[1.45rem]">
+                每一个留学生，都值得一位 24/7 的私人助教。
+              </p>
+              <p className="text-base leading-8 text-white/54 sm:text-lg">
+                上传你的专属资料，生成你的专属题库。问你想问，学你想学，Exam Master 比你更懂你的考纲。
+              </p>
+            </div>
 
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
               <Link

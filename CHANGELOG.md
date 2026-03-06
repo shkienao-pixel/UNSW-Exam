@@ -1,5 +1,80 @@
 # Changelog
 
+## [0.7.0] - 2026-03-06
+
+### Added
+- Added animated entry page (`/home`): Lottie brand animation plays on first load and on refresh from any app page; "Start Exploring" button navigates to landing page after 1.2s delay.
+- Added landing page (`/`): restored full product-introduction page with login / register / guest-access entry points.
+- Added exam countdown full-stack feature:
+  - `courses.exam_date` nullable date column (`migrations/016_exam_date.sql`).
+  - Backend: `ExamDateUpdate` model + `set_exam_date` service + `PATCH /admin/courses/{id}/exam-date` endpoint.
+  - Frontend: `ExamCountdown` component with sm/lg sizes; three display states (>3 weeks / ≤3 weeks / ended).
+  - Dashboard course cards show countdown badge; course-page top banner shows countdown.
+  - Admin panel tab for setting/clearing exam date per course.
+- Added StreamlineField dot-matrix particle flow: curve rendering replaced with point-array rendering; flow lines hug CampusHeroCard edge precisely.
+
+### Fixed
+- Fixed TypeScript build errors: `Course.exam_date` typed as optional, `MotionValue` type imports corrected.
+- Fixed `ParticleText` animation causing infinite-loop freeze.
+- Fixed Vercel build failure by regenerating `pnpm-lock.yaml`.
+- Fixed footer copyright year to 2026.
+
+### Changed
+- Bumped backend API version to `0.7.0` (FastAPI `version` field in `main.py`).
+
+---
+
+## [0.6.0] - 2026-03-05
+
+### Added
+- Added async AI generation: POST endpoints return `{job_id}` within ~100ms; background `asyncio.create_task` runs generation; poll `GET /courses/{id}/jobs/{job_id}` for status (`pending → processing → done/failed`). Eliminates gateway timeouts.
+- Added credits system: `credits` and `credit_orders` tables; AI generation and file unlocks deduct credits; HTTP 402 + structured `{detail, balance, required}` response on insufficient balance.
+- Added file unlock system: all files uploaded by other users require credits to view (own uploads always free); unlock persisted in `user_unlocked_files`.
+- Added `ExamMasterLogo` SVG component: pure SVG brand logo (4-pointed star + ascending-M mark), warm amber-gold `#D4A843`, replaces image-based logo site-wide.
+- Added UI enhancements: feature card hover glow, hero connection lines made more transparent, hero subtitle lighter weight, AI knowledge nodes moved to negative space.
+
+### Fixed
+- Fixed 11 security items: JWT validation, SQL injection prevention, input sanitisation, rate-limit headers.
+- Fixed test suite import paths and patch targets after async refactor; all 175 tests pass.
+- Fixed credit balance display to update immediately after file unlock (no page refresh needed).
+- Added FK constraint on `user_unlocked_files.artifact_id → artifacts.id ON DELETE CASCADE`.
+
+### Changed
+- Extracted `generate_service.py` from `generate.py`: pure synchronous functions callable via `asyncio.to_thread`.
+- Added `job_service.py` for async job CRUD.
+- Added `credit_service.py` for atomic credit deduction with optimistic locking.
+
+---
+
+## [0.5.0] - 2026-03-04
+
+### Fixed
+- Fixed invite code verification to occur before consumption; registration failure no longer consumes the code.
+- Fixed insufficient-credits error to be uniformly HTTP 402 with structured response `{detail, balance, required}`.
+- Fixed `InsufficientCreditsModal` redirect to `view=resources`.
+- Fixed admin backend port fallback to port 8000.
+- Fixed invite code statistics field name from `used_count` to `use_count` (matches DB schema).
+- Fixed `ResourceHubTab` `isOwner` check from `user_id` to `uploaded_by` (matches `ArtifactOut`).
+- Fixed `credits.py` admin secret validation to use `admin_secrets_set` (matches `admin.py`).
+
+---
+
+## [0.4.0] - 2026-03-03
+
+### Added
+- Added Multi-Model RAG pipeline (`/generate/ask`): 4-stage flow — pgvector retrieval → GPT-4o-mini filter → Gemini 2.0 Flash generate → Imagen 3 optional illustration.
+- Added `gemini_service.py` for Gemini / Imagen 3 calls.
+- Added `llm_key_service.py`: dynamic API keys with DB priority + env fallback and 60-second TTL cache.
+- Added `api_keys` table and Admin panel "API Keys" tab for hot-swapping OpenAI / Gemini / DeepSeek keys without service restart.
+- Added `python-docx` support for Word document parsing alongside existing pypdf.
+- Added bilingual RAG recall: Chinese queries automatically trigger dual-path (Chinese + English) retrieval.
+
+### Changed
+- Changed `/generate/ask` from single-model to 4-stage multi-model pipeline.
+- Changed API key resolution to prefer DB active records over `.env` values.
+
+---
+
 ## [0.3.0] - 2026-02-19
 
 ### Added

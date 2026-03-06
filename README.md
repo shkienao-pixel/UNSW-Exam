@@ -48,6 +48,22 @@
 
 ## Changelog
 
+### v0.7.0 (2026-03-06)
+
+**Features:**
+- **Animated entry page** — `/home` route plays a Lottie brand animation on first load (and on any app-page refresh); "Start Exploring" button transitions to the landing page after 1.2s
+- **Landing page restored** — `page.tsx` reset to the full product-introduction page with login / register / guest-access entry points
+- **Exam countdown (full-stack)** — `courses.exam_date` column (migration 016); `PATCH /admin/courses/{id}/exam-date` admin endpoint; `ExamCountdown` component with sm/lg sizes and three states (>3 weeks / ≤3 weeks / ended); integrated into dashboard course cards and course-page banner
+- **StreamlineField rewrite** — curve rendering replaced with dot-matrix particle flow (no bright points); campus hero card flow lines hug the card edge precisely
+
+**Fixes:**
+- TypeScript build errors resolved (`Course.exam_date` optional typing, `MotionValue` type imports)
+- `ParticleText` infinite-loop freeze fixed
+- `pnpm-lock.yaml` regenerated to unblock Vercel build failure
+- Footer copyright year corrected to 2026
+
+---
+
 ### v0.6.0 (2026-03-05)
 
 **Features:**
@@ -627,6 +643,22 @@ Access `/admin` and enter the `X-Admin-Secret` in the UI.
 ---
 
 ## 更新日志
+
+### v0.7.0（2026-03-06）
+
+**新功能：**
+- **动效入口页** — `/home` 路由在首次加载及任意 app 内页刷新时播放 Lottie 品牌动效；"开始探索"按钮等待 1.2s 后跳转落地页
+- **落地页恢复** — `page.tsx` 恢复为完整产品介绍页，提供登录 / 注册 / 访客入口
+- **考试倒计时（全栈）** — 新增 `courses.exam_date` 字段（migration 016）；Admin 接口 `PATCH /admin/courses/{id}/exam-date`；`ExamCountdown` 组件支持 sm/lg 两种尺寸及三态显示（>3周 / ≤3周 / 已结束）；集成至 Dashboard 课程卡片与课程页顶部横幅；管理员面板支持设置/清除考试日期
+- **StreamlineField 重构** — 曲线渲染改为点阵粒子流（无亮点），流线精确贴合 CampusHeroCard 卡片边缘
+
+**修复项：**
+- TypeScript 构建错误修复（`Course.exam_date` 可选类型、`MotionValue` 类型引入）
+- `ParticleText` 无限循环冻结问题修复
+- 更新 `pnpm-lock.yaml` 解决 Vercel 构建失败
+- 页脚版权年份修正为 2026
+
+---
 
 ### v0.6.0（2026-03-05）
 

@@ -13,6 +13,7 @@ import FloatingProgress from '@/components/FloatingProgress'
 import ExamCountdown from '@/components/ExamCountdown'
 import {
   LayoutDashboard, LogOut, ArrowLeft, Loader2, BookOpen, ChevronLeft, Menu, X, MessageSquarePlus, Send, CreditCard,
+  LibraryBig, Layers3, FileWarning, Target, FileText, ListTree, MessageCircleMore, Sparkles, SlidersHorizontal, Globe,
 } from 'lucide-react'
 
 // ── Feature navigation config ─────────────────────────────────────────────────
@@ -30,6 +31,24 @@ const FEATURES = [
 ]
 
 // ── Hover-scale link wrapper ──────────────────────────────────────────────────
+
+const FEATURE_ICON_MAP = {
+  resources: { icon: LibraryBig, tint: '#9FD3C7', bg: 'rgba(159,211,199,0.1)' },
+  flashcards: { icon: Layers3, tint: '#E7D08A', bg: 'rgba(200,165,90,0.12)' },
+  mistakes: { icon: FileWarning, tint: '#F4A261', bg: 'rgba(244,162,97,0.12)' },
+  quiz: { icon: Target, tint: '#87B6FF', bg: 'rgba(135,182,255,0.12)' },
+  summary: { icon: FileText, tint: '#B5BAC8', bg: 'rgba(181,186,200,0.12)' },
+  outline: { icon: ListTree, tint: '#C7B6FF', bg: 'rgba(199,182,255,0.12)' },
+  ask: { icon: MessageCircleMore, tint: '#9BC5B6', bg: 'rgba(155,197,182,0.12)' },
+  generate: { icon: Sparkles, tint: '#E6CF98', bg: 'rgba(230,207,152,0.12)' },
+  scope: { icon: SlidersHorizontal, tint: '#AEB7C8', bg: 'rgba(174,183,200,0.12)' },
+} as const
+
+const SIDEBAR_SHELL_BG =
+  'radial-gradient(circle at top, rgba(22,30,44,0.56), transparent 26%), radial-gradient(circle at 78% 10%, rgba(200,165,90,0.08), transparent 18%), linear-gradient(180deg, rgba(10,12,18,0.96) 0%, rgba(7,9,14,0.98) 100%)'
+
+const SIDEBAR_CARD =
+  'rounded-[22px] border border-white/8 bg-white/[0.03] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]'
 
 function HoverLink({
   href, children, style, className, onClick,
@@ -63,6 +82,58 @@ function HoverLink({
 
 // ── Course sidebar nav ────────────────────────────────────────────────────────
 
+function SidebarHeader({
+  collapsed,
+  user,
+  role,
+  credits,
+  onToggleCollapse,
+}: {
+  collapsed: boolean
+  user: { email: string } | null
+  role?: string | null
+  credits?: number | null
+  onToggleCollapse?: () => void
+}) {
+  return (
+    <div className="border-b border-white/7 p-3">
+      <div className={`${SIDEBAR_CARD} ${collapsed ? 'flex flex-col items-center gap-2 p-2.5' : 'p-3'}`}>
+        <div className={`flex ${collapsed ? 'w-full flex-col items-center gap-2' : 'items-start justify-between gap-3'}`}>
+          <ExamMasterLogo height={collapsed ? 28 : 32} showText={!collapsed} />
+
+          {onToggleCollapse ? (
+            <button
+              onClick={onToggleCollapse}
+              className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/8 bg-white/[0.04] text-white/56 transition hover:border-white/12 hover:bg-white/[0.06] hover:text-white/80"
+              title={collapsed ? '展开侧边栏' : '收起侧边栏'}
+            >
+              <ChevronLeft
+                size={14}
+                style={{
+                  transform: collapsed ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.25s ease',
+                }}
+              />
+            </button>
+          ) : null}
+        </div>
+
+        {!collapsed ? (
+          <div className="mt-3 space-y-2">
+            <p className="truncate text-xs text-white/34">{user?.email}</p>
+            {role !== 'guest' && credits !== null && credits !== undefined ? (
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-[#c8a55a]/15 bg-[#c8a55a]/10 px-2.5 py-1 text-xs font-semibold text-[#e6cf98] shadow-[0_0_22px_rgba(200,165,90,0.08)]">
+                <Sparkles className="h-3.5 w-3.5 animate-pulse text-[#e6cf98]" />
+                <span>{credits} 积分</span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 function CourseSidebar({
   courseId, course, collapsed, onNavClick,
 }: {
@@ -77,12 +148,11 @@ function CourseSidebar({
   const currentView = searchParams.get('view') || 'flashcards'
 
   return (
-    <nav className="flex-1 px-2 py-4 flex flex-col gap-0.5 overflow-y-auto overflow-x-hidden">
+    <nav className="flex flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-3 py-4">
       {/* Back */}
       <HoverLink
         href="/dashboard"
-        className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs mb-2"
-        style={{ color: 'rgba(255,255,255,0.42)' }}
+        className={`mb-1 flex items-center gap-2 rounded-[18px] border border-white/6 bg-white/[0.02] px-3 py-2.5 text-xs text-white/46 transition hover:border-white/10 hover:bg-white/[0.04] hover:text-white/72 ${collapsed ? 'justify-center' : ''}`}
         onClick={onNavClick}
       >
         <ArrowLeft size={13} className="flex-shrink-0" />
@@ -91,46 +161,54 @@ function CourseSidebar({
 
       {/* Course badge */}
       {!collapsed && course && (
-        <div className="px-3 py-2.5 mb-1 rounded-xl"
-          style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.07)' }}>
-          <span className="text-xs font-bold px-1.5 py-0.5 rounded"
-            style={{ background: 'rgba(200,165,90,0.14)', color: '#e6cf98' }}>
+        <div className={`${SIDEBAR_CARD} mb-1 px-3 py-3`}>
+          <span
+            className="rounded-md bg-[#c8a55a]/14 px-1.5 py-0.5 text-xs font-bold"
+            style={{ color: '#e6cf98' }}
+          >
             {course.code}
           </span>
-          <p className="text-xs text-white font-medium mt-1.5 leading-tight">{course.name}</p>
+          <p className="mt-2 text-sm font-medium leading-tight text-white/86">{course.name}</p>
         </div>
       )}
       {collapsed && course && (
-        <div className="flex items-center justify-center px-1 py-2 mb-1">
-          <span className="text-xs font-bold px-1.5 py-0.5 rounded text-center"
-            style={{ background: 'rgba(200,165,90,0.14)', color: '#e6cf98', fontSize: 9 }}>
+        <div className={`${SIDEBAR_CARD} mb-1 flex items-center justify-center px-1 py-3`}>
+          <span
+            className="rounded-md px-1.5 py-0.5 text-center text-xs font-bold"
+            style={{ background: 'rgba(200,165,90,0.14)', color: '#e6cf98', fontSize: 9 }}
+          >
             {course.code}
           </span>
         </div>
       )}
-
-        <div className="my-2" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }} />
 
       {/* Feature links */}
       {FEATURES.filter(f => !(f.view === 'resources' && role === 'guest')).map(f => {
         const isActive = currentView === f.view
         const href = `/courses/${courseId}?view=${f.view}`
         const label = lang === 'zh' ? f.zh : f.en
+        const featureMeta = FEATURE_ICON_MAP[f.view as keyof typeof FEATURE_ICON_MAP]
+        const Icon = featureMeta.icon
 
         if (f.featured) {
           return (
             <HoverLink key={f.view} href={href} onClick={onNavClick}
-              className={`items-center gap-2.5 rounded-xl text-sm font-semibold ${collapsed ? 'justify-center px-2 py-3' : 'px-3 py-3'}`}
+              className={`items-center gap-2.5 rounded-[20px] text-sm font-semibold ${collapsed ? 'justify-center px-2 py-3' : 'px-3 py-3'}`}
               style={{
                 background: isActive
-                  ? 'rgba(255,255,255,0.075)'
+                  ? 'linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.035))'
                   : 'rgba(255,255,255,0.03)',
-                color: isActive ? '#ffffff' : '#e6cf98',
-                border: `1px solid ${isActive ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.06)'}`,
-                boxShadow: isActive ? '0 14px 32px rgba(0,0,0,0.18)' : 'none',
+                color: isActive ? '#ffffff' : '#efe0b8',
+                border: `1px solid ${isActive ? 'rgba(200,165,90,0.16)' : 'rgba(255,255,255,0.08)'}`,
+                boxShadow: isActive ? '0 16px 36px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.04)' : 'inset 0 1px 0 rgba(255,255,255,0.03)',
                 textShadow: 'none',
               }}>
-              <span className="text-lg leading-none flex-shrink-0">{f.emoji}</span>
+              <span
+                className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-white/6"
+                style={{ color: featureMeta.tint, background: featureMeta.bg }}
+              >
+                <Icon size={16} />
+              </span>
               {!collapsed && <span className="flex-1">{label}</span>}
               {!collapsed && isActive && (
                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#c8a55a' }} />
@@ -141,14 +219,19 @@ function CourseSidebar({
 
         return (
           <HoverLink key={f.view} href={href} onClick={onNavClick}
-            className={`items-center gap-2.5 rounded-lg text-sm ${collapsed ? 'justify-center px-2 py-2' : 'px-3 py-2'}`}
+            className={`items-center gap-2.5 rounded-[18px] text-sm ${collapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'}`}
             style={{
-              color: isActive ? '#ffffff' : 'rgba(255,255,255,0.42)',
-              background: isActive ? 'rgba(255,255,255,0.05)' : 'transparent',
-              borderLeft: collapsed ? 'none' : `2px solid ${isActive ? 'rgba(200,165,90,0.9)' : 'transparent'}`,
+              color: isActive ? '#ffffff' : 'rgba(255,255,255,0.44)',
+              background: isActive ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.01)',
+              border: `1px solid ${isActive ? 'rgba(200,165,90,0.14)' : 'rgba(255,255,255,0.02)'}`,
               textShadow: 'none',
             }}>
-            <span className="text-sm leading-none flex-shrink-0">{f.emoji}</span>
+            <span
+              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-white/5"
+              style={{ color: featureMeta.tint, background: featureMeta.bg }}
+            >
+              <Icon size={14} />
+            </span>
             {!collapsed && label}
           </HoverLink>
         )
@@ -175,43 +258,52 @@ function DefaultSidebar({
     const active = pathname === href
     return (
       <HoverLink href={href} onClick={onNavClick}
-        className={`items-center rounded-lg text-sm ${collapsed ? 'justify-center px-2 py-2' : 'gap-3 px-3 py-2'}`}
+        className={`items-center text-sm ${collapsed ? 'justify-center rounded-[18px] px-2 py-2.5' : 'gap-3 rounded-[18px] px-3 py-2.5'}`}
         style={{
-          color: active ? '#FFD700' : '#999',
-          background: active ? 'rgba(255,215,0,0.08)' : 'transparent',
-          borderLeft: collapsed ? 'none' : `2px solid ${active ? '#FFD700' : 'transparent'}`,
-          textShadow: active ? '0 0 10px rgba(255,215,0,0.45)' : 'none',
+          color: active ? '#ffffff' : 'rgba(255,255,255,0.5)',
+          background: active ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.01)',
+          border: `1px solid ${active ? 'rgba(200,165,90,0.16)' : 'rgba(255,255,255,0.03)'}`,
+          boxShadow: active ? '0 14px 30px rgba(0,0,0,0.2)' : 'none',
+          textShadow: 'none',
         }}>
-        <span className="flex-shrink-0">{icon}</span>
+        <span
+          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-white/6"
+          style={{
+            color: active ? '#e6cf98' : 'rgba(255,255,255,0.58)',
+            background: active ? 'rgba(200,165,90,0.12)' : 'rgba(255,255,255,0.03)',
+          }}
+        >
+          {icon}
+        </span>
         {!collapsed && label}
       </HoverLink>
     )
   }
 
   return (
-    <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto overflow-x-hidden">
+    <nav className="flex-1 space-y-2 overflow-y-auto overflow-x-hidden px-3 py-4">
       {navItem('/dashboard', <LayoutDashboard size={16} />, t('dashboard'))}
       {role !== 'guest' && navItem('/credits', <CreditCard size={16} />, '积分 & 充值')}
 
       {!collapsed && (
         <div>
           <button onClick={() => setCoursesOpen(v => !v)}
-            className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors"
+            className="flex w-full items-center gap-2 rounded-[18px] border border-white/6 bg-white/[0.02] px-3 py-2.5 text-sm transition-colors"
             style={{ color: 'rgba(255,255,255,0.48)' }}>
             <BookOpen size={16} />
             <span className="flex-1 text-left">{t('my_courses')}</span>
             <span style={{ fontSize: 10, color: '#555' }}>{coursesOpen ? '▲' : '▼'}</span>
           </button>
           {coursesOpen && (
-            <div className="ml-4 mt-1 space-y-0.5">
+            <div className={`${SIDEBAR_CARD} mt-2 space-y-1 p-2 pl-3`}>
               {courses.map(c => {
                 const href = `/courses/${c.id}?view=flashcards`
                 const active = pathname.startsWith(`/courses/${c.id}`)
                 return (
                   <HoverLink key={c.id} href={href} onClick={onNavClick}
-                    className="items-center gap-2 px-3 py-1.5 rounded-lg text-xs truncate"
+                    className="items-center gap-2 rounded-[16px] px-3 py-2 text-[11px] truncate"
                     style={{
-                      color: active ? '#fff' : 'rgba(255,255,255,0.42)',
+                      color: active ? '#fff' : 'rgba(255,255,255,0.46)',
                       background: active ? 'rgba(255,255,255,0.05)' : 'transparent',
                       textShadow: 'none',
                     }}>
@@ -250,46 +342,51 @@ function SidebarFooter({
 
   if (collapsed) {
     return (
-      <div className="px-2 py-4 border-t flex flex-col items-center gap-2"
-        style={{ borderColor: 'rgba(255,215,0,0.08)' }}>
-        <button
-          onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
-          className="flex items-center justify-center w-8 h-8 rounded-lg text-xs transition-colors"
-          title={lang === 'zh' ? 'Switch to English' : '切换中文'}
-          style={{ color: 'rgba(255,255,255,0.58)', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-          🌐
-        </button>
-        <button onClick={logout}
-          className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors"
-          title={t('logout')}
-          style={{ color: 'rgba(255,255,255,0.42)' }}>
-          <LogOut size={15} />
-        </button>
+      <div className="border-t border-white/7 px-3 py-4">
+        <div className={`${SIDEBAR_CARD} flex flex-col items-center gap-2 p-2`}>
+          <button
+            onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+            className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/8 bg-white/[0.04] text-xs text-white/58 transition-colors hover:border-white/12 hover:bg-white/[0.06]"
+            title={lang === 'zh' ? 'English Version' : 'Chinese Version'}
+          >
+            <Globe size={14} />
+          </button>
+          <button
+            onClick={logout}
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/42 transition-colors hover:bg-white/[0.04] hover:text-white/70"
+            title={t('logout')}
+          >
+            <LogOut size={15} />
+          </button>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="px-3 py-4 border-t space-y-1" style={{ borderColor: 'rgba(255,215,0,0.08)' }}>
-      <button
-        onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
-        className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs transition-colors"
-        style={{ color: 'rgba(255,255,255,0.58)', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-        🌐 {lang === 'zh' ? 'Switch to English' : '切换为中文'}
-      </button>
-      <button onClick={logout}
-        className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors"
-        style={{ color: 'rgba(255,255,255,0.42)' }}>
-        <LogOut size={16} /> {t('logout')}
-      </button>
+    <div className="border-t border-white/7 px-3 py-4">
+      <div className={`${SIDEBAR_CARD} space-y-2 p-2`}>
+        <button
+          onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+          className="flex w-full items-center gap-2 rounded-[16px] border border-white/8 bg-white/[0.04] px-3 py-2.5 text-xs text-white/58 transition-colors hover:border-white/12 hover:bg-white/[0.06] hover:text-white/80"
+        >
+          <Globe size={14} /> {lang === 'zh' ? 'English Version' : 'Chinese Version'}
+        </button>
+        <button
+          onClick={logout}
+          className="flex w-full items-center gap-2 rounded-[16px] px-3 py-2.5 text-sm text-white/42 transition-colors hover:bg-white/[0.04] hover:text-white/74"
+        >
+          <LogOut size={16} /> {t('logout')}
+        </button>
+      </div>
     </div>
   )
 }
 
-// ── Sidebar shell (shared by mobile drawer and desktop) ───────────────────────
+// Sidebar shell (shared by mobile drawer and desktop)
 
 function SidebarShell({
-  courseId, currentCourse, courses, pathname, collapsed, user, logout, onNavClick,
+  courseId, currentCourse, courses, pathname, collapsed, user, logout, role, credits, onNavClick,
 }: {
   courseId: string | null
   currentCourse: Course | undefined
@@ -298,26 +395,13 @@ function SidebarShell({
   collapsed: boolean
   user: { email: string } | null
   logout: () => void
+  role?: string | null
+  credits?: number | null
   onNavClick?: () => void
 }) {
   return (
     <>
-      {/* Logo strip */}
-      <div className="border-b flex items-center"
-        style={{
-          borderColor: 'rgba(255,215,0,0.06)',
-          padding: collapsed ? '16px 0' : '16px',
-          justifyContent: collapsed ? 'center' : 'space-between',
-          minHeight: 64,
-          transition: 'padding 0.25s ease',
-        }}>
-        {!collapsed && (
-          <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
-            <ExamMasterLogo height={34} />
-            <div className="text-xs mt-0.5 truncate" style={{ color: '#555', maxWidth: 150 }}>{user?.email}</div>
-          </div>
-        )}
-      </div>
+      <SidebarHeader collapsed={collapsed} user={user} role={role} credits={credits} />
 
       {courseId
         ? (
@@ -381,7 +465,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const sidebarWidth = collapsed ? 56 : 240
 
   const sidebarProps = {
-    courseId, currentCourse, courses, pathname, collapsed, user, logout,
+    courseId, currentCourse, courses, pathname, collapsed, user, logout, role, credits,
   }
 
   return (
@@ -399,16 +483,25 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
           width: sidebarWidth,
           minWidth: sidebarWidth,
           borderRight: '1px solid rgba(255,255,255,0.06)',
-          background: 'rgba(9,11,16,0.86)',
+          background: SIDEBAR_SHELL_BG,
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
+          boxShadow: 'inset -1px 0 0 rgba(255,255,255,0.03)',
           transition: 'width 0.25s cubic-bezier(0.4,0,0.2,1), min-width 0.25s cubic-bezier(0.4,0,0.2,1)',
           overflow: 'hidden',
           position: 'relative',
         }}>
 
+        <SidebarHeader
+          collapsed={collapsed}
+          user={user}
+          role={role}
+          credits={credits}
+          onToggleCollapse={() => setCollapsed(v => !v)}
+        />
+
         {/* Logo + collapse toggle (desktop only) */}
-        <div className="border-b flex items-center"
+        <div className="hidden border-b items-center"
           style={{
             borderColor: 'rgba(255,215,0,0.06)',
             padding: collapsed ? '16px 0' : '16px',
@@ -472,7 +565,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
         className="fixed inset-y-0 left-0 z-50 flex flex-col md:hidden"
         style={{
           width: 260,
-          background: 'rgba(9,11,16,0.96)',
+          background: SIDEBAR_SHELL_BG,
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           borderRight: '1px solid rgba(255,255,255,0.08)',

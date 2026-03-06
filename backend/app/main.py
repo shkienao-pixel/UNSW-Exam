@@ -15,7 +15,7 @@ settings = get_settings()
 
 app = FastAPI(
     title="UNSW Exam Master API",
-    version="0.5.0",
+    version="0.7.0",
     description="Backend API for UNSW Exam Master — multi-user AI exam prep platform",
 )
 
