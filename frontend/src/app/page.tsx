@@ -287,12 +287,22 @@ export default function LandingPage() {
   const router = useRouter()
   const [guestLoading, setGuestLoading] = useState(false)
   const [guestError, setGuestError] = useState('')
+  const [introChecked, setIntroChecked] = useState(false)
 
   useEffect(() => {
+    if (!sessionStorage.getItem('intro_visited')) {
+      router.replace('/home')
+    } else {
+      setIntroChecked(true)
+    }
+  }, [router])
+
+  useEffect(() => {
+    if (!introChecked) return
     if (!loading && user && role !== 'guest') {
       router.replace('/dashboard')
     }
-  }, [loading, role, router, user])
+  }, [loading, role, router, user, introChecked])
 
   async function handleGuestLogin() {
     setGuestLoading(true)

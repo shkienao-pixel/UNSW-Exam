@@ -434,12 +434,6 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   useEffect(() => {
-    if (!sessionStorage.getItem('intro_visited')) {
-      router.replace('/home')
-    }
-  }, [])
-
-  useEffect(() => {
     if (!loading && !user) router.replace('/')
   }, [user, loading, router])
 
