@@ -72,7 +72,7 @@ export default function HomePage() {
           background: none;
           border: none;
           color: rgba(255, 255, 255, 0.56);
-          font-size: 0.85rem;
+          font-size: 1rem;
           font-weight: 500;
           letter-spacing: 0.06em;
           cursor: pointer;
@@ -95,7 +95,7 @@ export default function HomePage() {
 
       {btnReady ? (
         <button className="explore-btn" onClick={handleExplore}>
-          <ArrowRight size={15} className="explore-arrow" />
+          <ArrowRight size={18} className="explore-arrow" />
           <span>开始探索</span>
         </button>
       ) : null}
