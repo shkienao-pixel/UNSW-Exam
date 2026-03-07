@@ -238,8 +238,8 @@ def get_today_plan(
         try:
             exam_dt = datetime.fromisoformat(exam_at_str.replace("Z", "+00:00"))
             remaining_days = max(1, (exam_dt - datetime.now(timezone.utc)).days + 1)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("failed to parse exam_at '%s', using default remaining_days=30: %s", exam_at_str, exc)
 
     # ── Filter undone nodes ───────────────────────────────────────────────────
     undone = [n for n in body.outline_nodes if not n.done]

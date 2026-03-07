@@ -107,8 +107,8 @@ def _fallback_extract(
             total += len(text)
             if total >= max_chars:
                 break
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("text extraction failed for artifact %s: %s", a.get("id"), exc)
 
     return "\n\n".join(parts), sources
 

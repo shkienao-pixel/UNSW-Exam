@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Body
@@ -14,6 +15,7 @@ from app.services.course_service import get_course, list_artifacts
 import app.services.credit_service as credit_service
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # 所有他人上传的文件均需积分解锁（自己上传的永远免费）
 

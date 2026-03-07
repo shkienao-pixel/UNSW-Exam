@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
@@ -14,6 +15,7 @@ from app.models.auth import LoginRequest, RefreshRequest, RegisterRequest, Token
 from app.services import credit_service
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _build_token_response(session: Any) -> TokenResponse:

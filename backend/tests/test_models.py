@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -50,12 +50,12 @@ class TestCourseCreate:
 
 class TestCourseOut:
     def test_valid(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         c = CourseOut(id="abc123", code="COMP9900", name="Capstone", created_at=now, updated_at=now)
         assert c.id == "abc123"
 
     def test_serialization(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         c = CourseOut(id="x", code="Y", name="Z", created_at=now, updated_at=now)
         d = c.model_dump()
         assert d["code"] == "Y"
@@ -65,7 +65,7 @@ class TestCourseOut:
 
 class TestArtifactOut:
     def test_defaults(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         a = ArtifactOut(
             id=1, course_id="c1", file_name="test.pdf",
             file_hash="abc", file_path=None, created_at=now
@@ -76,7 +76,7 @@ class TestArtifactOut:
         assert a.storage_url is None
 
     def test_optional_fields(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         a = ArtifactOut(
             id=2, course_id="c1", file_name="doc.pdf",
             file_hash="xyz", file_path="/path/file.pdf",
@@ -90,31 +90,31 @@ class TestArtifactOut:
         assert a.storage_url == "https://cdn.example.com/doc.pdf"
 
     def test_doc_type_defaults_to_lecture(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         a = ArtifactOut(id=3, course_id="c1", file_name="f.pdf",
                         file_hash="h", created_at=now)
         assert a.doc_type == "lecture"
 
     def test_doc_type_revision_accepted(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         a = ArtifactOut(id=4, course_id="c1", file_name="r.pdf",
                         file_hash="h", created_at=now, doc_type="revision")
         assert a.doc_type == "revision"
 
     def test_doc_type_past_exam_accepted(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         a = ArtifactOut(id=5, course_id="c1", file_name="e.pdf",
                         file_hash="h", created_at=now, doc_type="past_exam")
         assert a.doc_type == "past_exam"
 
     def test_doc_type_invalid_rejected(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         with pytest.raises(ValidationError):
             ArtifactOut(id=6, course_id="c1", file_name="x.pdf",
                         file_hash="h", created_at=now, doc_type="slides")
 
     def test_doc_type_in_serialization(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         a = ArtifactOut(id=7, course_id="c1", file_name="f.pdf",
                         file_hash="h", created_at=now, doc_type="tutorial")
         d = a.model_dump()

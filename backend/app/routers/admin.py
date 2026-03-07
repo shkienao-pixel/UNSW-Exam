@@ -6,6 +6,7 @@ Used by the Next.js admin panel — never exposed to end users.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -35,6 +36,7 @@ except Exception:
     _purge_chunks = None   # type: ignore[assignment]
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _require_admin(x_admin_secret: str = Header(default="")) -> None:

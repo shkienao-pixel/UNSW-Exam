@@ -7,11 +7,14 @@ Data isolation is enforced via explicit ``.eq("user_id", user_id)`` filters
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime, timezone
 from typing import Any
 
 from supabase import Client
+
+logger = logging.getLogger(__name__)
 
 from app.core.exceptions import AppError, NotFoundError
 
@@ -92,16 +95,23 @@ def delete_course(supabase: Client, course_id: str) -> None:
 def set_exam_date(supabase: Client, course_id: str, exam_date: "datetime | None") -> dict[str, Any]:
     """Admin only: set or clear the exam date for a course."""
     value = exam_date.isoformat() if exam_date is not None else None
-    resp = (
+    # supabase-py update().eq() returns SyncFilterRequestBuilder in some versions,
+    # which does not support chaining .select() afterwards.
+    (
         supabase.table("courses")
         .update({"exam_date": value, "updated_at": _now_iso()})
         .eq("id", course_id)
-        .select("id, code, name, exam_date, created_at, updated_at")
         .execute()
     )
-    if not resp.data:
+    fetch = (
+        supabase.table("courses")
+        .select("id, code, name, exam_date, created_at, updated_at")
+        .eq("id", course_id)
+        .execute()
+    )
+    if not fetch.data:
         raise NotFoundError("Course")
-    return resp.data[0]
+    return fetch.data[0]
 
 
 # ── Artifacts ─────────────────────────────────────────────────────────────────

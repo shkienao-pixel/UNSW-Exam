@@ -43,5 +43,5 @@ def get_job(db: Client, job_id: str) -> dict | None:
 
 
 def _patch(db: Client, job_id: str, patch: dict) -> None:
-    patch["updated_at"] = datetime.datetime.utcnow().isoformat()
+    patch["updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
     db.table("generation_jobs").update(patch).eq("id", job_id).execute()

@@ -223,8 +223,8 @@ def process_artifact(
         # Remove stale docs for this artifact
         try:
             col.delete(where={"artifact_id": str(artifact_id)})
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("ChromaDB stale chunk deletion failed for artifact %s: %s", artifact_id, exc)
         col.add(
             ids        = [str(cid) for cid in chunk_ids],
             embeddings = embeddings,
@@ -549,8 +549,8 @@ def search_chunks(
             en = _translate_zh_to_en(query)
             if en and en.strip().lower() != query.strip().lower():
                 queries.append(en)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("zh→en translation failed, using original query: %s", exc)
 
     # ── Vector search via ChromaDB ────────────────────────────────────────────
     try:

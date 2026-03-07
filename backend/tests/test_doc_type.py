@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -20,7 +20,7 @@ class TestDocTypeLiteral:
     VALID = ["lecture", "tutorial", "revision", "past_exam", "assignment", "other"]
 
     def test_all_valid_values_accepted(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         for dt in self.VALID:
             a = ArtifactOut(
                 id=1, course_id="c", file_name="f.pdf",
@@ -29,7 +29,7 @@ class TestDocTypeLiteral:
             assert a.doc_type == dt
 
     def test_default_is_lecture(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         a = ArtifactOut(
             id=1, course_id="c", file_name="f.pdf",
             file_hash="h", created_at=now,
@@ -37,7 +37,7 @@ class TestDocTypeLiteral:
         assert a.doc_type == "lecture"
 
     def test_invalid_value_rejected(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         with pytest.raises(ValidationError):
             ArtifactOut(
                 id=1, course_id="c", file_name="f.pdf",
@@ -45,7 +45,7 @@ class TestDocTypeLiteral:
             )
 
     def test_empty_string_rejected(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         with pytest.raises(ValidationError):
             ArtifactOut(
                 id=1, course_id="c", file_name="f.pdf",
@@ -53,7 +53,7 @@ class TestDocTypeLiteral:
             )
 
     def test_case_sensitive_upper_rejected(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         with pytest.raises(ValidationError):
             ArtifactOut(
                 id=1, course_id="c", file_name="f.pdf",
@@ -62,7 +62,7 @@ class TestDocTypeLiteral:
 
     def test_past_exam_underscore_required(self):
         """past_exam uses underscore, not space."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         with pytest.raises(ValidationError):
             ArtifactOut(
                 id=1, course_id="c", file_name="f.pdf",
@@ -92,7 +92,7 @@ class TestDocTypeLabels:
 class TestArtifactOutWithDocType:
     def test_all_doc_types_roundtrip(self):
         """doc_type survives model_dump → model_validate cycle."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         for dt in ["lecture", "tutorial", "revision", "past_exam", "assignment", "other"]:
             a = ArtifactOut(
                 id=1, course_id="c1", file_name="f.pdf",
@@ -104,7 +104,7 @@ class TestArtifactOutWithDocType:
             assert restored.doc_type == dt
 
     def test_doc_type_included_in_serialization(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         a = ArtifactOut(
             id=2, course_id="c2", file_name="exam.pdf",
             file_hash="hh", created_at=now, doc_type="past_exam",
@@ -114,7 +114,7 @@ class TestArtifactOutWithDocType:
         assert d["doc_type"] == "past_exam"
 
     def test_revision_is_valid_and_distinct_from_lecture(self):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         a_rev = ArtifactOut(
             id=3, course_id="c3", file_name="rev.pdf",
             file_hash="r", created_at=now, doc_type="revision",
@@ -127,7 +127,7 @@ class TestArtifactOutWithDocType:
 
     def test_existing_fields_unaffected_by_doc_type(self):
         """Adding doc_type must not break existing field behaviour."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         a = ArtifactOut(
             id=5, course_id="c5", file_name="w.pdf",
             file_hash="ww", created_at=now,
