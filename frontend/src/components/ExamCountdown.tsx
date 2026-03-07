@@ -32,13 +32,14 @@ export default function ExamCountdown({ examDate, size = 'sm' }: Props) {
   const rem = target ? calcRemaining(target) : null
   const isOver = target && !rem
 
-  // <= 2 weeks: realtime countdown
+  // ≤14 days: 1s real-time countdown; >14 days: 1min refresh so display stays current
+  // and auto-transitions into real-time mode when the threshold is crossed
+  const isRealTime = !!(rem && rem.totalSec <= 14 * 86400)
   useEffect(() => {
-    if (!target || !rem || rem.totalSec > 14 * 86400) return
-    const id = setInterval(() => setTick(t => t + 1), 1000)
+    if (!target) return
+    const id = setInterval(() => setTick(t => t + 1), isRealTime ? 1000 : 60_000)
     return () => clearInterval(id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [examDate, rem?.weeks])
+  }, [examDate, isRealTime])
 
   if (!target) return null
 
@@ -86,7 +87,7 @@ export default function ExamCountdown({ examDate, size = 'sm' }: Props) {
       >
         <CalendarClock size={15} />
         <span>{label}</span>
-        <span className="ml-1 text-xs opacity-55">
+        <span className="ml-1 text-xs opacity-50">
           {target.toLocaleDateString(locale, { month: 'long', day: 'numeric' })}
         </span>
       </div>
@@ -94,6 +95,7 @@ export default function ExamCountdown({ examDate, size = 'sm' }: Props) {
   }
 
   if (rem) {
+
     const urgent = rem.days < 3
 
     if (size === 'sm') {
