@@ -8,17 +8,23 @@
   html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:Inter,Arial,"Microsoft YaHei",sans-serif}
   #stage{position:fixed;inset:0;background:#000;overflow:hidden}
   .vignette{position:absolute;inset:0;background:radial-gradient(circle at center, rgba(255,255,255,.012), rgba(0,0,0,1) 64%)}
+  .heroPhotoWrap{position:absolute;inset:0;opacity:0;pointer-events:none;z-index:1;overflow:hidden}
+  .heroPhoto{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:62% 10%;filter:saturate(.72) contrast(1.03) brightness(.66)}
+  .heroPhotoShade{position:absolute;inset:0;background:
+    radial-gradient(115% 95% at 50% 46%, rgba(130,165,190,.09), rgba(10,14,18,.62) 64%, rgba(0,0,0,.94) 100%),
+    linear-gradient(90deg, rgba(3,6,9,.62) 0%, rgba(9,14,20,.22) 40%, rgba(0,0,0,.50) 100%);
+    mix-blend-mode:normal}
   .grain{position:absolute;inset:0;opacity:.032;background-image:radial-gradient(circle, rgba(255,255,255,.65) 0.65px, transparent 0.85px);background-size:7px 7px;mix-blend-mode:soft-light;pointer-events:none}
 
   .frame{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(84vw,1120px);height:min(64vh,520px);border-radius:30px;border:1.05px solid rgba(255,255,255,.14);box-shadow:0 0 24px rgba(255,255,255,.04), inset 0 0 18px rgba(255,255,255,.016);background:transparent;overflow:visible}
   .frameGlow{position:absolute;inset:-2px;border-radius:32px;pointer-events:none;background:conic-gradient(from 0deg, rgba(255,90,90,0), rgba(255,65,120,.16), rgba(120,120,255,.14), rgba(60,255,220,.12), rgba(255,200,100,.12), rgba(255,90,90,0));filter:blur(20px);opacity:0;mix-blend-mode:screen}
   .frameSweep{position:absolute;inset:-1px;border-radius:31px;pointer-events:none;background:linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,.08) 46%, rgba(255,255,255,0) 60%);filter:blur(10px);opacity:0;transform:translateX(-28%)}
 
-  .letter{position:absolute;left:0;top:0;color:#fff;font-weight:800;letter-spacing:.06em;white-space:pre;user-select:none;will-change:transform,opacity,filter;text-shadow:0 0 10px rgba(255,255,255,.10), 0 0 24px rgba(255,255,255,.05)}
-  .guideBall{position:absolute;left:0;top:0;width:26px;height:26px;border-radius:50%;background:#fff;transform:translate(-50%,-50%) scale(1,1);opacity:1;will-change:transform,opacity}
+  .letter{position:absolute;left:0;top:0;color:#fff;font-weight:800;letter-spacing:.06em;white-space:pre;user-select:none;will-change:transform,opacity,filter;z-index:6;text-shadow:0 0 10px rgba(255,255,255,.10), 0 0 24px rgba(255,255,255,.05)}
+  .guideBall{position:absolute;left:0;top:0;width:26px;height:26px;border-radius:50%;background:#fff;transform:translate(-50%,-50%) scale(1,1);opacity:1;will-change:transform,opacity;z-index:6}
   .guideBall::before,.guideBall::after{content:none}
 
-  .sparkle{position:absolute;left:0;top:0;width:26px;height:26px;transform:translate(-50%,-50%) scale(.2);opacity:0;pointer-events:none;filter:drop-shadow(0 0 7px rgba(255,255,255,.95)) drop-shadow(0 0 16px rgba(255,255,255,.28));}
+  .sparkle{position:absolute;left:0;top:0;width:26px;height:26px;transform:translate(-50%,-50%) scale(.2);opacity:0;pointer-events:none;z-index:7;filter:drop-shadow(0 0 7px rgba(255,255,255,.95)) drop-shadow(0 0 16px rgba(255,255,255,.28));}
   .sparkle .coreH,.sparkle .coreV,.sparkle .diag1,.sparkle .diag2,.sparkle .miniA,.sparkle .miniB,.sparkle .miniC{position:absolute;left:50%;top:50%;display:block;background:#fff;border-radius:999px;transform-origin:center center}
   .sparkle .coreV{width:2.8px;height:22px;transform:translate(-50%,-50%)}
   .sparkle .coreH{width:22px;height:2.8px;transform:translate(-50%,-50%)}
@@ -29,10 +35,32 @@
   .sparkle .miniC{width:2.8px;height:2.8px;transform:translate(11px,10px) rotate(45deg);background:#fff;box-shadow:0 0 3px rgba(255,255,255,.28)}
 
   .flash{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(circle at center, rgba(255,42,42,.16), rgba(255,42,42,0) 48%);mix-blend-mode:screen}
+  .finalTagline{
+    position:absolute;left:0;top:0;transform:translate(0,0);
+    display:inline-flex;align-items:center;gap:9px;padding:8px 14px 10px 12px;
+    color:rgba(248,251,255,.97);font-size:clamp(18px,1.45vw,28px);font-weight:600;letter-spacing:.17em;
+    font-family:"Futura PT","Avenir Next","Helvetica Neue",Arial,sans-serif;
+    text-shadow:0 1px 1px rgba(0,0,0,.25),0 0 14px rgba(255,255,255,.14);
+    background:rgba(7,10,13,.52);border:1px solid rgba(255,255,255,.34);
+    box-shadow:0 10px 24px rgba(0,0,0,.3), inset 0 0 0 1px rgba(255,255,255,.1);
+    opacity:0;pointer-events:none;z-index:5;white-space:nowrap
+  }
+  .finalTagline::after{
+    content:'';display:block;width:26px;height:1px;flex:0 0 auto;background:rgba(255,255,255,.68)
+  }
+  @media (max-width: 900px){
+    .finalTagline{font-size:clamp(16px,4.2vw,23px);letter-spacing:.09em;padding:7px 12px 8px 10px;gap:8px}
+    .finalTagline::after{width:18px}
+  }
 </style>
 </head>
 <body>
 <div id="stage">
+  <div class="heroPhotoWrap" id="heroPhotoWrap">
+    <img class="heroPhoto" id="heroPhoto" src="./b7830f310f59c9f898266efbffdde304.jpg" alt="hero"/>
+    <div class="heroPhotoShade"></div>
+  </div>
+  <div class="finalTagline" id="finalTagline">&#22791;&#32771;&#65292;&#20174;&#26410;&#22914;&#27492;&#28165;&#26224;</div>
   <div class="vignette"></div>
   <div class="frame" id="frame">
     <div class="frameGlow" id="frameGlow"></div>
@@ -43,6 +71,9 @@
 </div>
 <script>
 const stage = document.getElementById('stage');
+const heroPhotoWrap = document.getElementById('heroPhotoWrap');
+const heroPhoto = document.getElementById('heroPhoto');
+const finalTagline = document.getElementById('finalTagline');
 const frame = document.getElementById('frame');
 const frameGlow = document.getElementById('frameGlow');
 const frameSweep = document.getElementById('frameSweep');
@@ -68,10 +99,23 @@ const bezier = (p0,p1,p2,p3,t) => {
 function starTarget(){
   return {x: Math.max(finalTextRightEdge() + 54, cx() + 470), y: H()*0.51 - 1};
 }
+function finalWordConfig(){
+  return timeline[timeline.length - 1];
+}
+function finalWordLayout(){
+  const final = finalWordConfig();
+  const layout = wordLayout(final.word, final.size);
+  const x0 = W()*final.xRatio - layout.total/2;
+  const y0 = H()*final.yRatio;
+  return {final, layout, x0, y0};
+}
 function finalTextRightEdge(){
-  const size = 102;
-  const layout = wordLayout('EXAM MASTER', size);
-  return W()*0.5 + layout.total/2;
+  const {layout, x0} = finalWordLayout();
+  return x0 + layout.total;
+}
+function finalTextLeftEdge(){
+  const {x0} = finalWordLayout();
+  return x0;
 }
 
 const ball = document.createElement('div');
@@ -167,20 +211,20 @@ function spawnGuidedWord({word, start, build=1600, hold=900, fade=420, size, xRa
 }
 
 const timeline = [
-  {word:'UNSW',   start:  450, build:1180, hold:880, fade:380, size:96, xRatio:.5, yRatio:.24, dir:'bottom', anchorSide:'top'},
-  {word:'EXAM',   start: 2350, build:1220, hold:930, fade:380, size:98, xRatio:.5, yRatio:.40, dir:'left', anchorSide:'right'},
-  {word:'MASTER', start: 4480, build:1320, hold:980, fade:420, size:84, xRatio:.5, yRatio:.56, dir:'right', anchorSide:'left'},
-  {word:'STUDY',  start: 6760, build:1220, hold:920, fade:380, size:88, xRatio:.5, yRatio:.72, dir:'top', anchorSide:'bottom'},
-  {word:'READY',  start: 8920, build:1180, hold:900, fade:400, size:82, xRatio:.5, yRatio:.86, dir:'bottom', anchorSide:'top'},
-  {word:'3周',    start:11280, build:1040, hold:720, fade:260, size:94, xRatio:.5, yRatio:.47, dir:'left', anchorSide:'right'},
-  {word:'2周',    start:12680, build:1040, hold:720, fade:260, size:104, xRatio:.5, yRatio:.47, dir:'right', anchorSide:'left'},
-  {word:'1周',    start:14080, build:1080, hold:1120, fade:300, size:118, xRatio:.5, yRatio:.47, dir:'bottom', anchorSide:'top', color:'#ff5151', red:true, pulse:true},
-  {word:'紧急复习',start:15820,build:1560, hold:1500, fade:420, size:128, xRatio:.5, yRatio:.50, dir:'bottom', anchorSide:'top', color:'#ff2f2f', red:true, pulse:true},
-  {word:'EXAM MASTER',start:18950,build:1420,hold:99999,fade:0,size:102,xRatio:.5,yRatio:.51,dir:'left',anchorSide:'right',finalHold:true}
+  {word:'2\u5468', start:  520, build:1000, hold:760,  fade:260, size:108, xRatio:.5, yRatio:.49, dir:'left',   anchorSide:'right'},
+  {word:'1\u5468', start: 1980, build:1020, hold:860,  fade:280, size:118, xRatio:.5, yRatio:.49, dir:'right',  anchorSide:'left', color:'#ff6464', red:true, pulse:true},
+  {word:'3\u5929', start: 3540, build:1120, hold:1180, fade:320, size:132, xRatio:.5, yRatio:.50, dir:'bottom', anchorSide:'top',  color:'#ff3a3a', red:true, pulse:true},
+  {word:'EXAM MASTER', start:5600, build:1380, hold:99999, fade:0, size:122, xRatio:.5, yRatio:.50, dir:'left', anchorSide:'right', finalHold:true}
 ];
 
+const FINAL_START = timeline[timeline.length - 1].start;
+const HERO_START = FINAL_START - 120;
+const TAGLINE_START = FINAL_START + 340;
+const MORPH_START = FINAL_START + 2500;
+const SPARKLE_START = MORPH_START + 760;
+const totalDuration = FINAL_START + 6400;
+
 timeline.forEach(spawnGuidedWord);
-const totalDuration = 25500;
 
 function renderLetter(o,t){
   const {el,start,build,hold,fade,endX,endY,dir,pulse,red,finalHold,c1,c2,startX,startY} = o;
@@ -283,7 +327,7 @@ function renderBall(t){
 }
 
 function renderSparkle(t, ballState){
-  const start = 22350;
+  const start = SPARKLE_START;
   const spinStart = start - 760;
   const target = starTarget();
   const p = clamp((t-start)/920,0,1);
@@ -303,6 +347,45 @@ function renderSparkle(t, ballState){
   sparkle.style.filter = `drop-shadow(0 0 ${8+7*Math.sin(t/260)**2}px rgba(255,255,255,.95)) drop-shadow(0 0 ${13+10*Math.sin(t/320)**2}px rgba(255,255,255,.16))`;
 }
 
+function renderHeroPhoto(t){
+  const start = HERO_START;
+  const fadeIn = 1200;
+  const p = clamp((t-start)/fadeIn, 0, 1);
+  if(p <= 0){
+    heroPhotoWrap.style.opacity = '0';
+    heroPhoto.style.transform = 'scale(1.065)';
+    return;
+  }
+  const e = easeOutCubic(p);
+  heroPhotoWrap.style.opacity = String(0.96 * e);
+  const drift = Math.sin(t/2600) * 0.9;
+  const lift = -58 + Math.sin(t/3200) * 1.2;
+  const scale = lerp(1.065, 1.0, e) + (1 - e) * 0.01;
+  heroPhoto.style.transform = `translate3d(${drift}px,${lift}px,0) scale(${scale})`;
+}
+
+function renderFinalTagline(t){
+  const start = TAGLINE_START;
+  const fadeIn = 900;
+  const p = clamp((t-start)/fadeIn, 0, 1);
+  const {final, y0} = finalWordLayout();
+  const left = finalTextLeftEdge();
+  const padLeft = parseFloat(getComputedStyle(finalTagline).paddingLeft) || 0;
+  const top = y0 + final.size * 0.74;
+  finalTagline.style.left = `${left - padLeft}px`;
+  finalTagline.style.top = `${top}px`;
+  if(p <= 0){
+    finalTagline.style.opacity = '0';
+    finalTagline.style.transform = 'translate(0,16px) scale(.985)';
+    return;
+  }
+  const e = easeOutCubic(p);
+  const rise = lerp(16, 0, e);
+  const scale = lerp(.985, 1, e);
+  finalTagline.style.opacity = String(0.95 * e);
+  finalTagline.style.transform = `translate(0,${rise}px) scale(${scale})`;
+}
+
 let startTs = null;
 function frameLoop(ts){
   if(!startTs) startTs = ts;
@@ -315,6 +398,8 @@ function frameLoop(ts){
   });
 
   const ballState = renderBall(t);
+  renderHeroPhoto(t);
+  renderFinalTagline(t);
   energy = Math.max(energy, .85);
   redEnergy = Math.max(redEnergy, ballState.red||0);
 
@@ -326,11 +411,11 @@ function frameLoop(ts){
   frameSweep.style.transform = `translateX(${(-28 + (t/24)%154)}%)`;
   flash.style.opacity = String(redEnergy*0.34*(0.45 + 0.55*Math.sin(t/95)**2));
 
-  const morph = clamp((t-21590)/1680,0,1);
+  const morph = clamp((t-MORPH_START)/1680,0,1);
   if(morph > 0){
     const target = starTarget();
-    const spinP = clamp((t-21590)/760,0,1);
-    const arriveP = clamp((t-22350)/920,0,1);
+    const spinP = clamp((t-MORPH_START)/760,0,1);
+    const arriveP = clamp((t-SPARKLE_START)/920,0,1);
     const radius = lerp(34, 10, easeInOutCubic(spinP));
     const angle = Math.PI*4*spinP;
     const orbitX = target.x + Math.cos(angle)*radius;

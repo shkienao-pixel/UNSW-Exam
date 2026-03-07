@@ -327,9 +327,34 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050608] text-white">
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,rgba(20,28,42,0.78),transparent_30%),radial-gradient(circle_at_85%_10%,rgba(200,165,90,0.08),transparent_18%),linear-gradient(180deg,#050608_0%,#080b12_50%,#050608_100%)]" />
+    <div className="relative min-h-screen overflow-x-hidden bg-[#050608] text-white">
+      <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_top,rgba(20,28,42,0.78),transparent_30%),radial-gradient(circle_at_85%_10%,rgba(200,165,90,0.08),transparent_18%),linear-gradient(180deg,#050608_0%,#080b12_50%,#050608_100%)]" />
+      <div
+        className="pointer-events-none absolute inset-0 z-[1] hidden md:block"
+        style={{
+          backgroundImage:
+            "radial-gradient(140% 118% at 86% 8%, rgba(5,6,8,0.00) 36%, rgba(5,6,8,0.14) 62%, rgba(5,6,8,0.40) 84%, rgba(5,6,8,0.70) 100%), linear-gradient(90deg, rgba(5,6,8,0.00) 34%, rgba(5,6,8,0.05) 52%, rgba(5,6,8,0.13) 66%, rgba(5,6,8,0.25) 80%, rgba(5,6,8,0.46) 100%), linear-gradient(90deg, rgba(5,6,8,0.96) 0%, rgba(5,6,8,0.78) 12%, rgba(5,6,8,0.52) 24%, rgba(5,6,8,0.26) 36%, rgba(5,6,8,0.08) 48%, rgba(5,6,8,0.00) 58%), url('/6f53e3fb2b7c6f648a1a4c323f102e71.jpg')",
+          backgroundRepeat: 'no-repeat, no-repeat, no-repeat, no-repeat',
+          backgroundSize: '100% 100%, 100% 100%, clamp(520px, 66vw, 980px) auto, clamp(520px, 66vw, 980px) auto',
+          backgroundPosition: 'center, center, calc(100% - 7vw) -62vh, calc(100% - 7vw) -62vh',
+          opacity: 0.95,
+          filter: 'saturate(1.0) contrast(1.07) brightness(1.03)',
+        }}
+      />
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-[46vh] md:hidden"
+        style={{
+          backgroundImage:
+            "linear-gradient(180deg, rgba(5,6,8,0.08) 0%, rgba(5,6,8,0.38) 52%, rgba(5,6,8,0.74) 82%, rgba(5,6,8,0.95) 100%), radial-gradient(140% 120% at 50% -8%, rgba(5,6,8,0.00) 34%, rgba(5,6,8,0.16) 58%, rgba(5,6,8,0.42) 86%, rgba(5,6,8,0.72) 100%), url('/6f53e3fb2b7c6f648a1a4c323f102e71.jpg')",
+          backgroundRepeat: 'no-repeat, no-repeat, no-repeat',
+          backgroundSize: '100% 100%, 100% 100%, cover',
+          backgroundPosition: 'center, center, center -18vh',
+          opacity: 0.72,
+          filter: 'saturate(0.9) contrast(1.02) brightness(0.92)',
+        }}
+      />
 
+      <div className="relative z-20">
       <nav className="sticky top-0 z-30 border-b border-white/6 bg-[rgba(5,6,8,0.72)] backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1280px] items-center justify-between gap-6 px-5 py-4 sm:px-6">
           <ExamMasterLogo height={29} />
@@ -459,6 +484,7 @@ export default function LandingPage() {
           </div>
         </section>
       </main>
+      </div>
     </div>
   )
 }

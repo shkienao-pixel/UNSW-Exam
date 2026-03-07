@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -68,20 +68,24 @@ export default function HomePage() {
           display: flex;
           align-items: center;
           gap: 8px;
-          padding: 8px 4px;
-          background: none;
-          border: none;
-          color: rgba(255, 255, 255, 0.56);
+          padding: 10px 14px;
+          background: rgba(8, 10, 14, 0.28);
+          border: 1px solid rgba(255, 255, 255, 0.42);
+          color: rgba(255, 255, 255, 0.76);
+          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.24), inset 0 0 0 1px rgba(255, 255, 255, 0.1);
           font-size: 1rem;
           font-weight: 500;
           letter-spacing: 0.06em;
           cursor: pointer;
-          transition: color 0.25s ease;
+          transition: color 0.25s ease, border-color 0.25s ease, background-color 0.25s ease, box-shadow 0.25s ease;
           animation: btn-fade-in 0.9s ease forwards;
         }
 
         .explore-btn:hover {
           color: rgba(255, 255, 255, 1);
+          border-color: rgba(255, 255, 255, 0.72);
+          background: rgba(11, 15, 20, 0.44);
+          box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28), inset 0 0 0 1px rgba(255, 255, 255, 0.15);
         }
 
         .explore-btn:hover .explore-arrow {
@@ -96,9 +100,11 @@ export default function HomePage() {
       {btnReady ? (
         <button className="explore-btn" onClick={handleExplore}>
           <ArrowRight size={18} className="explore-arrow" />
-          <span>开始探索</span>
+          <span>{'\u5f00\u59cb\u63a2\u7d22'}</span>
         </button>
       ) : null}
     </div>
   )
 }
+
+
