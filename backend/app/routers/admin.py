@@ -6,6 +6,7 @@ Used by the Next.js admin panel — never exposed to end users.
 
 from __future__ import annotations
 
+import hmac
 import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -41,7 +42,10 @@ logger = logging.getLogger(__name__)
 
 def _require_admin(x_admin_secret: str = Header(default="")) -> None:
     cfg = get_settings()
-    if not x_admin_secret or x_admin_secret not in cfg.admin_secrets_set:
+    # hmac.compare_digest: constant-time comparison prevents timing attacks
+    if not x_admin_secret or not any(
+        hmac.compare_digest(x_admin_secret, s) for s in cfg.admin_secrets_set
+    ):
         raise HTTPException(status_code=403, detail="Admin access required")
 
 

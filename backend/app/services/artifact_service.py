@@ -35,6 +35,12 @@ _EXT_TO_TYPE: dict[str, FileType] = {
     ".ipynb": "notebook",
 }
 
+# Magic bytes for file types that could be abused if faked by extension
+_MAGIC_BYTES: dict[str, bytes] = {
+    "pdf":  b"%PDF",
+    "word": b"PK\x03\x04",  # DOCX/XLSX/PPTX are ZIP archives
+}
+
 _TYPE_TO_MIME: dict[str, str] = {
     "pdf":      "application/pdf",
     "word":     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -48,6 +54,14 @@ _TYPE_TO_MIME: dict[str, str] = {
 def _detect_file_type(filename: str) -> FileType:
     ext = Path(filename).suffix.lower()
     return _EXT_TO_TYPE.get(ext, "other")
+
+
+def _check_magic_bytes(file_type: str, data: bytes) -> bool:
+    """Return False if file content doesn't match expected magic bytes."""
+    magic = _MAGIC_BYTES.get(file_type)
+    if magic is None:
+        return True
+    return data[: len(magic)] == magic
 
 
 def _sanitize_filename(name: str) -> str:
@@ -121,6 +135,12 @@ def store_file(
     safe_name = _sanitize_filename(file_name)
     file_hash = _file_hash(file_bytes)
     file_type = _detect_file_type(safe_name)
+
+    if not _check_magic_bytes(file_type, file_bytes):
+        raise AppError(
+            f"File content does not match its extension ({Path(safe_name).suffix}). "
+            "Please upload a valid file."
+        )
 
     # Storage path: {course_id}/{hash[:12]}_{filename}
     storage_path = f"{course_id}/{file_hash[:12]}_{safe_name}"

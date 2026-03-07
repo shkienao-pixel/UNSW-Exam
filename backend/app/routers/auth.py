@@ -55,11 +55,20 @@ def _validate_invite(supabase: Client, code: str) -> dict:
     return invite
 
 
-def _consume_invite(supabase: Client, invite: dict) -> None:
-    """Consume one use of an already-validated invite. Call only after successful sign_up."""
-    supabase.table("invites").update(
-        {"use_count": invite["use_count"] + 1}
-    ).eq("id", invite["id"]).execute()
+def _consume_invite(supabase: Client, invite: dict) -> bool:
+    """Atomically consume one invite use via optimistic locking.
+
+    Updates use_count only when it still equals the value we read (invite["use_count"]).
+    Returns True if consumed, False if a concurrent registration already changed it.
+    """
+    result = (
+        supabase.table("invites")
+        .update({"use_count": invite["use_count"] + 1})
+        .eq("id", invite["id"])
+        .eq("use_count", invite["use_count"])  # optimistic lock: only match if unchanged
+        .execute()
+    )
+    return bool(result.data)
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
@@ -79,9 +88,14 @@ def register(body: RegisterRequest, supabase: Client = Depends(get_db)) -> Token
             "Registration successful. Please check your email to confirm your account."
         )
 
-    # Step 3: consume invite only after successful sign_up
+    # Step 3: consume invite atomically — detect concurrent-registration race
     try:
-        _consume_invite(supabase, invite)
+        consumed = _consume_invite(supabase, invite)
+        if not consumed:
+            logger.warning(
+                "Invite code %s race: use_count changed between validate and consume",
+                invite.get("id"),
+            )
     except Exception:
         pass  # non-fatal: account is live, invite tracking failure is recoverable
 

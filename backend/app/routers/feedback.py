@@ -11,6 +11,7 @@ Admin-only:
 
 from __future__ import annotations
 
+import hmac
 import json
 from datetime import datetime, timezone
 from typing import Any
@@ -39,7 +40,9 @@ class FeedbackStatusUpdate(BaseModel):
 # ── Admin auth helper ──────────────────────────────────────────────────────────
 
 def _require_admin(x_admin_secret: str | None = Header(default=None)) -> None:
-    if not x_admin_secret or x_admin_secret not in get_settings().admin_secrets_set:
+    if not x_admin_secret or not any(
+        hmac.compare_digest(x_admin_secret, s) for s in get_settings().admin_secrets_set
+    ):
         raise HTTPException(status_code=403, detail="Forbidden")
 
 
