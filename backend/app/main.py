@@ -9,7 +9,9 @@ from fastapi.responses import JSONResponse
 from app.core.config import get_settings
 from app.core.exceptions import InsufficientCreditsError
 from app.core.supabase_client import get_supabase
+from app.services.generation_worker import start_generation_worker, stop_generation_workers
 from app.routers import auth, courses, artifacts, scope_sets, outputs, admin, content, generate, review, knowledge, feedback, credits
+from app.routers import course_content
 
 settings = get_settings()
 
@@ -44,6 +46,18 @@ app.include_router(knowledge.router,  prefix="",         tags=["knowledge"])
 app.include_router(feedback.router,   prefix="",         tags=["feedback"])
 app.include_router(credits.router,    prefix="/credits", tags=["credits"])
 app.include_router(credits.admin_router, prefix="/admin", tags=["admin"])
+app.include_router(course_content.router, prefix="/courses", tags=["course-content"])
+
+
+@app.on_event("startup")
+async def _startup_generation_workers() -> None:
+    app.state.generation_worker_tasks = start_generation_worker()
+
+
+@app.on_event("shutdown")
+async def _shutdown_generation_workers() -> None:
+    tasks = getattr(app.state, "generation_worker_tasks", [])
+    await stop_generation_workers(tasks)
 
 
 @app.exception_handler(InsufficientCreditsError)
