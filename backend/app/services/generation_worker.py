@@ -1,0 +1,143 @@
+"""Background generation worker for persistent job execution."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import os
+import socket
+from types import SimpleNamespace
+from typing import Any
+
+from supabase import Client
+
+from app.core.config import get_settings
+from app.core.supabase_client import get_supabase
+from app.services import generate_service, job_service
+
+logger = logging.getLogger(__name__)
+
+_GEN_FN = {
+    "summary": generate_service.run_summary,
+    "quiz": generate_service.run_quiz,
+    "outline": generate_service.run_outline,
+    "flashcards": generate_service.run_flashcards,
+}
+
+
+def _payload_to_body(payload: dict[str, Any]) -> SimpleNamespace:
+    """Convert persisted payload JSON to the body object expected by generate_service."""
+    return SimpleNamespace(
+        scope_set_id=payload.get("scope_set_id"),
+        artifact_ids=payload.get("artifact_ids"),
+        num_questions=int(payload.get("num_questions", 10)),
+        exclude_topics=list(payload.get("exclude_topics") or []),
+    )
+
+
+async def _run_job(db: Client, job: dict[str, Any], worker_id: str) -> None:
+    job_id = job["id"]
+    job_type = str(job.get("job_type", ""))
+    user_id = str(job.get("user_id", ""))
+    course_id = str(job.get("course_id", ""))
+    payload = job.get("request_payload") or {}
+
+    if job_type not in _GEN_FN:
+        await asyncio.to_thread(job_service.fail_job, db, job_id, f"Unsupported job_type: {job_type}")
+        return
+
+    try:
+        body = _payload_to_body(payload if isinstance(payload, dict) else {})
+        output = await asyncio.to_thread(_GEN_FN[job_type], db, user_id, course_id, body)
+        await asyncio.to_thread(job_service.finish_job, db, job_id, output["id"])
+        logger.info("generation job done worker=%s job=%s output=%s", worker_id, job_id, output["id"])
+    except Exception as exc:
+        logger.error("generation job failed worker=%s job=%s err=%s", worker_id, job_id, exc, exc_info=True)
+        await asyncio.to_thread(job_service.fail_job, db, job_id, str(exc))
+
+
+async def _dispatch_loop(worker_id: str) -> None:
+    cfg = get_settings()
+    db = get_supabase()
+    inflight: set[asyncio.Task] = set()
+    poll_interval = max(0.2, float(cfg.generation_worker_poll_interval))
+    max_concurrency = max(1, int(cfg.generation_worker_max_concurrency))
+    stale_reclaim_every = max(5.0, poll_interval * 10.0)
+    last_reclaim = 0.0
+
+    logger.info(
+        "generation worker started id=%s max_concurrency=%s poll=%.2fs",
+        worker_id,
+        max_concurrency,
+        poll_interval,
+    )
+
+    try:
+        while True:
+            now = asyncio.get_running_loop().time()
+            if now - last_reclaim >= stale_reclaim_every:
+                try:
+                    reclaimed = await asyncio.to_thread(
+                        job_service.reclaim_stale_processing_jobs,
+                        db,
+                        int(cfg.generation_job_timeout_seconds),
+                    )
+                    if reclaimed:
+                        logger.warning("reclaimed %s stale processing jobs", reclaimed)
+                except Exception as exc:
+                    logger.warning("stale-job reclaim failed: %s", exc)
+                last_reclaim = now
+
+            claimed_any = False
+            while len(inflight) < max_concurrency:
+                try:
+                    job = await asyncio.to_thread(job_service.claim_next_pending_job, db)
+                except Exception as exc:
+                    logger.warning("job claim failed: %s", exc)
+                    break
+                if not job:
+                    break
+                claimed_any = True
+                task = asyncio.create_task(_run_job(db, job, worker_id))
+                inflight.add(task)
+                task.add_done_callback(inflight.discard)
+
+            if not inflight and not claimed_any:
+                await asyncio.sleep(poll_interval)
+                continue
+
+            done, _ = await asyncio.wait(inflight, timeout=poll_interval, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                try:
+                    task.result()
+                except Exception:
+                    logger.exception("unexpected unhandled exception in generation worker task")
+    except asyncio.CancelledError:
+        logger.info("generation worker stopping id=%s", worker_id)
+        for task in inflight:
+            task.cancel()
+        if inflight:
+            await asyncio.gather(*inflight, return_exceptions=True)
+        raise
+
+
+def start_generation_worker() -> list[asyncio.Task]:
+    """Start generation worker task(s) for this process."""
+    cfg = get_settings()
+    if not cfg.generation_worker_enabled:
+        logger.info("generation worker disabled by config")
+        return []
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        logger.info("generation worker disabled under pytest")
+        return []
+
+    worker_id = f"{socket.gethostname()}-{os.getpid()}"
+    task = asyncio.create_task(_dispatch_loop(worker_id), name=f"generation-worker-{worker_id}")
+    return [task]
+
+
+async def stop_generation_workers(tasks: list[asyncio.Task]) -> None:
+    for task in tasks:
+        task.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
