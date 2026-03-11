@@ -48,6 +48,28 @@
 
 ## Changelog
 
+### v0.8.0 (2026-03-12)
+
+**Features:**
+- **Structured Knowledge Summary (summary_v1 schema)** — New JSON schema with sections (heading, content, exam_weight, key_terms, exam_tips, formulas), overview, quick_recap, and likely_exam_questions. Replaces the old flat markdown output
+- **AI Refine endpoint** — `POST /courses/{id}/course-content/{type}/refine` accepts any pasted text (markdown, HTML, JSON, notes) and uses GPT-4.1 to convert it into the summary_v1 schema. Saved as draft automatically
+- **Rich SummarySchemaRenderer** — New React component renders summary_v1 with: collapsible section cards with left-bar color coding (red=high / yellow=medium / gray=low exam weight), clickable key-term chips with definition tooltips, exam tips callout, formula code boxes, a "Possible Exam Questions" collapsible panel, and a TL;DR quick-recap card
+- **Two-column course summary layout** — Sticky TOC on the left (colored dots per exam_weight, click to toggle section), rich renderer on the right; falls back to markdown/HTML/JSON rendering for legacy formats
+- **Admin paste-box rewrite** — Removed PDF extraction; replaced with a multi-format paste editor. Auto-detects format (Markdown / HTML / JSON / summary_v1) with a live badge; one-click AI Refine converts to structured schema; tabbed Edit/Preview with format-appropriate preview renderer
+- **Format compatibility** — `parseContentJson()` unified parser handles summary_v1, `{format, content}`, `{markdown}`, and legacy `{weeks:[...]}` shapes
+
+**Fixes:**
+- Course page `load()` now has a `catch` block — prevents unhandled Promise rejection when `courses.get` fails on network errors
+- Admin `PUT /course-content` no longer returns 404 on first paste (upserts correctly when no row exists)
+
+**Refactors:**
+- Deleted 5 dead PDF-generation functions from `course_content_service.py` (−170 lines): `generate_summary`, `generate_outline`, `_parse_text_structure`, `_get_week_artifacts`, `update_status`
+- `course_content.py`: all inline imports moved to top; `_validate_content_type()` extracted to eliminate 6 duplicate validations; `admin_update_content` simplified to a single `upsert_content` call
+- `api.ts`: `req` / `nextReq` deduplicated via shared `_fetch()` (−30 lines)
+- `CourseContentTab.tsx`: `saveEdit` reuses tracked `detectedFormat` state; `ContentPreview` component extracted from nested ternaries
+
+---
+
 ### v0.7.0 (2026-03-06)
 
 **Features:**
@@ -643,6 +665,28 @@ Access `/admin` and enter the `X-Admin-Secret` in the UI.
 ---
 
 ## 更新日志
+
+### v0.8.0（2026-03-12）
+
+**新功能：**
+- **结构化知识摘要（summary_v1 Schema）** — 全新 JSON 格式，每个章节含 heading、content、exam_weight（高/中/低考率）、key_terms（核心术语+定义）、exam_tips、formulas；顶层含 overview、quick_recap、likely_exam_questions
+- **AI 精炼接口** — `POST /courses/{id}/course-content/{type}/refine`：将任意粘贴内容（Markdown、HTML、JSON、笔记）通过 GPT-4.1 转换为 summary_v1 结构化 Schema，自动存为草稿
+- **富文本 SummarySchemaRenderer 组件** — 新增 React 渲染组件：可折叠章节卡片（左侧色条：红=高考率 / 黄=中考率 / 灰=低）、可点击术语 Chip（悬浮弹出定义）、考试提示黄色标注框、公式代码块、"可能考题"折叠面板、TL;DR 速记卡
+- **课程摘要双栏布局** — 左侧粘性目录（按 exam_weight 显示彩色圆点，点击展开/收起对应章节）、右侧富文本渲染器；旧格式自动降级为 Markdown/HTML/JSON 渲染
+- **Admin 粘贴盒重构** — 移除 PDF 提取功能；改为多格式粘贴编辑器，实时检测格式（Markdown / HTML / JSON / summary_v1）并显示格式徽章；一键 AI 精炼；编辑/预览双模式，预览根据格式自适应渲染
+- **格式兼容性** — `parseContentJson()` 统一解析 summary_v1、`{format, content}`、`{markdown}`、旧版 `{weeks:[...]}` 四种格式
+
+**修复项：**
+- 课程页 `load()` 补充 `catch` 块，避免 `courses.get` 网络失败时抛出未捕获的 Promise rejection（控制台 `TypeError: Failed to fetch`）
+- Admin `PUT /course-content` 首次粘贴不再返回 404（行不存在时正确执行 insert）
+
+**重构：**
+- `course_content_service.py` 删除 5 个废弃 PDF 生成函数（−170 行）：`generate_summary`、`generate_outline`、`_parse_text_structure`、`_get_week_artifacts`、`update_status`
+- `course_content.py`：所有 inline import 移至文件顶部；提取 `_validate_content_type()` 消除 6 处重复校验；`admin_update_content` 简化为单次 `upsert_content`
+- `api.ts`：`req` / `nextReq` 提取公共 `_fetch()` 去重（−30 行）
+- `CourseContentTab.tsx`：`saveEdit` 直接复用已追踪的 `detectedFormat` state；提取 `ContentPreview` 组件消除嵌套三元
+
+---
 
 ### v0.7.0（2026-03-06）
 
