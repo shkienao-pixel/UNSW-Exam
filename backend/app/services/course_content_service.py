@@ -132,24 +132,79 @@ def _get_week_artifacts(
     return buckets
 
 
+def _parse_text_structure(text: str, week_num: int) -> tuple[str, list[str], str]:
+    """
+    从原始文本中用启发式规则提取结构：
+    - 短行（<= 80字符）、非句子结尾、至少2个词 → 视为 slide 标题
+    - 第一个有意义标题 → week title
+    - 所有标题 → key_points（最多8个）
+    - 按标题分段生成 markdown content
+    """
+    import re
+
+    # 过滤噪声行（页码、单个数字、纯符号等）
+    _noise = re.compile(r'^[\d\s\-–—|•·▪▸►◦»«\[\]()]+$')
+
+    lines = [l.rstrip() for l in text.splitlines()]
+
+    headings: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or _noise.match(stripped):
+            continue
+        word_count = len(stripped.split())
+        is_short = len(stripped) <= 80
+        ends_with_prose = stripped.endswith(('.', ',', ';', ':', '?', '!'))
+        if is_short and not ends_with_prose and word_count >= 2:
+            headings.append(stripped)
+
+    # 去重保序
+    seen: set[str] = set()
+    unique_headings: list[str] = []
+    for h in headings:
+        key = h.lower()
+        if key not in seen:
+            seen.add(key)
+            unique_headings.append(h)
+
+    # 过滤管理类信息（讲师、学期、课程编号等）
+    _admin = re.compile(
+        r'\b(tutor|lecturer|professor|semester|term|school of|faculty|week \d+|copyright|all rights|©)\b',
+        re.IGNORECASE,
+    )
+    content_headings = [h for h in unique_headings if not _admin.search(h)]
+
+    title = content_headings[0] if content_headings else f"Week {week_num}"
+    key_points = content_headings[1:9] if len(content_headings) > 1 else content_headings[:8]
+
+    # 构建 markdown：遇到标题加 ##，其余行原样
+    heading_set = set(h.lower() for h in content_headings[:20])
+    md_parts: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.lower() in heading_set:
+            md_parts.append(f"\n## {stripped}")
+        else:
+            md_parts.append(stripped)
+
+    content = "\n".join(md_parts).strip()
+    return title, key_points, content
+
+
 def generate_summary(db: Client, course_id: str) -> dict:
     from app.services.artifact_service import download_artifact_bytes
     from app.services.text_extractor import extract_text
-    from app.core.config import get_settings
-    from openai import OpenAI
-    import json
 
     week_map = _get_week_artifacts(db, course_id)
     if not week_map:
         raise ValueError("No lecture artifacts with week assigned found for this course")
 
-    settings = get_settings()
-    client = OpenAI(api_key=settings.openai_api_key, timeout=120.0)
-
     weeks_output = []
     for week_num in sorted(week_map.keys()):
         arts = week_map[week_num]
-        parts = []
+        all_texts: list[str] = []
         for a in arts:
             sp = a.get("storage_path")
             ft = a.get("file_type", "pdf")
@@ -158,45 +213,21 @@ def generate_summary(db: Client, course_id: str) -> dict:
             try:
                 data = download_artifact_bytes(db, sp)
                 text = extract_text(ft, data, a["file_name"])
-                parts.append(f"=== {a['file_name']} ===\n{text[:8000]}")
+                all_texts.append(text)
             except Exception as exc:
                 logger.warning("Failed to extract week %d artifact %s: %s", week_num, a.get("file_name"), exc)
 
-        if not parts:
+        if not all_texts:
             continue
 
-        week_text = "\n\n".join(parts)
-        resp = client.chat.completions.create(
-            model="gpt-4.1",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an academic knowledge extractor. "
-                        "Given lecture slides for one week, extract: "
-                        "1) a short title for the week (5-10 words), "
-                        "2) 5-8 key_points as short phrases, "
-                        "3) a detailed markdown summary of the week's content. "
-                        "Exclude administrative info (tutor names, dates, grading). "
-                        "Respond ONLY as JSON: "
-                        '{\"title\":\"...\",\"key_points\":[\"...\"],\"content\":\"markdown...\"}'
-                    ),
-                },
-                {"role": "user", "content": f"Week {week_num} lecture materials:\n\n{week_text[:12000]}"},
-            ],
-            temperature=0.3,
-            response_format={"type": "json_object"},
-        )
-        try:
-            parsed = json.loads(resp.choices[0].message.content or "{}")
-        except Exception:
-            parsed = {"title": f"Week {week_num}", "key_points": [], "content": ""}
+        combined = "\n\n".join(all_texts)
+        title, key_points, content = _parse_text_structure(combined, week_num)
 
         weeks_output.append({
             "week": week_num,
-            "title": parsed.get("title", f"Week {week_num}"),
-            "key_points": parsed.get("key_points", []),
-            "content": parsed.get("content", ""),
+            "title": title,
+            "key_points": key_points,
+            "content": content,
         })
 
     if not weeks_output:
