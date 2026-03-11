@@ -45,7 +45,7 @@ function CoursePageInner() {
     try {
       const c = await api.courses.get(courseId)
       setCourse(c)
-      // Load artifacts, scope-sets, credits independently
+      // Load artifacts, scope-sets, credits independently — individual failures don't crash page
       const [arts, scopes, bal] = await Promise.allSettled([
         api.artifacts.list(courseId),
         api.scopeSets.list(courseId),
@@ -54,6 +54,8 @@ function CoursePageInner() {
       if (arts.status === 'fulfilled') setArtifacts(arts.value)
       if (scopes.status === 'fulfilled') setScopeSets(scopes.value)
       if (bal.status === 'fulfilled') setCreditBalance(bal.value.balance)
+    } catch (e) {
+      console.warn('[load] failed to load course data:', e)
     } finally {
       setLoading(false)
     }
