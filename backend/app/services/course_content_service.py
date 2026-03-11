@@ -132,65 +132,45 @@ def _get_week_artifacts(
     return buckets
 
 
-def _parse_text_structure(text: str, week_num: int) -> tuple[str, list[str], str]:
-    """
-    从原始文本中用启发式规则提取结构：
-    - 短行（<= 80字符）、非句子结尾、至少2个词 → 视为 slide 标题
-    - 第一个有意义标题 → week title
-    - 所有标题 → key_points（最多8个）
-    - 按标题分段生成 markdown content
-    """
+def _parse_text_structure(text: str, week_num: int) -> tuple[str, str]:
+    """从原始文本提取结构，返回 (week_title, markdown_block)。"""
     import re
 
-    # 过滤噪声行（页码、单个数字、纯符号等）
     _noise = re.compile(r'^[\d\s\-–—|•·▪▸►◦»«\[\]()]+$')
+    _admin = re.compile(
+        r'\b(tutor|lecturer|professor|semester|term|school of|faculty|copyright|all rights|©)\b',
+        re.IGNORECASE,
+    )
 
     lines = [l.rstrip() for l in text.splitlines()]
 
     headings: list[str] = []
-    for line in lines:
-        stripped = line.strip()
-        if not stripped or _noise.match(stripped):
-            continue
-        word_count = len(stripped.split())
-        is_short = len(stripped) <= 80
-        ends_with_prose = stripped.endswith(('.', ',', ';', ':', '?', '!'))
-        if is_short and not ends_with_prose and word_count >= 2:
-            headings.append(stripped)
-
-    # 去重保序
     seen: set[str] = set()
-    unique_headings: list[str] = []
-    for h in headings:
-        key = h.lower()
-        if key not in seen:
-            seen.add(key)
-            unique_headings.append(h)
-
-    # 过滤管理类信息（讲师、学期、课程编号等）
-    _admin = re.compile(
-        r'\b(tutor|lecturer|professor|semester|term|school of|faculty|week \d+|copyright|all rights|©)\b',
-        re.IGNORECASE,
-    )
-    content_headings = [h for h in unique_headings if not _admin.search(h)]
-
-    title = content_headings[0] if content_headings else f"Week {week_num}"
-    key_points = content_headings[1:9] if len(content_headings) > 1 else content_headings[:8]
-
-    # 构建 markdown：遇到标题加 ##，其余行原样
-    heading_set = set(h.lower() for h in content_headings[:20])
-    md_parts: list[str] = []
     for line in lines:
-        stripped = line.strip()
-        if not stripped:
+        s = line.strip()
+        if not s or _noise.match(s):
             continue
-        if stripped.lower() in heading_set:
-            md_parts.append(f"\n## {stripped}")
-        else:
-            md_parts.append(stripped)
+        if (len(s) <= 80 and not s.endswith(('.', ',', ';', ':', '?', '!'))
+                and len(s.split()) >= 2):
+            key = s.lower()
+            if key not in seen and not _admin.search(s):
+                seen.add(key)
+                headings.append(s)
 
-    content = "\n".join(md_parts).strip()
-    return title, key_points, content
+    week_title = headings[0] if headings else f"Week {week_num}"
+    heading_set = set(h.lower() for h in headings[:20])
+
+    md_lines: list[str] = [f"## {week_title}", ""]
+    for line in lines:
+        s = line.strip()
+        if not s:
+            continue
+        if s.lower() in heading_set and s != week_title:
+            md_lines.append(f"\n### {s}")
+        else:
+            md_lines.append(s)
+
+    return week_title, "\n".join(md_lines)
 
 
 def generate_summary(db: Client, course_id: str) -> dict:
@@ -201,7 +181,7 @@ def generate_summary(db: Client, course_id: str) -> dict:
     if not week_map:
         raise ValueError("No lecture artifacts with week assigned found for this course")
 
-    weeks_output = []
+    blocks: list[str] = []
     for week_num in sorted(week_map.keys()):
         arts = week_map[week_num]
         all_texts: list[str] = []
@@ -221,20 +201,14 @@ def generate_summary(db: Client, course_id: str) -> dict:
             continue
 
         combined = "\n\n".join(all_texts)
-        title, key_points, content = _parse_text_structure(combined, week_num)
+        _, block = _parse_text_structure(combined, week_num)
+        blocks.append(block)
 
-        weeks_output.append({
-            "week": week_num,
-            "title": title,
-            "key_points": key_points,
-            "content": content,
-        })
-
-    if not weeks_output:
+    if not blocks:
         raise ValueError("No content generated - check that lecture artifacts have text")
 
-    content_json = {"weeks": weeks_output}
-    return upsert_content(db, course_id, "summary", content_json, status="draft")
+    markdown = "# 课程摘要\n\n" + "\n\n---\n\n".join(blocks)
+    return upsert_content(db, course_id, "summary", {"markdown": markdown}, status="draft")
 
 
 def generate_outline(db: Client, course_id: str) -> dict:
