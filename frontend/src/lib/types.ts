@@ -261,3 +261,34 @@ export interface Feedback {
   status: FeedbackStatus
   created_at: string
 }
+
+// ── Course Content ─────────────────────────────────────────────────────────────
+
+export type CourseContentStatus = 'not_published' | 'locked' | 'unlocked'
+
+export interface CourseContentWeek {
+  week: number
+  title: string
+  key_points: string[]
+  content: string
+}
+
+export interface CourseContentSummary {
+  weeks: CourseContentWeek[]
+}
+
+export interface CourseContentOutlineNode {
+  id: string
+  title: string
+  level: number
+}
+
+export interface CourseContentOutlineWeek {
+  week: number
+  title: string
+  nodes: CourseContentOutlineNode[]
+}
+
+export interface CourseContentOutline {
+  weeks: CourseContentOutlineWeek[]
+}

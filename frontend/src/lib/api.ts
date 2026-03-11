@@ -3,7 +3,7 @@ import type {
   GenerateBody, AskResponse, ExplainImageResponse,
   ReviewSettings, ReviewNodeProgress, ReviewNodeUpdate, TodayPlanResult,
   KnowledgeOutline, KnowledgeGraph, KnowledgeOutlineNode, KnowledgeResult,
-  DocType, Feedback, FeedbackStatus,
+  DocType, Feedback, FeedbackStatus, CourseContentStatus,
 } from './types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8005'
@@ -349,5 +349,21 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ package: pkg, success_url: successUrl, cancel_url: cancelUrl }),
       }),
+  },
+
+  courseContent: {
+    status: (courseId: string, contentType: 'summary' | 'outline') =>
+      req<{ status: CourseContentStatus; credits_required: number }>(
+        `/courses/${courseId}/course-content/${contentType}/status`
+      ),
+    unlock: (courseId: string, contentType: 'summary' | 'outline') =>
+      req<{ ok: boolean; already_unlocked: boolean; credits_spent?: number }>(
+        `/courses/${courseId}/course-content/${contentType}/unlock`,
+        { method: 'POST' }
+      ),
+    get: (courseId: string, contentType: 'summary' | 'outline') =>
+      req<{ content_json: Record<string, unknown> }>(
+        `/courses/${courseId}/course-content/${contentType}`
+      ),
   },
 }
