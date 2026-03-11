@@ -53,14 +53,19 @@ export function getDocTypeOptions(lang: UiLang) {
 }
 
 export async function adminReq<T>(secret: string, path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(API + path, {
-    ...options,
-    headers: {
-      'X-Admin-Secret': secret,
-      'Content-Type': 'application/json',
-      ...(options.headers as Record<string, string> | undefined),
-    },
-  })
+  let res: Response
+  try {
+    res = await fetch(API + path, {
+      ...options,
+      headers: {
+        'X-Admin-Secret': secret,
+        'Content-Type': 'application/json',
+        ...(options.headers as Record<string, string> | undefined),
+      },
+    })
+  } catch {
+    throw new Error('网络连接失败，请检查后端服务是否运行')
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
     throw new Error(err.detail || `HTTP ${res.status}`)
