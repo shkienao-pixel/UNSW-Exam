@@ -119,7 +119,7 @@ def set_exam_date(supabase: Client, course_id: str, exam_date: "datetime | None"
 
 _ARTIFACT_COLS = (
     "id, course_id, user_id, file_name, file_hash, file_path, file_type, doc_type, status, "
-    "storage_path, storage_url, reject_reason, uploaded_by, created_at"
+    "storage_path, storage_url, reject_reason, uploaded_by, created_at, week"
 )
 
 
