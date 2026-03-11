@@ -164,7 +164,7 @@ def generate_summary(db: Client, course_id: str) -> dict:
 
         week_text = "\n\n".join(parts)
         resp = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4.1",
             messages=[
                 {
                     "role": "system",
