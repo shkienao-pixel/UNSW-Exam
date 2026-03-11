@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowRight,
@@ -63,6 +63,13 @@ export default function DashboardPage() {
   const [courses, setCourses] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
   const { role } = useAuth()
+  const guestDemoExamAt = useMemo(() => {
+    // Keep guest demo countdown stable in each session (about 18 days out).
+    const d = new Date()
+    d.setDate(d.getDate() + 18)
+    d.setHours(9, 0, 0, 0)
+    return d.toISOString()
+  }, [])
 
   useEffect(() => {
     api.courses
@@ -172,6 +179,8 @@ export default function DashboardPage() {
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {displayCourses.map((course) => {
               const insight = getCourseInsight(course, role)
+              const countdownDate =
+                course.exam_date || (role === 'guest' && course.code === 'COMP9517' ? guestDemoExamAt : null)
 
               return (
                 <Link
@@ -195,7 +204,13 @@ export default function DashboardPage() {
                   <h3 className="mt-5 text-lg font-medium leading-7 text-white">{course.name}</h3>
 
                   <div className="mt-4 min-h-[32px]">
-                    <ExamCountdown examDate={course.exam_date} size="sm" />
+                    {countdownDate ? (
+                      <ExamCountdown examDate={countdownDate} size="sm" />
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-xs text-white/42">
+                        未设置考试日期
+                      </span>
+                    )}
                   </div>
 
                   <div className="mt-5 flex flex-wrap gap-2">
