@@ -95,18 +95,23 @@ def record_unlock(
     db: Client, user_id: str, course_id: str, content_type: str
 ) -> dict:
     cost = UNLOCK_COSTS[content_type]
-    result = (
+    db.table("user_content_unlocks").insert({
+        "user_id": user_id,
+        "course_id": course_id,
+        "content_type": content_type,
+        "credits_spent": cost,
+    }).execute()
+    fetch = (
         db.table("user_content_unlocks")
-        .insert({
-            "user_id": user_id,
-            "course_id": course_id,
-            "content_type": content_type,
-            "credits_spent": cost,
-        })
-        .select()
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("course_id", course_id)
+        .eq("content_type", content_type)
+        .order("unlocked_at", desc=True)
+        .limit(1)
         .execute()
     )
-    return result.data[0]
+    return fetch.data[0]
 
 
 # ── Generation ────────────────────────────────────────────────────────────────
@@ -212,25 +217,27 @@ def generate_summary(db: Client, course_id: str) -> dict:
 
 
 def generate_outline(db: Client, course_id: str) -> dict:
+    """从 summary 的 markdown 中提取 ## 标题作为大纲节点。"""
+    import re
+
     summary = get_content(db, course_id, "summary")
     if not summary:
         raise ValueError("Generate summary first before generating outline")
 
-    weeks_data = summary["content_json"].get("weeks", [])
-    weeks_output = []
-    for w in weeks_data:
-        nodes = []
-        for i, kp in enumerate(w.get("key_points", [])):
-            nodes.append({
-                "id": f"w{w['week']}_n{i}",
-                "title": kp,
-                "level": 1,
-            })
-        weeks_output.append({
-            "week": w["week"],
-            "title": w.get("title", f"Week {w['week']}"),
-            "nodes": nodes,
-        })
+    markdown = summary["content_json"].get("markdown", "")
+    if not markdown:
+        raise ValueError("Summary has no markdown content — regenerate summary first")
 
-    content_json = {"weeks": weeks_output}
-    return upsert_content(db, course_id, "outline", content_json, status="draft")
+    nodes = []
+    for i, line in enumerate(markdown.splitlines()):
+        m = re.match(r'^(#{1,3})\s+(.+)', line)
+        if m:
+            level = len(m.group(1))
+            title = m.group(2).strip()
+            nodes.append({
+                "id": f"n{i}",
+                "title": title,
+                "level": level,
+            })
+
+    return upsert_content(db, course_id, "outline", {"nodes": nodes}, status="draft")
