@@ -1,6 +1,7 @@
 """Course content routes - admin generation + user unlock/view."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -58,9 +59,16 @@ def admin_update_content(
 ) -> dict[str, Any]:
     if content_type not in ("summary", "outline"):
         raise HTTPException(status_code=422, detail="content_type must be summary or outline")
+
     row = svc.get_content(db, course_id, content_type)
+
+    # First-time paste: row doesn't exist yet — create it
     if not row:
-        raise HTTPException(status_code=404, detail="Content not found - generate first")
+        content_json = body.content_json or {}
+        status = body.status or "draft"
+        if status not in ("draft", "published", "hidden"):
+            raise HTTPException(status_code=422, detail="Invalid status")
+        return svc.upsert_content(db, course_id, content_type, content_json, status=status)
 
     from datetime import datetime, timezone
     update: dict[str, Any] = {"updated_at": datetime.now(timezone.utc).isoformat()}
@@ -86,6 +94,44 @@ def admin_update_content(
         .execute()
     )
     return fetch.data[0] if fetch.data else {}
+
+
+class RefineRequest(BaseModel):
+    context: str
+
+
+@router.post("/{course_id}/course-content/{content_type}/refine")
+async def admin_refine_content(
+    course_id: str,
+    content_type: str,
+    body: RefineRequest,
+    _: None = Depends(_require_admin),
+    db: Client = Depends(get_db),
+) -> dict[str, Any]:
+    """Use LLM to convert raw context text into summary_v1 schema, save as draft."""
+    if content_type not in ("summary", "outline"):
+        raise HTTPException(status_code=422, detail="content_type must be summary or outline")
+    if not body.context.strip():
+        raise HTTPException(status_code=422, detail="context must not be empty")
+
+    import app.services.llm_key_service as key_svc
+    openai_key = key_svc.get_api_key("openai", db)
+    if not openai_key:
+        raise HTTPException(status_code=400, detail="OpenAI API key not configured")
+
+    try:
+        from app.services.content_schema_service import generate_schema_from_context
+        schema = await asyncio.to_thread(
+            generate_schema_from_context, body.context, content_type, openai_key
+        )
+        result = svc.upsert_content(db, course_id, content_type, schema, status="draft")
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        import traceback
+        logger.error("refine_content failed %s/%s:\n%s", course_id, content_type, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"AI refinement failed: {str(exc)[:200]}")
 
 
 @router.get("/{course_id}/course-content/{content_type}/status")

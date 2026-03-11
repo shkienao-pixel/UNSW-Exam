@@ -292,3 +292,31 @@ export interface CourseContentOutlineWeek {
 export interface CourseContentOutline {
   weeks: CourseContentOutlineWeek[]
 }
+
+// ── Summary Schema V1 ─────────────────────────────────────────────────────────
+
+export type ExamWeight = 'high' | 'medium' | 'low'
+
+export interface SummaryKeyTerm {
+  term: string
+  definition: string
+}
+
+export interface SummarySection {
+  heading: string
+  content: string
+  exam_weight: ExamWeight
+  key_terms: SummaryKeyTerm[]
+  exam_tips: string[]
+  formulas?: string[]
+}
+
+export interface SummarySchemaV1 {
+  format: 'summary_v1'
+  title: string
+  overview: string
+  sections: SummarySection[]
+  quick_recap: string
+  likely_exam_questions: string[]
+}
+

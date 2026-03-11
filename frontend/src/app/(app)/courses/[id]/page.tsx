@@ -18,6 +18,8 @@ import { addMistake } from '@/lib/mistakes-store'
 import MistakesView from '@/components/MistakesView'
 import InsufficientCreditsModal from '@/components/InsufficientCreditsModal'
 import ReactMarkdown from 'react-markdown'
+import SummarySchemaRenderer from '@/components/SummarySchemaRenderer'
+import type { SummarySchemaV1 } from '@/lib/types'
 import ReviewOutlineTab from '@/components/ReviewOutlineTab'
 import ResourceHubTab from '@/components/ResourceHubTab'
 import KnowledgeTab from '@/components/KnowledgeTab'
@@ -418,19 +420,31 @@ function extractTocFromHtml(html: string): { id: string; title: string; level: n
   return toc
 }
 
-/** 解析 content_json，返回统一的 { format, content } */
-function parseContentJson(json: Record<string, unknown>): { format: 'markdown' | 'html' | 'json'; content: string } {
-  if (json.format && json.content) {
-    return { format: json.format as 'markdown' | 'html' | 'json', content: json.content as string }
+type ContentFormat = 'markdown' | 'html' | 'json' | 'summary_v1'
+
+/** 解析 content_json，返回统一的 { format, content, schema } */
+function parseContentJson(json: Record<string, unknown>): {
+  format: ContentFormat
+  content: string
+  schema: SummarySchemaV1 | null
+} {
+  // 结构化 Schema V1
+  if (json.format === 'summary_v1') {
+    return { format: 'summary_v1', content: '', schema: json as unknown as SummarySchemaV1 }
   }
-  if (json.markdown) return { format: 'markdown', content: json.markdown as string }
+  // 通用 format+content 结构
+  if (json.format && json.content) {
+    return { format: json.format as ContentFormat, content: json.content as string, schema: null }
+  }
+  // 旧版 { markdown }
+  if (json.markdown) return { format: 'markdown', content: json.markdown as string, schema: null }
   // 旧版 weeks 格式
   if (json.weeks && Array.isArray(json.weeks)) {
     const blocks = (json.weeks as { week: number; title: string; content: string }[])
       .map(w => `## ${w.title}\n\n${w.content}`)
-    return { format: 'markdown', content: '# 课程摘要\n\n' + blocks.join('\n\n---\n\n') }
+    return { format: 'markdown', content: '# 课程摘要\n\n' + blocks.join('\n\n---\n\n'), schema: null }
   }
-  return { format: 'markdown', content: '' }
+  return { format: 'markdown', content: '', schema: null }
 }
 
 /** Markdown 渲染（带 TOC anchor） */
@@ -555,11 +569,14 @@ function JsonContent({ content }: { content: string }) {
 function SummaryTab({ courseId }: { courseId: string }) {
   const [status, setStatus]                   = useState<'loading' | 'not_published' | 'locked' | 'unlocked'>('loading')
   const [creditsRequired, setCreditsRequired] = useState(200)
-  const [format, setFormat]                   = useState<'markdown' | 'html' | 'json'>('markdown')
+  const [format, setFormat]                   = useState<ContentFormat>('markdown')
   const [content, setContent]                 = useState('')
+  const [schema, setSchema]                   = useState<SummarySchemaV1 | null>(null)
   const [unlocking, setUnlocking]             = useState(false)
   const [error, setError]                     = useState<string | null>(null)
   const contentRef                            = useRef<HTMLDivElement>(null)
+  // For schema_v1: track open section for TOC highlight
+  const [activeSectionIdx, setActiveSectionIdx] = useState<number | null>(null)
 
   useEffect(() => {
     api.courseContent.status(courseId, 'summary').then(res => {
@@ -572,15 +589,15 @@ function SummaryTab({ courseId }: { courseId: string }) {
   async function loadContent() {
     try {
       const res = await api.courseContent.get(courseId, 'summary')
-      const { format: fmt, content: cnt } = parseContentJson(res.content_json)
-      setFormat(fmt)
-      setContent(cnt)
+      const parsed = parseContentJson(res.content_json)
+      setFormat(parsed.format)
+      setContent(parsed.content)
+      setSchema(parsed.schema)
     } catch { setError('加载失败，请刷新重试') }
   }
 
   async function handleUnlock() {
-    setUnlocking(true)
-    setError(null)
+    setUnlocking(true); setError(null)
     try {
       await api.courseContent.unlock(courseId, 'summary')
       setStatus('unlocked')
@@ -597,14 +614,16 @@ function SummaryTab({ courseId }: { courseId: string }) {
 
   function scrollTo(id: string) {
     if (format === 'html') {
-      // HTML 内容在 iframe 里，通过 contentDocument 操作
       const iframe = contentRef.current?.querySelector('iframe') as HTMLIFrameElement | null
-      const el = iframe?.contentDocument?.querySelector(`[data-heading-id="${id}"]`)
-      el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      iframe?.contentDocument?.querySelector(`[data-heading-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       return
     }
-    if (!contentRef.current) return
-    const el = contentRef.current.querySelector(`[data-heading-id="${id}"]`)
+    contentRef.current?.querySelector(`[data-heading-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  function scrollToSection(index: number) {
+    setActiveSectionIdx(index)
+    const el = document.querySelector(`[data-section-index="${index}"]`)
     el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
@@ -628,8 +647,7 @@ function SummaryTab({ courseId }: { courseId: string }) {
       <p className="text-xl font-bold text-white">知识摘要</p>
       <p className="text-sm" style={{ color: '#777' }}>系统整理的课程核心知识，可作为刷题参考</p>
       {error && <p className="text-sm" style={{ color: '#FF6666' }}>{error}</p>}
-      <button
-        onClick={handleUnlock} disabled={unlocking}
+      <button onClick={handleUnlock} disabled={unlocking}
         className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm"
         style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.35)' }}>
         {unlocking ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
@@ -639,20 +657,48 @@ function SummaryTab({ courseId }: { courseId: string }) {
     </div>
   )
 
+  // ── Schema V1: two-column with section TOC ──
+  if (format === 'summary_v1' && schema) {
+    const WEIGHT_DOT: Record<string, string> = { high: '#FF6B6B', medium: '#FFD700', low: '#444' }
+    return (
+      <div className="flex gap-0 min-h-[70vh]">
+        {/* Left TOC */}
+        <div className="w-52 flex-shrink-0 pr-4">
+          <div className="sticky top-4 space-y-0.5 max-h-[calc(100vh-140px)] overflow-y-auto">
+            <p className="text-xs font-semibold mb-3 uppercase tracking-wider" style={{ color: '#555' }}>章节</p>
+            {schema.sections.map((sec, i) => (
+              <button key={i} onClick={() => scrollToSection(i)}
+                className="w-full text-left text-xs py-1.5 px-2 rounded-lg transition-all hover:bg-white/5 leading-snug flex items-center gap-2"
+                style={{ color: activeSectionIdx === i ? '#FFD700' : '#888', background: activeSectionIdx === i ? 'rgba(255,215,0,0.06)' : 'transparent' }}>
+                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                  style={{ background: WEIGHT_DOT[sec.exam_weight] ?? '#444' }} />
+                <span className="truncate">{sec.heading}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="w-px flex-shrink-0 mr-6" style={{ background: 'rgba(255,255,255,0.06)' }} />
+        {/* Right content */}
+        <div className="flex-1 min-w-0">
+          {error && <p className="text-sm mb-4" style={{ color: '#FF6666' }}>{error}</p>}
+          <SummarySchemaRenderer schema={schema} onTocClick={scrollToSection} />
+        </div>
+      </div>
+    )
+  }
+
+  // ── Flat formats: markdown / html / json ──
   const toc = format === 'markdown' ? extractToc(content) : format === 'html' ? extractTocFromHtml(content) : []
 
   return (
     <div className="flex gap-0 min-h-[70vh]">
-      {/* 左侧 TOC（仅 markdown/html 有标题结构时显示） */}
       {toc.length > 0 && (
         <>
           <div className="w-52 flex-shrink-0 pr-4">
             <div className="sticky top-4 space-y-0.5 max-h-[calc(100vh-140px)] overflow-y-auto">
               <p className="text-xs font-semibold mb-3 uppercase tracking-wider" style={{ color: '#555' }}>目录</p>
               {toc.map((item, i) => (
-                <button
-                  key={i}
-                  onClick={() => scrollTo(item.id)}
+                <button key={i} onClick={() => scrollTo(item.id)}
                   className="w-full text-left text-xs py-1.5 rounded-lg transition-all hover:bg-white/5 leading-snug"
                   style={{
                     color: item.level === 1 ? '#FFD700' : item.level === 2 ? '#CCC' : '#888',
@@ -668,11 +714,10 @@ function SummaryTab({ courseId }: { courseId: string }) {
         </>
       )}
 
-      {/* 右侧正文 */}
       {error && <p className="text-sm mb-4" style={{ color: '#FF6666' }}>{error}</p>}
       {format === 'markdown' && <MarkdownContent content={content} contentRef={contentRef} />}
-      {format === 'html' && <HtmlContent content={content} contentRef={contentRef} />}
-      {format === 'json' && <JsonContent content={content} />}
+      {format === 'html'     && <HtmlContent     content={content} contentRef={contentRef} />}
+      {format === 'json'     && <JsonContent      content={content} />}
     </div>
   )
 }
