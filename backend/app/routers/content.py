@@ -7,7 +7,6 @@ Called by Next.js API Routes before sending to OpenAI.
 
 from __future__ import annotations
 
-import io
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
@@ -22,46 +21,9 @@ from app.services.course_service import (
     list_artifacts,
     list_artifacts_by_ids,
 )
+from app.services.text_extractor import extract_text
 
 router = APIRouter()
-
-
-def _extract_text(file_type: str, data: bytes, file_name: str) -> str:
-    if file_type == "pdf":
-        return _extract_pdf(data)
-    elif file_type == "word":
-        return _extract_word(data)
-    elif file_type == "python":
-        return data.decode("utf-8", errors="replace")
-    elif file_type == "url":
-        return f"[URL reference: see storage_url field]"
-    else:
-        try:
-            return data.decode("utf-8", errors="replace")
-        except Exception:
-            return f"[Binary file: {file_name}]"
-
-
-def _extract_pdf(data: bytes) -> str:
-    try:
-        from pypdf import PdfReader
-        reader = PdfReader(io.BytesIO(data))
-        parts = []
-        for page in reader.pages:
-            text = page.extract_text() or ""
-            parts.append(text)
-        return "\n\n".join(parts)
-    except Exception as exc:
-        return f"[PDF extraction failed: {exc}]"
-
-
-def _extract_word(data: bytes) -> str:
-    try:
-        from docx import Document
-        doc = Document(io.BytesIO(data))
-        return "\n".join(para.text for para in doc.paragraphs if para.text.strip())
-    except Exception as exc:
-        return f"[Word extraction failed: {exc}]"
 
 
 @router.get("/{course_id}/content")
@@ -109,7 +71,7 @@ def get_course_content(
         elif storage_path:
             try:
                 raw = download_artifact_bytes(supabase, storage_path)
-                text = _extract_text(file_type, raw, art["file_name"])
+                text = extract_text(file_type, raw, art["file_name"])
             except AppError as e:
                 text = f"[Download error: {e}]"
         else:

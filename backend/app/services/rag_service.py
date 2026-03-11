@@ -19,7 +19,6 @@ Retrieval flow (for generation / Q&A):
 
 from __future__ import annotations
 
-import io
 import logging
 import random
 import re
@@ -32,6 +31,7 @@ from supabase import Client
 
 from app.core.config import get_settings
 from app.core.exceptions import AppError
+from app.services.text_extractor import extract_text as _extract_raw_text
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -42,31 +42,9 @@ _TOP_K          = 6     # default retrieval count
 
 _CHINESE_RE = re.compile(r'[\u4e00-\u9fff]')
 
-# ── Text extraction ───────────────────────────────────────────────────────────
 
 def _extract_raw(file_type: str, data: bytes) -> str:
-    if file_type == "pdf":
-        try:
-            from pypdf import PdfReader
-            reader = PdfReader(io.BytesIO(data))
-            pages: list[str] = []
-            for i, page in enumerate(reader.pages):
-                text = page.extract_text() or ""
-                if text.strip():
-                    pages.append(f"[Page {i+1}]\n{text}")
-            return "\n\n".join(pages)
-        except Exception as exc:
-            return f"[PDF extraction failed: {exc}]"
-
-    if file_type == "word":
-        try:
-            from docx import Document
-            doc = Document(io.BytesIO(data))
-            return "\n\n".join(p.text for p in doc.paragraphs if p.text.strip())
-        except Exception as exc:
-            return f"[Word extraction failed: {exc}]"
-
-    return data.decode("utf-8", errors="replace")
+    return _extract_raw_text(file_type, data, page_markers=True)
 
 
 # ── Text cleaning ─────────────────────────────────────────────────────────────
@@ -301,35 +279,17 @@ def get_artifact_ids_by_doc_type(
     return [r["id"] for r in rows]
 
 
-# ── Get all chunks (for full-doc generation) ─────────────────────────────────
+# ── Shared helpers ────────────────────────────────────────────────────────────
 
-def get_course_chunks(
+def _build_context_and_sources(
     supabase: Client,
-    course_id: str,
-    artifact_ids: list[int] | None = None,
-    max_chars: int = 80_000,
+    chunks: list[dict[str, Any]],
+    max_chars: int,
 ) -> tuple[str, list[dict[str, Any]]]:
-    """
-    Return (context_text, sources) for generation.
-    context_text: concatenated clean chunks (truncated to max_chars)
-    sources:      [{artifact_id, file_name, storage_url}]
-    """
-    q = (
-        supabase.table("artifact_chunks")
-        .select("id, artifact_id, chunk_index, content")
-        .eq("course_id", course_id)
-        .order("artifact_id")
-        .order("chunk_index")
-    )
-    if artifact_ids:
-        q = q.in_("artifact_id", artifact_ids)
-
-    chunks = q.execute().data or []
-
+    """Build (context_text, sources) from a pre-fetched list of chunk rows."""
     if not chunks:
         return "", []
 
-    # Fetch source artifact metadata
     art_ids = list({c["artifact_id"] for c in chunks})
     arts = (
         supabase.table("artifacts")
@@ -339,7 +299,6 @@ def get_course_chunks(
     ).data or []
     art_map: dict[int, dict] = {a["id"]: a for a in arts}
 
-    # Build context text
     parts: list[str] = []
     total = 0
     for c in chunks:
@@ -349,8 +308,6 @@ def get_course_chunks(
         parts.append(content)
         total += len(content)
 
-    context = "\n\n".join(parts)
-
     sources = [
         {
             "artifact_id": aid,
@@ -359,8 +316,29 @@ def get_course_chunks(
         }
         for aid in art_ids
     ]
+    return "\n\n".join(parts), sources
 
-    return context, sources
+
+# ── Get all chunks (for full-doc generation) ─────────────────────────────────
+
+def get_course_chunks(
+    supabase: Client,
+    course_id: str,
+    artifact_ids: list[int] | None = None,
+    max_chars: int = 80_000,
+) -> tuple[str, list[dict[str, Any]]]:
+    """Return (context_text, sources) for generation — all chunks, ordered."""
+    q = (
+        supabase.table("artifact_chunks")
+        .select("id, artifact_id, chunk_index, content")
+        .eq("course_id", course_id)
+        .order("artifact_id")
+        .order("chunk_index")
+    )
+    if artifact_ids:
+        q = q.in_("artifact_id", artifact_ids)
+    chunks = q.execute().data or []
+    return _build_context_and_sources(supabase, chunks, max_chars)
 
 
 # ── Sampled context (anti-repetition generation) ─────────────────────────────
@@ -375,13 +353,8 @@ def get_course_chunks_sampled(
 ) -> tuple[str, list[dict[str, Any]]]:
     """带随机采样的上下文构建，专为防重复生成设计。
 
-    流程：
-      1. 从 DB 检索最多 fetch_limit 个 chunks（覆盖课程全部知识面）
-      2. random.shuffle() 随机打乱顺序
-      3. 取前 sample_n 个，按 max_chars 上限拼接上下文
-
-    每次生成时 LLM 看到不同的"原材料"切片，从根本上避免重复题目。
-    返回 (context_text, sources)，格式与 get_course_chunks() 相同。
+    每次随机打乱 fetch_limit 个 chunks，取前 sample_n 个，
+    确保 LLM 每次看到不同的知识面切片，避免重复题目。
     """
     q = (
         supabase.table("artifact_chunks")
@@ -391,45 +364,11 @@ def get_course_chunks_sampled(
     )
     if artifact_ids:
         q = q.in_("artifact_id", artifact_ids)
-
     chunks = q.execute().data or []
     if not chunks:
         return "", []
-
-    # 随机打乱 — 确保每次传给 LLM 的知识面切片不同
     random.shuffle(chunks)
-    sampled = chunks[:sample_n]
-
-    # 获取来源文件元数据
-    art_ids = list({c["artifact_id"] for c in sampled})
-    arts = (
-        supabase.table("artifacts")
-        .select("id, file_name, storage_url")
-        .in_("id", art_ids)
-        .execute()
-    ).data or []
-    art_map: dict[int, dict] = {a["id"]: a for a in arts}
-
-    # 拼接上下文（respect max_chars）
-    parts: list[str] = []
-    total = 0
-    for c in sampled:
-        content = c["content"]
-        if total + len(content) > max_chars:
-            break
-        parts.append(content)
-        total += len(content)
-
-    context = "\n\n".join(parts)
-    sources = [
-        {
-            "artifact_id": aid,
-            "file_name":   art_map[aid]["file_name"] if aid in art_map else "unknown",
-            "storage_url": art_map[aid].get("storage_url", "") if aid in art_map else "",
-        }
-        for aid in art_ids
-    ]
-    return context, sources
+    return _build_context_and_sources(supabase, chunks[:sample_n], max_chars)
 
 
 # ── Metadata sync (doc_type 变更时同步到 ChromaDB) ───────────────────────────
