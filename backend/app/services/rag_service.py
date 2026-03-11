@@ -482,89 +482,52 @@ def search_chunks(
     - Falls back to DB scan if ChromaDB is unavailable or empty
     Returns list of {content, artifact_id, file_name, storage_url, chunk_index}
     """
-    queries = [query]
-    if _is_chinese(query):
-        try:
-            en = _translate_zh_to_en(query)
-            if en and en.strip().lower() != query.strip().lower():
-                queries.append(en)
-        except Exception as exc:
-            logger.warning("zh→en translation failed, using original query: %s", exc)
+    from app.services.retrieval import multi_retrieve, RetrievalConfig
+    cfg = RetrievalConfig(
+        dense_top_k=max(top_k * 3, 15),
+        sparse_top_k=max(top_k * 3, 15),
+        final_top_k=top_k,
+        query=query,
+        bilingual=_is_chinese(query),
+    )
+    enriched = multi_retrieve(supabase, course_id, cfg, artifact_ids)
+    if enriched:
+        return enriched
 
-    # ── Vector search via ChromaDB ────────────────────────────────────────────
-    try:
-        col = _chroma_collection(course_id)
-        if col.count() == 0:
-            raise ValueError("empty collection")
-
-        embeddings = _embed(queries)
-        seen: set[str] = set()
-        results: list[dict[str, Any]] = []
-
-        for emb in embeddings:
-            n = min(top_k, col.count())
-            qr = col.query(query_embeddings=[emb], n_results=n)
-            for i, doc_id in enumerate(qr["ids"][0]):
-                if doc_id not in seen:
-                    seen.add(doc_id)
-                    meta = qr["metadatas"][0][i]
-                    art_id = int(meta.get("artifact_id", 0))
-                    if artifact_ids and art_id not in artifact_ids:
-                        continue
-                    results.append({
-                        "chunk_id":    doc_id,
-                        "content":     qr["documents"][0][i],
-                        "artifact_id": art_id,
-                        "file_name":   meta.get("file_name", ""),
-                        "chunk_index": meta.get("chunk_index", 0),
-                        "distance":    qr["distances"][0][i] if qr.get("distances") else 0.5,
-                    })
-
-        results.sort(key=lambda x: x.get("distance", 1))
-        results = results[:top_k]
-
-    except Exception:
-        # ── Fallback: keyword-style DB scan ──────────────────────────────────
-        q = (
-            supabase.table("artifact_chunks")
-            .select("id, artifact_id, chunk_index, content")
-            .eq("course_id", course_id)
-            .limit(top_k * 3)
-        )
-        if artifact_ids:
-            q = q.in_("artifact_id", artifact_ids)
-        rows = q.execute().data or []
-        results = [
-            {
-                "chunk_id":    str(r["id"]),
-                "content":     r["content"],
-                "artifact_id": r["artifact_id"],
-                "chunk_index": r["chunk_index"],
-                "file_name":   "",
-                "distance":    0.5,
-            }
-            for r in rows[:top_k]
-        ]
-
+    # DB 兜底（保留原有逻辑）
+    q = (
+        supabase.table("artifact_chunks")
+        .select("id, artifact_id, chunk_index, content")
+        .eq("course_id", course_id)
+        .limit(top_k * 3)
+    )
+    if artifact_ids:
+        q = q.in_("artifact_id", artifact_ids)
+    rows = q.execute().data or []
+    results = [
+        {
+            "chunk_id": str(r["id"]),
+            "content": r["content"],
+            "artifact_id": r["artifact_id"],
+            "chunk_index": r["chunk_index"],
+            "file_name": "",
+            "storage_url": "",
+            "distance": 0.5,
+        }
+        for r in rows[:top_k]
+    ]
     if not results:
         return []
-
-    # ── Enrich with storage_url from artifacts table ──────────────────────────
-    art_ids = list({r["artifact_id"] for r in results})
+    art_ids_list = list({r["artifact_id"] for r in results})
     arts = (
         supabase.table("artifacts")
         .select("id, file_name, storage_url")
-        .in_("id", art_ids)
+        .in_("id", art_ids_list)
         .execute()
     ).data or []
-    art_map: dict[int, dict] = {a["id"]: a for a in arts}
-
+    art_map = {a["id"]: a for a in arts}
     for r in results:
         aid = r["artifact_id"]
-        if aid in art_map:
-            r["file_name"]   = art_map[aid]["file_name"]
-            r["storage_url"] = art_map[aid].get("storage_url", "")
-        else:
-            r.setdefault("storage_url", "")
-
+        r["file_name"] = art_map.get(aid, {}).get("file_name", "")
+        r["storage_url"] = art_map.get(aid, {}).get("storage_url", "")
     return results
