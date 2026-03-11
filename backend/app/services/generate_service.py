@@ -25,6 +25,8 @@ from app.services.course_service import (
     list_artifacts_by_ids,
 )
 from app.services.rag_service import get_artifact_ids_by_doc_type, get_course_chunks_sampled
+from app.services.retrieval import multi_retrieve, RetrievalConfig
+from app.services.retrieval.multi_retriever import FLASHCARD_CONFIG, QUIZ_CONFIG
 from app.core.exceptions import AppError
 
 logger = logging.getLogger(__name__)
@@ -249,10 +251,23 @@ def run_quiz(db: Client, user_id: str, course_id: str, body) -> dict:
         priority_doc_types=["past_exam"],
         fallback_doc_types=None,
     )
-    ctx, sources = get_course_chunks_sampled(
-        db, course_id, art_ids,
-        sample_n=15, fetch_limit=200,
-    )
+    raw_hits = multi_retrieve(db, course_id, RetrievalConfig(
+        dense_top_k=QUIZ_CONFIG.dense_top_k,
+        sparse_top_k=QUIZ_CONFIG.sparse_top_k,
+        final_top_k=QUIZ_CONFIG.final_top_k,
+        query=QUIZ_CONFIG.query,
+    ), art_ids)
+    sources: list[dict] = []
+    if raw_hits:
+        ctx = "\n\n".join(h["content"] for h in raw_hits)
+        seen_art: set[int] = set()
+        for h in raw_hits:
+            aid = h["artifact_id"]
+            if aid not in seen_art:
+                seen_art.add(aid)
+                sources.append({"artifact_id": aid, "file_name": h["file_name"], "storage_url": h["storage_url"]})
+    else:
+        ctx, sources = get_course_chunks_sampled(db, course_id, art_ids, sample_n=15, fetch_limit=200)
     if not ctx.strip():
         raise AppError("未找到「往年考题」类型的文件。请在管理后台上传往年试卷并将 doc_type 设为「往年考题 (past_exam)」后重试。")
 
@@ -369,11 +384,15 @@ def run_flashcards(db: Client, user_id: str, course_id: str, body) -> dict:
         fallback_doc_types=["tutorial"],
     )
 
-    ctx, _ = get_course_chunks_sampled(
-        db, course_id, art_ids,
-        sample_n=12, fetch_limit=200,
-    )
-    if not ctx.strip():
+    raw_hits = multi_retrieve(db, course_id, RetrievalConfig(
+        dense_top_k=FLASHCARD_CONFIG.dense_top_k,
+        sparse_top_k=FLASHCARD_CONFIG.sparse_top_k,
+        final_top_k=FLASHCARD_CONFIG.final_top_k,
+        query=FLASHCARD_CONFIG.query,
+    ), art_ids)
+    if raw_hits:
+        ctx = "\n\n".join(h["content"] for h in raw_hits)
+    else:
         ctx, _ = _get_context(db, user_id, course_id, art_ids)
     if not ctx.strip():
         raise AppError("No content found — please wait for files to be indexed")
