@@ -1,16 +1,16 @@
-"""AI generation endpoints — summary, quiz, outline, flashcards, ask, translate.
+﻿"""AI generation endpoints 鈥?summary, quiz, outline, flashcards, ask, translate.
 
 All generation uses pre-cleaned, chunked content from artifact_chunks table.
 
 Q&A (/ask) uses a 4-stage multi-model pipeline:
-  Stage 1 — Supabase pgvector / ChromaDB  : retrieve top-K relevant chunks
-  Stage 2 — GPT-4o-mini (judge)           : filter irrelevant chunks
-  Stage 3 — Gemini 2.0 Flash              : generate grounded final answer
-  Stage 4 — Imagen 3 (optional)           : visual aid for complex topics
+  Stage 1 鈥?Supabase pgvector / ChromaDB  : retrieve top-K relevant chunks
+  Stage 2 鈥?GPT-4o-mini (judge)           : filter irrelevant chunks
+  Stage 3 鈥?Gemini 2.0 Flash              : generate grounded final answer
+  Stage 4 鈥?Imagen 3 (optional)           : visual aid for complex topics
 
 Other endpoints (summary, quiz, outline, flashcards) are ASYNC:
-  POST → {job_id} immediately (~100ms)
-  Background asyncio task runs the generation
+  POST 鈫?{job_id} immediately (~100ms)
+  Persistent DB queue + background worker runs the generation
   GET /{course_id}/jobs/{job_id} to poll status
 
 POST /courses/{id}/generate/summary
@@ -24,7 +24,6 @@ GET  /courses/{id}/jobs/{job_id}
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from typing import Any, Optional
@@ -35,13 +34,10 @@ from supabase import Client
 
 from app.core.config import get_settings
 from app.core.dependencies import get_current_user, get_db
-from app.core.exceptions import AppError
 from app.services.credit_service import credit_guard
 from app.services.course_service import (
     get_course,
     get_scope_set,
-    list_artifacts_by_ids,
-    list_artifacts,
 )
 from app.services.rag_service import get_artifact_ids_by_doc_type, get_course_chunks_sampled
 from app.services import job_service, generate_service
@@ -50,13 +46,13 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-# ── Request schemas ───────────────────────────────────────────────────────────
+# 鈹€鈹€ Request schemas 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 class GenerateRequest(BaseModel):
     scope_set_id:   int | None       = None
     artifact_ids:   list[int] | None = None
     num_questions:  int               = 10
-    exclude_topics: list[str]         = []  # 历史题目主题，生成时回避
+    exclude_topics: list[str]         = []  # 鍘嗗彶棰樼洰涓婚锛岀敓鎴愭椂鍥為伩
 
 
 class AskRequest(BaseModel):
@@ -70,37 +66,40 @@ class TranslateRequest(BaseModel):
     target_lang: str = "en"  # 'en' or 'zh'
 
 
-# ── Background job runner ─────────────────────────────────────────────────────
+def _serialize_generate_payload(body: GenerateRequest) -> dict[str, Any]:
+    return {
+        "scope_set_id": body.scope_set_id,
+        "artifact_ids": body.artifact_ids,
+        "num_questions": body.num_questions,
+        "exclude_topics": body.exclude_topics,
+    }
 
-_GEN_FN = {
-    "summary":    generate_service.run_summary,
-    "quiz":       generate_service.run_quiz,
-    "outline":    generate_service.run_outline,
-    "flashcards": generate_service.run_flashcards,
-}
 
-
-async def _run_job_bg(
-    db: Client,
-    job_id: str,
-    job_type: str,
+def _enqueue_generation_job(
+    supabase: Client,
     user_id: str,
     course_id: str,
+    job_type: str,
     body: GenerateRequest,
-) -> None:
-    """Background coroutine: run sync generation in thread pool, update job status."""
-    job_service.set_processing(db, job_id)
-    try:
-        gen_fn = _GEN_FN[job_type]
-        output = await asyncio.to_thread(gen_fn, db, user_id, course_id, body)
-        job_service.finish_job(db, job_id, output["id"])
-        logger.info("job %s done → output_id=%s", job_id, output["id"])
-    except Exception as exc:
-        logger.error("job %s failed: %s", job_id, exc, exc_info=True)
-        job_service.fail_job(db, job_id, str(exc))
+) -> str:
+    max_inflight = get_settings().generation_max_inflight_per_user
+    job_id = job_service.create_job_with_limit(
+        supabase,
+        user_id,
+        course_id,
+        job_type,
+        max_inflight=max_inflight,
+        request_payload=_serialize_generate_payload(body),
+    )
+    if not job_id:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many generation jobs in progress. Limit={max_inflight}.",
+        )
+    return job_id
 
 
-# ── Job status endpoint ───────────────────────────────────────────────────────
+# 鈹€鈹€ Job status endpoint 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 @router.get("/{course_id}/jobs/{job_id}")
 def get_job_status(
@@ -116,7 +115,7 @@ def get_job_status(
     return job
 
 
-# ── Async POST endpoints ──────────────────────────────────────────────────────
+# 鈹€鈹€ Async POST endpoints 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 @router.post("/{course_id}/generate/summary")
 async def gen_summary(
@@ -128,8 +127,7 @@ async def gen_summary(
     """Kick off async summary generation. Returns {job_id} immediately."""
     get_course(supabase, course_id)
     with credit_guard(supabase, current_user["id"], "gen_summary"):
-        job_id = job_service.create_job(supabase, current_user["id"], course_id, "summary")
-    asyncio.create_task(_run_job_bg(supabase, job_id, "summary", current_user["id"], course_id, body))
+        job_id = _enqueue_generation_job(supabase, current_user["id"], course_id, "summary", body)
     return {"job_id": job_id}
 
 
@@ -143,8 +141,7 @@ async def gen_quiz(
     """Kick off async quiz generation. Returns {job_id} immediately."""
     get_course(supabase, course_id)
     with credit_guard(supabase, current_user["id"], "gen_quiz"):
-        job_id = job_service.create_job(supabase, current_user["id"], course_id, "quiz")
-    asyncio.create_task(_run_job_bg(supabase, job_id, "quiz", current_user["id"], course_id, body))
+        job_id = _enqueue_generation_job(supabase, current_user["id"], course_id, "quiz", body)
     return {"job_id": job_id}
 
 
@@ -158,8 +155,7 @@ async def gen_outline(
     """Kick off async outline generation. Returns {job_id} immediately."""
     get_course(supabase, course_id)
     with credit_guard(supabase, current_user["id"], "gen_outline"):
-        job_id = job_service.create_job(supabase, current_user["id"], course_id, "outline")
-    asyncio.create_task(_run_job_bg(supabase, job_id, "outline", current_user["id"], course_id, body))
+        job_id = _enqueue_generation_job(supabase, current_user["id"], course_id, "outline", body)
     return {"job_id": job_id}
 
 
@@ -173,12 +169,11 @@ async def gen_flashcards(
     """Kick off async flashcards generation. Returns {job_id} immediately."""
     get_course(supabase, course_id)
     with credit_guard(supabase, current_user["id"], "gen_flashcards"):
-        job_id = job_service.create_job(supabase, current_user["id"], course_id, "flashcards")
-    asyncio.create_task(_run_job_bg(supabase, job_id, "flashcards", current_user["id"], course_id, body))
+        job_id = _enqueue_generation_job(supabase, current_user["id"], course_id, "flashcards", body)
     return {"job_id": job_id}
 
 
-# ── Synchronous endpoints (unchanged) ────────────────────────────────────────
+# 鈹€鈹€ Synchronous endpoints (unchanged) 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 @router.post("/{course_id}/generate/ask")
 def ask_question(
@@ -190,11 +185,11 @@ def ask_question(
     """4-stage multi-model RAG Q&A with optional visual aid.
 
     Pipeline:
-      Stage 1 — Supabase pgvector / ChromaDB : retrieve top-8 chunks (bilingual)
-      Stage 2 — GPT-4o-mini (judge)          : filter irrelevant chunks
-      Stage 3 — Gemini 2.0 Flash             : generate grounded answer
-                 └→ GPT-4o fallback if Gemini key missing or call fails
-      Stage 4 — Imagen 3 (optional)          : diagram for complex/abstract topics
+      Stage 1 鈥?Supabase pgvector / ChromaDB : retrieve top-8 chunks (bilingual)
+      Stage 2 鈥?GPT-4o-mini (judge)          : filter irrelevant chunks
+      Stage 3 鈥?Gemini 2.0 Flash             : generate grounded answer
+                 鈹斺啋 GPT-4o fallback if Gemini key missing or call fails
+      Stage 4 鈥?Imagen 3 (optional)          : diagram for complex/abstract topics
     """
     get_course(supabase, course_id)
 
@@ -245,7 +240,7 @@ def ask_question(
             if not ctx.strip():
                 return {
                     "question":   body.question,
-                    "answer":     "暂无可用的课程材料，请等待文件审核通过或联系管理员建立索引。",
+                    "answer":     "No course material is available yet. Please wait for file approval/indexing.",
                     "sources":    [],
                     "image_url":  None,
                     "model_used": "none",
@@ -287,7 +282,7 @@ def ask_question(
                 bucket=get_settings().supabase_storage_bucket,
             )
             if image_url:
-                answer += f"\n\n---\n\n![辅助图解]({image_url})"
+                answer += f"\n\n---\n\n![杈呭姪鍥捐В]({image_url})"
 
         return {
             "question":   body.question,
@@ -315,13 +310,10 @@ def translate_texts(
 
     if body.target_lang == "zh":
         system_prompt = (
-            "你的唯一任务是将用户输入的英文文本翻译成简体中文（zh-CN）。"
-            "【强制规则】：\n"
-            "1. 所有输出必须是中文，不得保留英文原文。\n"
-            "2. 技术术语必须给出中文译名（例：Convolutional Neural Network → 卷积神经网络）。\n"
-            "3. 专有名词若无通用译名，可在括号内附英文：如 ResNet（残差网络）。\n"
-            "4. 仅输出翻译结果，禁止任何解释或评论。\n"
-            "5. 返回格式：纯 JSON 数组，例：[\"翻译1\",\"翻译2\"]，不带 markdown 代码块。"
+            "Translate each numbered text to Simplified Chinese (zh-CN). "
+            "Do not output explanations. Keep code identifiers unchanged. "
+            "Return ONLY a raw JSON array of translated strings. "
+            'No markdown fences, no extra text. Example: ["翻译1","翻译2"]'
         )
     else:
         system_prompt = (
@@ -356,3 +348,4 @@ def translate_texts(
         translations.append(body.texts[len(translations)])
 
     return {"translations": translations[: len(body.texts)]}
+
