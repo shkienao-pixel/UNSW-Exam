@@ -389,14 +389,27 @@ function TypedOutputsView({
 
 // ── Summary Tab ───────────────────────────────────────────────────────────────
 
+function extractToc(markdown: string): { id: string; title: string; level: number }[] {
+  const toc: { id: string; title: string; level: number }[] = []
+  for (const line of markdown.split('\n')) {
+    const m = line.match(/^(#{1,3})\s+(.+)/)
+    if (m) {
+      const level = m[1].length
+      const title = m[2].trim()
+      const id = title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w\u4e00-\u9fff-]/g, '')
+      toc.push({ id, title, level })
+    }
+  }
+  return toc
+}
+
 function SummaryTab({ courseId }: { courseId: string }) {
-  const { t } = useLang()
-  const [status, setStatus] = useState<'loading' | 'not_published' | 'locked' | 'unlocked'>('loading')
+  const [status, setStatus]                   = useState<'loading' | 'not_published' | 'locked' | 'unlocked'>('loading')
   const [creditsRequired, setCreditsRequired] = useState(200)
-  const [weeks, setWeeks] = useState<{ week: number; title: string; key_points: string[]; content: string }[]>([])
-  const [expanded, setExpanded] = useState<Set<number>>(new Set([1]))
-  const [unlocking, setUnlocking] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [markdown, setMarkdown]               = useState('')
+  const [unlocking, setUnlocking]             = useState(false)
+  const [error, setError]                     = useState<string | null>(null)
+  const contentRef                            = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     api.courseContent.status(courseId, 'summary').then(res => {
@@ -409,8 +422,13 @@ function SummaryTab({ courseId }: { courseId: string }) {
   async function loadContent() {
     try {
       const res = await api.courseContent.get(courseId, 'summary')
-      const json = res.content_json as { weeks?: { week: number; title: string; key_points: string[]; content: string }[] }
-      setWeeks(json.weeks ?? [])
+      const json = res.content_json as { markdown?: string; weeks?: { week: number; title: string; content: string }[] }
+      if (json.markdown) {
+        setMarkdown(json.markdown)
+      } else if (json.weeks) {
+        const blocks = json.weeks.map(w => `## ${w.title}\n\n${w.content}`)
+        setMarkdown('# 课程摘要\n\n' + blocks.join('\n\n---\n\n'))
+      }
     } catch { setError('加载失败，请刷新重试') }
   }
 
@@ -431,6 +449,12 @@ function SummaryTab({ courseId }: { courseId: string }) {
     } finally { setUnlocking(false) }
   }
 
+  function scrollTo(id: string) {
+    if (!contentRef.current) return
+    const el = contentRef.current.querySelector(`[data-heading-id="${id}"]`)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   if (status === 'loading') return (
     <div className="flex justify-center py-20">
       <Loader2 className="animate-spin" size={24} style={{ color: '#FFD700' }} />
@@ -446,14 +470,14 @@ function SummaryTab({ courseId }: { courseId: string }) {
   )
 
   if (status === 'locked') return (
-    <div className="text-center py-20 glass rounded-2xl space-y-4" style={{ color: '#444' }}>
-      <FileText size={52} className="mx-auto opacity-30" />
+    <div className="text-center py-20 glass rounded-2xl space-y-4">
+      <FileText size={52} className="mx-auto opacity-30" style={{ color: '#FFD700' }} />
       <p className="text-xl font-bold text-white">知识摘要</p>
-      <p className="text-sm" style={{ color: '#777' }}>按 Week 整理的核心知识点与内容精华</p>
+      <p className="text-sm" style={{ color: '#777' }}>系统整理的课程核心知识，可作为刷题参考</p>
       {error && <p className="text-sm" style={{ color: '#FF6666' }}>{error}</p>}
       <button
         onClick={handleUnlock} disabled={unlocking}
-        className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all hover:opacity-90"
+        className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm"
         style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.35)' }}>
         {unlocking ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
         {unlocking ? '解锁中...' : `解锁摘要 ${creditsRequired} ✦`}
@@ -462,58 +486,64 @@ function SummaryTab({ courseId }: { courseId: string }) {
     </div>
   )
 
+  const toc = extractToc(markdown)
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 mb-4">
-        <FileText size={20} style={{ color: '#FFD700' }} />
-        <h2 className="text-2xl font-bold text-white">知识摘要</h2>
-      </div>
-      {error && <p className="text-sm" style={{ color: '#FF6666' }}>{error}</p>}
-      {weeks.map(w => {
-        const open = expanded.has(w.week)
-        return (
-          <div key={w.week} className="glass rounded-xl overflow-hidden"
-            style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
+    <div className="flex gap-0 min-h-[70vh]">
+      {/* 左侧 TOC */}
+      <div className="w-52 flex-shrink-0 pr-4">
+        <div className="sticky top-4 space-y-0.5 max-h-[calc(100vh-140px)] overflow-y-auto">
+          <p className="text-xs font-semibold mb-3 uppercase tracking-wider" style={{ color: '#555' }}>目录</p>
+          {toc.map((item, i) => (
             <button
-              className="w-full flex items-center justify-between px-5 py-4 text-left"
-              onClick={() => setExpanded(prev => {
-                const next = new Set(prev)
-                open ? next.delete(w.week) : next.add(w.week)
-                return next
-              })}>
-              <div className="flex items-center gap-3">
-                <span className="text-xs px-2 py-0.5 rounded font-mono font-bold"
-                  style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700' }}>
-                  W{w.week}
-                </span>
-                <span className="font-semibold text-white">{w.title}</span>
-              </div>
-              {open
-                ? <ChevronDown size={16} style={{ color: '#555' }} />
-                : <ChevronRight size={16} style={{ color: '#555' }} />}
+              key={i}
+              onClick={() => scrollTo(item.id)}
+              className="w-full text-left text-xs py-1.5 rounded-lg transition-all hover:bg-white/5 leading-snug"
+              style={{
+                color: item.level === 1 ? '#FFD700' : item.level === 2 ? '#CCC' : '#888',
+                paddingLeft: item.level <= 2 ? '8px' : '20px',
+                fontWeight: item.level <= 2 ? 600 : 400,
+              }}>
+              {item.title}
             </button>
-            {open && (
-              <div className="px-5 pb-5 space-y-4" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                {w.key_points.length > 0 && (
-                  <div className="pt-3">
-                    <p className="text-xs font-semibold mb-2" style={{ color: '#888' }}>核心知识点</p>
-                    <ul className="space-y-1">
-                      {w.key_points.map((kp, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm" style={{ color: '#CCC' }}>
-                          <span style={{ color: '#FFD700', marginTop: 2 }}>•</span> {kp}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {w.content && (
-                  <ContentTranslationPanel content={w.content} courseId={courseId} />
-                )}
-              </div>
-            )}
-          </div>
-        )
-      })}
+          ))}
+        </div>
+      </div>
+
+      {/* 分割线 */}
+      <div className="w-px flex-shrink-0 mr-6" style={{ background: 'rgba(255,255,255,0.06)' }} />
+
+      {/* 右侧正文 */}
+      <div ref={contentRef} className="flex-1 min-w-0">
+        {error && <p className="text-sm mb-4" style={{ color: '#FF6666' }}>{error}</p>}
+        <ReactMarkdown
+          components={{
+            h1: ({ children }) => {
+              const id = String(children).toLowerCase().replace(/\s+/g, '-').replace(/[^\w\u4e00-\u9fff-]/g, '')
+              return <h1 data-heading-id={id} className="text-2xl font-bold text-white mb-6 mt-0">{children}</h1>
+            },
+            h2: ({ children }) => {
+              const id = String(children).toLowerCase().replace(/\s+/g, '-').replace(/[^\w\u4e00-\u9fff-]/g, '')
+              return (
+                <h2 data-heading-id={id}
+                  className="text-lg font-semibold mt-8 mb-3 pb-2"
+                  style={{ color: '#FFD700', borderBottom: '1px solid rgba(255,215,0,0.15)' }}>
+                  {children}
+                </h2>
+              )
+            },
+            h3: ({ children }) => {
+              const id = String(children).toLowerCase().replace(/\s+/g, '-').replace(/[^\w\u4e00-\u9fff-]/g, '')
+              return <h3 data-heading-id={id} className="text-base font-semibold mt-5 mb-2 text-white">{children}</h3>
+            },
+            hr: () => <hr className="my-8" style={{ borderColor: 'rgba(255,255,255,0.08)' }} />,
+            p: ({ children }) => <p className="mb-3 leading-relaxed text-sm" style={{ color: '#CCC' }}>{children}</p>,
+            li: ({ children }) => <li className="mb-1 text-sm" style={{ color: '#CCC' }}>{children}</li>,
+            strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+          }}>
+          {markdown}
+        </ReactMarkdown>
+      </div>
     </div>
   )
 }
