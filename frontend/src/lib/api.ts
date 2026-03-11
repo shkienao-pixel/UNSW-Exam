@@ -13,7 +13,6 @@ function getToken(): string | null {
   return localStorage.getItem('access_token')
 }
 
-/** 将原始错误信息转换为用户友好的中文提示 */
 function humanizeError(raw: string, status?: number): string {
   const s = raw.toLowerCase()
   if (s.includes('server disconnected') || s.includes('network') || s.includes('disconnected'))
@@ -33,7 +32,8 @@ function humanizeError(raw: string, status?: number): string {
   return raw || `请求失败 (HTTP ${status ?? '?'})`
 }
 
-async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
+/** 共用 fetch 逻辑。handle401=true 时遇到 401 自动清除 token 并跳转登录页。 */
+async function _fetch<T>(url: string, options: RequestInit = {}, handle401 = false): Promise<T> {
   const token = getToken()
   const isFormData = options.body instanceof FormData
 
@@ -45,24 +45,21 @@ async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   let res: Response
   try {
-    res = await fetch(API_URL + path, { ...options, headers })
+    res = await fetch(url, { ...options, headers })
   } catch (networkErr) {
-    // fetch() 本身抛出意味着连接失败（DNS、CORS、Server disconnected）
     console.error('[api] network error:', networkErr)
     throw new Error('网络连接失败，请检查后端服务是否运行')
   }
 
   if (!res.ok) {
-    // Token expired or missing — clear storage and redirect to login
-    if (res.status === 401) {
+    if (handle401 && res.status === 401) {
       localStorage.removeItem('access_token')
       localStorage.removeItem('refresh_token')
       window.location.href = '/login'
       throw new Error('登录已过期，请重新登录')
     }
     const err = await res.json().catch(() => ({ detail: res.statusText }))
-    const raw = err.detail || err.message || `HTTP ${res.status}`
-    // 402 积分不足 — 抛出特殊错误供 UI 识别
+    const raw = err.detail || err.error || err.message || `HTTP ${res.status}`
     if (res.status === 402) {
       const creditsErr = new Error(raw) as Error & { code: string; balance?: number; required?: number }
       creditsErr.code = 'INSUFFICIENT_CREDITS'
@@ -73,38 +70,18 @@ async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new Error(humanizeError(raw, res.status))
   }
 
-  // 204 No Content
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
 }
 
-/** 调用 Next.js 内部 API route（相对路径，自动附带 token）。 */
-async function nextReq<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken()
-  const isFormData = options.body instanceof FormData
+/** 调用后端 FastAPI（自动附加 API_URL 前缀，401 时跳转登录）。 */
+function req<T>(path: string, options: RequestInit = {}): Promise<T> {
+  return _fetch<T>(API_URL + path, options, true)
+}
 
-  const headers: Record<string, string> = {
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
-    ...(options.headers as Record<string, string> | undefined),
-  }
-
-  let res: Response
-  try {
-    res = await fetch(path, { ...options, headers })
-  } catch (networkErr) {
-    console.error('[api] nextReq network error:', networkErr)
-    throw new Error('网络连接失败，请检查后端服务是否运行')
-  }
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    const raw = err.detail || err.error || err.message || `HTTP ${res.status}`
-    throw new Error(humanizeError(raw, res.status))
-  }
-
-  if (res.status === 204) return undefined as T
-  return res.json() as Promise<T>
+/** 调用 Next.js 内部 API route（相对路径，不处理 401 跳转）。 */
+function nextReq<T>(path: string, options: RequestInit = {}): Promise<T> {
+  return _fetch<T>(path, options, false)
 }
 
 /** 轮询异步生成 job，直到 done / failed / 超时。返回 Output 对象。 */
@@ -117,10 +94,8 @@ async function _pollJob(courseId: string, jobId: string, timeoutMs = 180_000): P
     )
     if (job.status === 'done' && job.output_id != null)
       return req<Output>(`/courses/${courseId}/outputs/${job.output_id}`)
-    if (job.status === 'failed') {
-      const err = Object.assign(new Error(job.error_msg ?? '生成失败'), { code: 'GEN_FAILED' })
-      throw err
-    }
+    if (job.status === 'failed')
+      throw Object.assign(new Error(job.error_msg ?? '生成失败'), { code: 'GEN_FAILED' })
     // pending / processing → continue polling
   }
   throw new Error('生成超时（3分钟），请稍后在历史记录中查看结果')
@@ -168,7 +143,7 @@ export const api = {
         `/courses/${courseId}/artifacts/unlock-all`, { method: 'POST' }
       ),
     updateDocType: (courseId: string, artifactId: number, docType: string) =>
-      req<import('@/lib/types').Artifact>(
+      req<Artifact>(
         `/courses/${courseId}/artifacts/${artifactId}/doc-type`,
         { method: 'PATCH', body: JSON.stringify({ doc_type: docType }) }
       ),
@@ -212,11 +187,6 @@ export const api = {
       const { job_id } = await req<{ job_id: string }>(`/courses/${courseId}/generate/flashcards`, { method: 'POST', body: JSON.stringify(body) })
       return _pollJob(courseId, job_id)
     },
-    /**
-     * 发送问题到 Ask API。
-     * - 无图片 → 直接调用 FastAPI 后端 RAG 流水线
-     * - 有图片 → 经 Next.js /api/generate/ask 路由，走 Gemini 1.5 Pro VQA
-     */
     ask: (
       courseId: string,
       question: string,
@@ -238,14 +208,12 @@ export const api = {
         { method: 'POST', body: JSON.stringify({ question, scope_set_id, context_mode: contextMode }) },
       )
     },
-
-    /** 根据问题和 AI 回答，调用 Imagen 3 生成讲解配图。 */
     explainWithImage: (question: string, answer: string) =>
       nextReq<ExplainImageResponse>('/api/explain-with-image', {
         method: 'POST',
         body: JSON.stringify({ question, answer }),
       }),
-    translate:  (courseId: string, texts: string[], target_lang: 'en' | 'zh' = 'en') =>
+    translate: (courseId: string, texts: string[], target_lang: 'en' | 'zh' = 'en') =>
       req<{ translations: string[] }>(
         `/courses/${courseId}/generate/translate`,
         { method: 'POST', body: JSON.stringify({ texts, target_lang }) },
@@ -255,22 +223,18 @@ export const api = {
   review: {
     getSettings: (courseId: string) =>
       nextReq<ReviewSettings>(`/api/review/settings?courseId=${courseId}`),
-
     saveSettings: (courseId: string, reviewStartAt: string | null, examAt: string | null) =>
       nextReq<ReviewSettings>('/api/review/settings', {
         method: 'POST',
         body: JSON.stringify({ course_id: courseId, review_start_at: reviewStartAt, exam_at: examAt }),
       }),
-
     getProgress: (courseId: string) =>
       nextReq<ReviewNodeProgress[]>(`/api/review/progress?courseId=${courseId}`),
-
     saveProgress: (courseId: string, updates: ReviewNodeUpdate[]) =>
       nextReq<{ ok: boolean; updated: number }>('/api/review/progress', {
         method: 'POST',
         body: JSON.stringify({ course_id: courseId, updates }),
       }),
-
     getTodayPlan: (
       courseId: string,
       outlineNodes: Array<{
@@ -297,13 +261,10 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ course_id: courseId, allow_ai_fill: allowAiFill, scope_set_id: scopeSetId }),
       }),
-
     getOutline: (courseId: string) =>
       nextReq<KnowledgeOutline>(`/api/knowledge/outline?courseId=${courseId}`),
-
     getGraph: (courseId: string) =>
       nextReq<KnowledgeGraph>(`/api/knowledge/graph?courseId=${courseId}`),
-
     getNode: (courseId: string, nodeId: string) =>
       nextReq<KnowledgeOutlineNode>(`/api/knowledge/node?courseId=${courseId}&nodeId=${nodeId}`),
   },

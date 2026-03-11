@@ -69,7 +69,6 @@ function detectFormat(text: string): ContentFormat {
   return 'markdown'
 }
 
-/** JSON 格式预览 */
 function JsonPreview({ content }: { content: string }) {
   let pretty = content
   try { pretty = JSON.stringify(JSON.parse(content), null, 2) } catch {}
@@ -81,7 +80,6 @@ function JsonPreview({ content }: { content: string }) {
   )
 }
 
-/** HTML 格式预览 */
 function HtmlPreview({ content }: { content: string }) {
   const html = `<!doctype html><html><head><meta charset="utf-8">
     <style>body{font-family:sans-serif;background:#111;color:#ccc;padding:16px;font-size:13px;line-height:1.6}
@@ -91,6 +89,28 @@ function HtmlPreview({ content }: { content: string }) {
     <iframe srcDoc={html} title="html-preview" className="w-full rounded-lg"
       style={{ border: '1px solid rgba(255,255,255,0.08)', minHeight: 400, maxHeight: 600, background: '#111' }}
       sandbox="allow-same-origin" />
+  )
+}
+
+function ContentPreview({ format, content, schema }: {
+  format: ContentFormat
+  content: string
+  schema: SummarySchemaV1 | null
+}) {
+  if (format === 'summary_v1' && schema) {
+    return (
+      <div className="rounded-xl p-4" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,215,0,0.1)' }}>
+        <SummarySchemaRenderer schema={schema} />
+      </div>
+    )
+  }
+  if (format === 'html') return <HtmlPreview content={content} />
+  if (format === 'json') return <JsonPreview content={content} />
+  return (
+    <div className="w-full rounded-lg p-4 overflow-y-auto prose prose-invert prose-sm max-w-none"
+      style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)', minHeight: 300, maxHeight: 600, color: '#CCC' }}>
+      <ReactMarkdown>{content}</ReactMarkdown>
+    </div>
   )
 }
 
@@ -153,14 +173,14 @@ function ContentCard({
   }
 
   async function saveEdit() {
-    const fmt = detectFormat(editContent)
+    // Use already-tracked detectedFormat instead of re-running detection
     let content_json: Record<string, unknown>
-    if (fmt === 'summary_v1') {
+    if (detectedFormat === 'summary_v1') {
       try { content_json = JSON.parse(editContent) } catch { content_json = { format: 'summary_v1', content: editContent } }
-    } else if (fmt === 'markdown') {
-      content_json = { format: 'markdown', content: editContent, markdown: editContent }
+    } else if (detectedFormat === 'markdown') {
+      content_json = { format: 'markdown', content: editContent }
     } else {
-      content_json = { format: fmt, content: editContent }
+      content_json = { format: detectedFormat, content: editContent }
     }
     try {
       await adminReq(secret, `/courses/${course.id}/course-content/${contentType}/admin`, {
@@ -324,19 +344,7 @@ function ContentCard({
             />
           ) : (
             <div style={{ minHeight: 300 }}>
-              {detectedFormat === 'summary_v1' && parsedSchema
-                ? <div className="rounded-xl p-4" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,215,0,0.1)' }}>
-                    <SummarySchemaRenderer schema={parsedSchema} />
-                  </div>
-                : detectedFormat === 'html'
-                  ? <HtmlPreview content={editContent} />
-                  : detectedFormat === 'json'
-                    ? <JsonPreview content={editContent} />
-                    : <div className="w-full rounded-lg p-4 overflow-y-auto prose prose-invert prose-sm max-w-none"
-                        style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)', minHeight: 300, maxHeight: 600, color: '#CCC' }}>
-                        <ReactMarkdown>{editContent}</ReactMarkdown>
-                      </div>
-              }
+              <ContentPreview format={detectedFormat} content={editContent} schema={parsedSchema} />
             </div>
           )}
 
