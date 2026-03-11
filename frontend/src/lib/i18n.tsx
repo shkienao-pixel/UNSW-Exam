@@ -115,6 +115,7 @@ const dict = {
   admin_tab_invites: { zh: '邀请码', en: 'Invites' },
   admin_tab_api_keys: { zh: 'API 密钥', en: 'API Keys' },
   admin_tab_feedback: { zh: '用户反馈', en: 'Feedback' },
+  admin_tab_course_content: { zh: '课程内容', en: 'Content' },
   sidebar_low_credits: { zh: '算力不足，建议先充值', en: 'Low credits, top up recommended' },
 
   // Page headings & subtitles

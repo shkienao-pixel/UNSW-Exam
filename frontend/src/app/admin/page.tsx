@@ -14,6 +14,7 @@ import { UsersTab } from './UsersTab'
 import { InvitesTab } from './InvitesTab'
 import { ApiKeysTab } from './ApiKeysTab'
 import { FeedbackTab } from './FeedbackTab'
+import { CourseContentTab } from './CourseContentTab'
 
 function getTabs(t: (key: any) => string): { id: Tab; label: string; icon: React.ReactNode }[] {
   return [
@@ -23,6 +24,7 @@ function getTabs(t: (key: any) => string): { id: Tab; label: string; icon: React
     { id: 'invites', label: t('admin_tab_invites'), icon: <Ticket size={15} /> },
     { id: 'api-keys', label: t('admin_tab_api_keys'), icon: <Key size={15} /> },
     { id: 'feedback', label: t('admin_tab_feedback'), icon: <MessageSquare size={15} /> },
+    { id: 'course-content', label: t('admin_tab_course_content'), icon: <BookOpen size={15} /> },
   ]
 }
 
@@ -178,6 +180,7 @@ export default function AdminPage() {
         {tab === 'invites'   && <InvitesTab   secret={secret} />}
         {tab === 'api-keys'  && <ApiKeysTab   secret={secret} />}
         {tab === 'feedback'  && <FeedbackTab  secret={secret} />}
+        {tab === 'course-content' && <CourseContentTab secret={secret} />}
       </div>
     </div>
   )
