@@ -163,16 +163,21 @@ def update_artifact_week(
 ) -> dict:
     if week is not None and not (1 <= week <= 10):
         raise HTTPException(status_code=422, detail="week must be 1-10 or null")
-    result = (
+    (
         supabase.table("artifacts")
         .update({"week": week})
         .eq("id", artifact_id)
-        .select()
         .execute()
     )
-    if not result.data:
+    fetch = (
+        supabase.table("artifacts")
+        .select("*")
+        .eq("id", artifact_id)
+        .execute()
+    )
+    if not fetch.data:
         raise HTTPException(status_code=404, detail="Artifact not found")
-    return result.data[0]
+    return fetch.data[0]
 
 
 @router.patch("/artifacts/{artifact_id}/reject", response_model=ArtifactOut)

@@ -54,17 +54,23 @@ def upsert_content(
 
 def update_status(db: Client, course_id: str, content_type: str, status: str) -> dict:
     now = datetime.now(timezone.utc).isoformat()
-    result = (
+    (
         db.table("course_content")
         .update({"status": status, "updated_at": now})
         .eq("course_id", course_id)
         .eq("content_type", content_type)
-        .select()
         .execute()
     )
-    if not result.data:
+    fetch = (
+        db.table("course_content")
+        .select("*")
+        .eq("course_id", course_id)
+        .eq("content_type", content_type)
+        .execute()
+    )
+    if not fetch.data:
         raise ValueError(f"course_content not found: {course_id}/{content_type}")
-    return result.data[0]
+    return fetch.data[0]
 
 
 # ── Unlock ────────────────────────────────────────────────────────────────────

@@ -97,15 +97,21 @@ def admin_update_content(
             raise HTTPException(status_code=422, detail="Invalid status")
         update["status"] = body.status
 
-    result = (
+    (
         db.table("course_content")
         .update(update)
         .eq("course_id", course_id)
         .eq("content_type", content_type)
-        .select()
         .execute()
     )
-    return result.data[0]
+    fetch = (
+        db.table("course_content")
+        .select("*")
+        .eq("course_id", course_id)
+        .eq("content_type", content_type)
+        .execute()
+    )
+    return fetch.data[0] if fetch.data else {}
 
 
 @router.get("/{course_id}/course-content/{content_type}/status")
