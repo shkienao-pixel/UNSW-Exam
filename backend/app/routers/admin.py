@@ -154,6 +154,27 @@ def update_artifact_doc_type(
     return artifact
 
 
+@router.patch("/artifacts/{artifact_id}/week")
+def update_artifact_week(
+    artifact_id: int,
+    week: int | None = Body(embed=True),
+    _: None = Depends(_require_admin),
+    supabase: Client = Depends(get_db),
+) -> dict:
+    if week is not None and not (1 <= week <= 10):
+        raise HTTPException(status_code=422, detail="week must be 1-10 or null")
+    result = (
+        supabase.table("artifacts")
+        .update({"week": week})
+        .eq("id", artifact_id)
+        .select()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    return result.data[0]
+
+
 @router.patch("/artifacts/{artifact_id}/reject", response_model=ArtifactOut)
 def reject_artifact(
     artifact_id: int,
