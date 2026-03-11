@@ -34,22 +34,25 @@ def upsert_content(
     status: str = "draft",
 ) -> dict:
     now = datetime.now(timezone.utc).isoformat()
-    result = (
+    db.table("course_content").upsert(
+        {
+            "course_id": course_id,
+            "content_type": content_type,
+            "content_json": content_json,
+            "status": status,
+            "updated_at": now,
+        },
+        on_conflict="course_id,content_type",
+    ).execute()
+    fetch = (
         db.table("course_content")
-        .upsert(
-            {
-                "course_id": course_id,
-                "content_type": content_type,
-                "content_json": content_json,
-                "status": status,
-                "updated_at": now,
-            },
-            on_conflict="course_id,content_type",
-        )
-        .select()
+        .select("*")
+        .eq("course_id", course_id)
+        .eq("content_type", content_type)
+        .limit(1)
         .execute()
     )
-    return result.data[0]
+    return fetch.data[0]
 
 
 def update_status(db: Client, course_id: str, content_type: str, status: str) -> dict:
