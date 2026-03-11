@@ -1255,7 +1255,7 @@ function AskTab({ courseId, scopeSets, artifacts }: {
 
 // ── AI 生成 Tab ───────────────────────────────────────────────────────────────
 
-type GenType = 'summary' | 'quiz' | 'outline' | 'flashcards'
+type GenType = 'quiz' | 'flashcards'
 
 function GenerateTab({ courseId, scopeSets, setScopeSets, artifacts, setOutputs }: {
   courseId: string
@@ -1269,7 +1269,7 @@ function GenerateTab({ courseId, scopeSets, setScopeSets, artifacts, setOutputs 
   const isMounted = useRef(true)
   useEffect(() => () => { isMounted.current = false }, [])
 
-  const [genType, setGenType] = useState<GenType>('summary')
+  const [genType, setGenType] = useState<GenType>('quiz')
   const [scopeSetId, setScopeSetId] = useState<number | undefined>(scopeSets[0]?.id)
   const [numQuestions, setNumQuestions] = useState(10)
   const [generating, setGenerating] = useState(false)
@@ -1286,9 +1286,7 @@ function GenerateTab({ courseId, scopeSets, setScopeSets, artifacts, setOutputs 
   const approvedCount = approvedArtifacts.length
 
   const genTypes = [
-    { key: 'summary' as GenType, icon: <FileText size={18} style={{ color: '#FFD700' }} />, labelKey: 'gen_summary' as const, descKey: 'gen_desc_summary' as const },
     { key: 'quiz' as GenType, icon: <Target size={18} style={{ color: '#FFD700' }} />, labelKey: 'gen_quiz' as const, descKey: 'gen_desc_quiz' as const },
-    { key: 'outline' as GenType, icon: <ListTree size={18} style={{ color: '#FFD700' }} />, labelKey: 'gen_outline' as const, descKey: 'gen_desc_outline' as const },
     { key: 'flashcards' as GenType, icon: <Layers3 size={18} style={{ color: '#FFD700' }} />, labelKey: 'gen_flashcards' as const, descKey: 'gen_desc_flashcards' as const },
   ]
 
@@ -1345,8 +1343,8 @@ function GenerateTab({ courseId, scopeSets, setScopeSets, artifacts, setOutputs 
   }
 
   const viewLabels: Record<GenType, string> = {
-    summary: t('gen_summary'), quiz: t('gen_quiz'),
-    outline: t('gen_outline'), flashcards: t('gen_flashcards'),
+    quiz: t('gen_quiz'),
+    flashcards: t('gen_flashcards'),
   }
 
   return (
@@ -1450,7 +1448,7 @@ function GenerateTab({ courseId, scopeSets, setScopeSets, artifacts, setOutputs 
         {generating ? t('gen_loading') : t('gen_btn')}
         {!generating && (
           <span className="ml-auto text-xs opacity-60">
-            -{['outline', 'gen_plan'].includes(genType) ? 5 : 1} ✦
+            -1 ✦
           </span>
         )}
       </button>
