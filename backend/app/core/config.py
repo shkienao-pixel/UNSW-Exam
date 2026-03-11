@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     # App
     app_env: str = "development"
     cors_origins: str = "http://localhost:3000,http://localhost:8501"
+    generation_worker_enabled: bool = True
+    generation_worker_poll_interval: float = 0.8
+    generation_worker_max_concurrency: int = 4
+    generation_job_timeout_seconds: int = 1800
+    generation_max_inflight_per_user: int = 3
 
     @property
     def cors_origins_list(self) -> list[str]:
