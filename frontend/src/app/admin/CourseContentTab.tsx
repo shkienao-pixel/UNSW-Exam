@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Loader2, RefreshCw, CheckCircle, EyeOff, FileText, ListTree } from 'lucide-react'
 import { Course, adminReq, Spinner, ErrorBox } from './_shared'
+import ReactMarkdown from 'react-markdown'
 
 type ContentType = 'summary' | 'outline'
 type ContentStatus = 'not_generated' | 'draft' | 'published' | 'hidden'
@@ -40,8 +41,9 @@ function ContentCard({
   const [data, setData] = useState<CourseContent | null>(null)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
-  const [editing, setEditing] = useState(false)
-  const [editJson, setEditJson] = useState('')
+  const [editing, setEditing]           = useState(false)
+  const [editMarkdown, setEditMarkdown] = useState('')
+  const [preview, setPreview]           = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -97,10 +99,9 @@ function ContentCard({
 
   async function saveEdit() {
     try {
-      const parsed = JSON.parse(editJson)
       await adminReq(secret, `/courses/${course.id}/course-content/${contentType}/admin`, {
         method: 'PUT',
-        body: JSON.stringify({ content_json: parsed }),
+        body: JSON.stringify({ content_json: { markdown: editMarkdown } }),
       })
       setEditing(false)
       showToast('已保存')
@@ -168,7 +169,13 @@ function ContentCard({
               </button>
             )}
             <button
-              onClick={() => { setEditing(!editing); setEditJson(JSON.stringify(data?.content_json ?? {}, null, 2)) }}
+              onClick={() => {
+                const md = (data?.content_json as { markdown?: string })?.markdown
+                  ?? JSON.stringify(data?.content_json ?? {}, null, 2)
+                setEditMarkdown(md)
+                setPreview(false)
+                setEditing(!editing)
+              }}
               className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
               style={{ background: 'rgba(255,255,255,0.06)', color: '#CCC', border: '1px solid rgba(255,255,255,0.1)' }}>
               {editing ? '取消编辑' : '编辑内容'}
@@ -179,13 +186,54 @@ function ContentCard({
 
       {editing && (
         <div className="space-y-2">
-          <textarea
-            value={editJson}
-            onChange={e => setEditJson(e.target.value)}
-            rows={20}
-            className="w-full text-xs rounded-lg p-3 font-mono"
-            style={{ background: 'rgba(0,0,0,0.3)', color: '#CCC', border: '1px solid rgba(255,255,255,0.1)', resize: 'vertical' }}
-          />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPreview(false)}
+              className="px-3 py-1 rounded text-xs"
+              style={{
+                background: !preview ? 'rgba(255,215,0,0.15)' : 'transparent',
+                color: !preview ? '#FFD700' : '#666',
+                border: `1px solid ${!preview ? 'rgba(255,215,0,0.3)' : 'rgba(255,255,255,0.08)'}`,
+              }}>
+              编辑
+            </button>
+            <button
+              onClick={() => setPreview(true)}
+              className="px-3 py-1 rounded text-xs"
+              style={{
+                background: preview ? 'rgba(255,215,0,0.15)' : 'transparent',
+                color: preview ? '#FFD700' : '#666',
+                border: `1px solid ${preview ? 'rgba(255,215,0,0.3)' : 'rgba(255,255,255,0.08)'}`,
+              }}>
+              预览
+            </button>
+          </div>
+          {!preview ? (
+            <textarea
+              value={editMarkdown}
+              onChange={e => setEditMarkdown(e.target.value)}
+              rows={24}
+              className="w-full text-sm rounded-lg p-3 font-mono leading-relaxed"
+              style={{
+                background: 'rgba(0,0,0,0.3)',
+                color: '#CCC',
+                border: '1px solid rgba(255,255,255,0.1)',
+                resize: 'vertical',
+              }}
+            />
+          ) : (
+            <div
+              className="w-full rounded-lg p-4 overflow-y-auto prose prose-invert prose-sm max-w-none"
+              style={{
+                background: 'rgba(0,0,0,0.2)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                minHeight: '400px',
+                maxHeight: '600px',
+                color: '#CCC',
+              }}>
+              <ReactMarkdown>{editMarkdown}</ReactMarkdown>
+            </div>
+          )}
           <button onClick={saveEdit}
             className="px-4 py-1.5 rounded-lg text-sm font-medium"
             style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.3)' }}>
