@@ -3,7 +3,7 @@
 -- Called by sparse_retriever.py in the multi-path RAG pipeline
 
 CREATE OR REPLACE FUNCTION search_chunks_fts(
-    p_course_id    TEXT,
+    p_course_id    UUID,
     p_tsquery      TEXT,
     p_top_k        INTEGER DEFAULT 20,
     p_artifact_ids INTEGER[] DEFAULT '{}'
