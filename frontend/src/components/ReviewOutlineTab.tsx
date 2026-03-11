@@ -17,13 +17,13 @@ import React, {
 import { api } from '@/lib/api'
 import { useLang } from '@/lib/i18n'
 import type {
-  Output, ReviewSettings, ReviewNodeProgress, ReviewNodeUpdate,
+  ReviewSettings, ReviewNodeProgress, ReviewNodeUpdate,
   ReviewPriority, ReviewStatus, OutlineNodeData, TodayPlanResult,
 } from '@/lib/types'
 import {
   Loader2, ChevronDown, ChevronRight, CheckSquare, Square,
   Clock, Target, BarChart2, RefreshCw, AlertCircle, BookOpen,
-  Zap, MessageSquare, PlayCircle,
+  Zap, MessageSquare, PlayCircle, ListTree,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
@@ -700,6 +700,31 @@ function TodayPlanPanel({
   )
 }
 
+// ── buildNodesFromContentJson ──────────────────────────────────────────────────
+
+function buildNodesFromContentJson(json: {
+  weeks?: { week: number; title: string; nodes: { id: string; title: string; level: number }[] }[]
+}): OutlineNodeData[] {
+  const roots: OutlineNodeData[] = []
+  for (const w of json.weeks ?? []) {
+    const weekNode: OutlineNodeData = {
+      id: `week_${w.week}`,
+      title: `Week ${w.week}: ${w.title}`,
+      level: 1,
+      parent_id: null,
+      children: w.nodes.map(n => ({
+        id: n.id,
+        title: n.title,
+        level: 2,
+        parent_id: `week_${w.week}`,
+        children: [],
+      })),
+    }
+    roots.push(weekNode)
+  }
+  return roots
+}
+
 // ── Main ReviewOutlineTab ──────────────────────────────────────────────────────
 
 interface Props {
@@ -710,9 +735,11 @@ export default function ReviewOutlineTab({ courseId }: Props) {
   const { t } = useLang()
 
   // Outline data
-  const [outputs, setOutputs]   = useState<Output[]>([])
   const [outlineLoading, setOutlineLoading] = useState(true)
   const [roots, setRoots]       = useState<OutlineNodeData[]>([])
+  const [unlockStatus, setUnlockStatus] = useState<'loading' | 'not_published' | 'locked' | 'unlocked'>('loading')
+  const [creditsRequired, setCreditsRequired] = useState(300)
+  const [unlocking, setUnlocking] = useState(false)
   const flatNodes = useMemo(() => flattenTree(roots), [roots])
 
   // Review state
@@ -739,13 +766,20 @@ export default function ReviewOutlineTab({ courseId }: Props) {
     let active = true
     setOutlineLoading(true)
 
-    api.outputs.list(courseId, 'outline').then(outs => {
+    api.courseContent.status(courseId, 'outline').then(res => {
       if (!active) return
-      setOutputs(outs)
-      if (outs.length > 0 && outs[0].content) {
-        setRoots(parseOutlineMarkdown(outs[0].content))
+      setUnlockStatus(res.status)
+      setCreditsRequired(res.credits_required)
+      if (res.status === 'unlocked') {
+        return api.courseContent.get(courseId, 'outline').then(data => {
+          if (!active) return
+          const json = data.content_json as { weeks?: { week: number; title: string; nodes: { id: string; title: string; level: number }[] }[] }
+          setRoots(buildNodesFromContentJson(json))
+        })
       }
-    }).catch(() => {}).finally(() => {
+    }).catch(() => {
+      if (active) setUnlockStatus('not_published')
+    }).finally(() => {
       if (active) setOutlineLoading(false)
     })
 
@@ -897,6 +931,47 @@ export default function ReviewOutlineTab({ courseId }: Props) {
     )
   }
 
+  // ── Unlock handler ─────────────────────────────────────────────────────────
+  async function handleUnlock() {
+    setUnlocking(true)
+    try {
+      await api.courseContent.unlock(courseId, 'outline')
+      setUnlockStatus('unlocked')
+      const data = await api.courseContent.get(courseId, 'outline')
+      const json = data.content_json as Parameters<typeof buildNodesFromContentJson>[0]
+      setRoots(buildNodesFromContentJson(json))
+    } catch (e: unknown) {
+      console.error(e)
+    } finally {
+      setUnlocking(false)
+    }
+  }
+
+  // ── Gate: not_published / locked ──────────────────────────────────────────
+  if (unlockStatus === 'not_published') return (
+    <div className="text-center py-20 glass rounded-2xl">
+      <ListTree size={52} className="mx-auto mb-4 opacity-20" style={{ color: '#A78BFA' }} />
+      <p className="text-base font-medium text-white mb-2">复习大纲准备中</p>
+      <p className="text-sm" style={{ color: '#555' }}>管理员正在整理，敬请期待</p>
+    </div>
+  )
+
+  if (unlockStatus === 'locked') return (
+    <div className="text-center py-20 glass rounded-2xl space-y-4">
+      <ListTree size={52} className="mx-auto opacity-30" style={{ color: '#A78BFA' }} />
+      <p className="text-xl font-bold text-white">复习大纲</p>
+      <p className="text-sm" style={{ color: '#777' }}>按 Week 拆分的复习节点，支持打勾进度与考试规划</p>
+      <button
+        onClick={handleUnlock} disabled={unlocking}
+        className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm"
+        style={{ background: 'rgba(167,139,250,0.15)', color: '#A78BFA', border: '1px solid rgba(167,139,250,0.3)' }}>
+        {unlocking ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
+        {unlocking ? '解锁中...' : `解锁复习大纲 ${creditsRequired} ✦`}
+      </button>
+      <p className="text-xs" style={{ color: '#444' }}>一次解锁，永久可用</p>
+    </div>
+  )
+
   // ── Loading state ──────────────────────────────────────────────────────────
   if (outlineLoading || reviewLoading) {
     return (
@@ -906,12 +981,12 @@ export default function ReviewOutlineTab({ courseId }: Props) {
     )
   }
 
-  if (outputs.length === 0) {
+  if (roots.length === 0) {
     return (
       <div className="text-center py-20">
         <BookOpen size={40} className="mx-auto mb-4" style={{ color: '#333' }} />
         <p className="text-lg" style={{ color: '#555' }}>暂无大纲</p>
-        <p className="text-sm mt-1" style={{ color: '#444' }}>请先在「AI 生成」中生成课程大纲</p>
+        <p className="text-sm mt-1" style={{ color: '#444' }}>管理员尚未发布大纲内容</p>
       </div>
     )
   }
