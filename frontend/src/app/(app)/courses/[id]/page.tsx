@@ -10,7 +10,7 @@ import type { Course, Artifact, ScopeSet, Output, DocType } from '@/lib/types'
 import { DOC_TYPE_LABELS, DOC_TYPE_COLORS } from '@/lib/types'
 import {
   FileText, Upload, Loader2, Zap, History, Settings2,
-  CheckSquare, ChevronDown, MessageSquare, BookOpen, Send, RotateCcw,
+  CheckSquare, ChevronDown, ChevronRight, MessageSquare, BookOpen, Send, RotateCcw,
   ExternalLink, Trash2, Languages, HelpCircle, ImagePlus, X, Sparkles,
   Code, Lock, Target, Layers3, ListTree,
 } from 'lucide-react'
@@ -391,15 +391,130 @@ function TypedOutputsView({
 
 function SummaryTab({ courseId }: { courseId: string }) {
   const { t } = useLang()
+  const [status, setStatus] = useState<'loading' | 'not_published' | 'locked' | 'unlocked'>('loading')
+  const [creditsRequired, setCreditsRequired] = useState(200)
+  const [weeks, setWeeks] = useState<{ week: number; title: string; key_points: string[]; content: string }[]>([])
+  const [expanded, setExpanded] = useState<Set<number>>(new Set([1]))
+  const [unlocking, setUnlocking] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    api.courseContent.status(courseId, 'summary').then(res => {
+      setStatus(res.status)
+      setCreditsRequired(res.credits_required)
+      if (res.status === 'unlocked') loadContent()
+    }).catch(() => setStatus('not_published'))
+  }, [courseId])
+
+  async function loadContent() {
+    try {
+      const res = await api.courseContent.get(courseId, 'summary')
+      const json = res.content_json as { weeks?: { week: number; title: string; key_points: string[]; content: string }[] }
+      setWeeks(json.weeks ?? [])
+    } catch { setError('加载失败，请刷新重试') }
+  }
+
+  async function handleUnlock() {
+    setUnlocking(true)
+    setError(null)
+    try {
+      await api.courseContent.unlock(courseId, 'summary')
+      setStatus('unlocked')
+      await loadContent()
+    } catch (e: unknown) {
+      const err = e as { code?: string; balance?: number; required?: number }
+      if (err.code === 'INSUFFICIENT_CREDITS') {
+        setError(`积分不足（当前 ${err.balance}✦，需要 ${err.required}✦）`)
+      } else {
+        setError(e instanceof Error ? e.message : '解锁失败')
+      }
+    } finally { setUnlocking(false) }
+  }
+
+  if (status === 'loading') return (
+    <div className="flex justify-center py-20">
+      <Loader2 className="animate-spin" size={24} style={{ color: '#FFD700' }} />
+    </div>
+  )
+
+  if (status === 'not_published') return (
+    <div className="text-center py-20 glass rounded-2xl" style={{ color: '#444' }}>
+      <FileText size={52} className="mx-auto mb-4 opacity-20" />
+      <p className="text-base font-medium text-white mb-2">摘要准备中</p>
+      <p className="text-sm" style={{ color: '#555' }}>管理员正在整理课程内容，敬请期待</p>
+    </div>
+  )
+
+  if (status === 'locked') return (
+    <div className="text-center py-20 glass rounded-2xl space-y-4" style={{ color: '#444' }}>
+      <FileText size={52} className="mx-auto opacity-30" />
+      <p className="text-xl font-bold text-white">知识摘要</p>
+      <p className="text-sm" style={{ color: '#777' }}>按 Week 整理的核心知识点与内容精华</p>
+      {error && <p className="text-sm" style={{ color: '#FF6666' }}>{error}</p>}
+      <button
+        onClick={handleUnlock} disabled={unlocking}
+        className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all hover:opacity-90"
+        style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.35)' }}>
+        {unlocking ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
+        {unlocking ? '解锁中...' : `解锁摘要 ${creditsRequired} ✦`}
+      </button>
+      <p className="text-xs" style={{ color: '#444' }}>一次解锁，永久可用</p>
+    </div>
+  )
+
   return (
-    <TypedOutputsView
-      courseId={courseId} outputType="summary"
-      icon={<FileText size={20} style={{ color: '#FFD700' }} />} title={t('summary_title')} subtitle={t('summary_sub')}
-      emptyTitle={t('empty_summary')} emptyLinkLabel={t('empty_summary_btn')}
-      renderContent={output => (
-        <ContentTranslationPanel content={output.content || ''} courseId={courseId} />
-      )}
-    />
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 mb-4">
+        <FileText size={20} style={{ color: '#FFD700' }} />
+        <h2 className="text-2xl font-bold text-white">知识摘要</h2>
+      </div>
+      {error && <p className="text-sm" style={{ color: '#FF6666' }}>{error}</p>}
+      {weeks.map(w => {
+        const open = expanded.has(w.week)
+        return (
+          <div key={w.week} className="glass rounded-xl overflow-hidden"
+            style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
+            <button
+              className="w-full flex items-center justify-between px-5 py-4 text-left"
+              onClick={() => setExpanded(prev => {
+                const next = new Set(prev)
+                open ? next.delete(w.week) : next.add(w.week)
+                return next
+              })}>
+              <div className="flex items-center gap-3">
+                <span className="text-xs px-2 py-0.5 rounded font-mono font-bold"
+                  style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700' }}>
+                  W{w.week}
+                </span>
+                <span className="font-semibold text-white">{w.title}</span>
+              </div>
+              {open
+                ? <ChevronDown size={16} style={{ color: '#555' }} />
+                : <ChevronRight size={16} style={{ color: '#555' }} />}
+            </button>
+            {open && (
+              <div className="px-5 pb-5 space-y-4" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                {w.key_points.length > 0 && (
+                  <div className="pt-3">
+                    <p className="text-xs font-semibold mb-2" style={{ color: '#888' }}>核心知识点</p>
+                    <ul className="space-y-1">
+                      {w.key_points.map((kp, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm" style={{ color: '#CCC' }}>
+                          <span style={{ color: '#FFD700', marginTop: 2 }}>•</span> {kp}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {w.content && (
+                  <ContentTranslationPanel content={w.content} courseId={courseId} />
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
