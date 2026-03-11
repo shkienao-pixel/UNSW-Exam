@@ -138,11 +138,25 @@ function ContentCard({
       )}
 
       <div className="flex flex-wrap gap-2 mb-4">
+        {/* 粘贴/编辑 — 始终可用 */}
+        <button
+          onClick={() => {
+            const md = (data?.content_json as { markdown?: string })?.markdown ?? ''
+            setEditMarkdown(md)
+            setPreview(false)
+            setEditing(!editing)
+          }}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+          style={{ background: 'rgba(99,179,237,0.12)', color: '#63B3ED', border: '1px solid rgba(99,179,237,0.25)' }}>
+          ✎ {editing ? '取消' : '粘贴 / 编辑内容'}
+        </button>
+
+        {/* 自动生成 — 辅助功能 */}
         <button onClick={generate} disabled={generating}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-          style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}>
+          style={{ background: 'rgba(255,215,0,0.08)', color: '#999', border: '1px solid rgba(255,255,255,0.1)' }}>
           {generating ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-          {generating ? '生成中...' : (status === 'not_generated' ? '立即生成' : '重新生成')}
+          {generating ? '提取中...' : '从 PDF 提取草稿'}
         </button>
 
         {status !== 'not_generated' && (
@@ -168,18 +182,6 @@ function ContentCard({
                 <CheckCircle size={12} /> 重新发布
               </button>
             )}
-            <button
-              onClick={() => {
-                const md = (data?.content_json as { markdown?: string })?.markdown
-                  ?? JSON.stringify(data?.content_json ?? {}, null, 2)
-                setEditMarkdown(md)
-                setPreview(false)
-                setEditing(!editing)
-              }}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-              style={{ background: 'rgba(255,255,255,0.06)', color: '#CCC', border: '1px solid rgba(255,255,255,0.1)' }}>
-              {editing ? '取消编辑' : '编辑内容'}
-            </button>
           </>
         )}
       </div>

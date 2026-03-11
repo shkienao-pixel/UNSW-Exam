@@ -34,16 +34,21 @@ def upsert_content(
     status: str = "draft",
 ) -> dict:
     now = datetime.now(timezone.utc).isoformat()
-    db.table("course_content").upsert(
-        {
+    existing = get_content(db, course_id, content_type)
+    if existing:
+        db.table("course_content").update({
+            "content_json": content_json,
+            "status": status,
+            "updated_at": now,
+        }).eq("course_id", course_id).eq("content_type", content_type).execute()
+    else:
+        db.table("course_content").insert({
             "course_id": course_id,
             "content_type": content_type,
             "content_json": content_json,
             "status": status,
             "updated_at": now,
-        },
-        on_conflict="course_id,content_type",
-    ).execute()
+        }).execute()
     fetch = (
         db.table("course_content")
         .select("*")

@@ -65,7 +65,8 @@ async def admin_generate_content(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        logger.error("generate_content failed %s/%s: %s", course_id, body.content_type, exc)
+        import traceback
+        logger.error("generate_content failed %s/%s:\n%s", course_id, body.content_type, traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Generation failed: {str(exc)[:200]}")
 
 
