@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2, RefreshCw, CheckCircle, EyeOff, FileText, ListTree } from 'lucide-react'
+import { CheckCircle, EyeOff, FileText, ListTree } from 'lucide-react'
 import { Course, adminReq, Spinner, ErrorBox } from './_shared'
 import ReactMarkdown from 'react-markdown'
 
 type ContentType = 'summary' | 'outline'
 type ContentStatus = 'not_generated' | 'draft' | 'published' | 'hidden'
+type ContentFormat = 'markdown' | 'html' | 'json'
 
 interface CourseContent {
   id?: number
@@ -28,6 +29,72 @@ const STATUS_COLORS: Record<ContentStatus, string> = {
   hidden: '#FF6666',
 }
 
+const FORMAT_LABELS: Record<ContentFormat, string> = {
+  markdown: 'Markdown',
+  html: 'HTML',
+  json: 'JSON',
+}
+const FORMAT_COLORS: Record<ContentFormat, string> = {
+  markdown: '#63B3ED',
+  html: '#F6AD55',
+  json: '#A78BFA',
+}
+
+/** 从 content_json 中提取 { format, content } */
+function extractContent(json: Record<string, unknown>): { format: ContentFormat; content: string } {
+  if (json.format && json.content) {
+    return { format: json.format as ContentFormat, content: json.content as string }
+  }
+  if (json.markdown) return { format: 'markdown', content: json.markdown as string }
+  return { format: 'markdown', content: '' }
+}
+
+/** 自动检测粘贴内容的格式 */
+function detectFormat(text: string): ContentFormat {
+  const t = text.trim()
+  if (!t) return 'markdown'
+  try { JSON.parse(t); return 'json' } catch {}
+  if (/<[a-zA-Z][^>]*>/i.test(t)) return 'html'
+  return 'markdown'
+}
+
+/** JSON 格式内容预览 */
+function JsonPreview({ content }: { content: string }) {
+  let pretty = content
+  try {
+    pretty = JSON.stringify(JSON.parse(content), null, 2)
+  } catch {}
+  return (
+    <pre className="w-full rounded-lg p-4 text-xs overflow-auto"
+      style={{
+        background: 'rgba(0,0,0,0.3)',
+        color: '#A78BFA',
+        border: '1px solid rgba(167,139,250,0.15)',
+        minHeight: 300,
+        maxHeight: 600,
+      }}>
+      {pretty}
+    </pre>
+  )
+}
+
+/** HTML 格式内容预览（iframe 隔离） */
+function HtmlPreview({ content }: { content: string }) {
+  const html = `<!doctype html><html><head><meta charset="utf-8">
+    <style>body{font-family:sans-serif;background:#111;color:#ccc;padding:16px;font-size:13px;line-height:1.6}
+    h1,h2,h3{color:#FFD700}a{color:#63B3ED}hr{border-color:#333}</style>
+    </head><body>${content}</body></html>`
+  return (
+    <iframe
+      srcDoc={html}
+      title="html-preview"
+      className="w-full rounded-lg"
+      style={{ border: '1px solid rgba(255,255,255,0.08)', minHeight: 400, maxHeight: 600, background: '#111' }}
+      sandbox="allow-same-origin"
+    />
+  )
+}
+
 function ContentCard({
   secret, course, contentType, icon, label, creditCost,
 }: {
@@ -40,10 +107,10 @@ function ContentCard({
 }) {
   const [data, setData] = useState<CourseContent | null>(null)
   const [loading, setLoading] = useState(true)
-  const [generating, setGenerating] = useState(false)
-  const [editing, setEditing]           = useState(false)
-  const [editMarkdown, setEditMarkdown] = useState('')
-  const [preview, setPreview]           = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editContent, setEditContent] = useState('')
+  const [detectedFormat, setDetectedFormat] = useState<ContentFormat>('markdown')
+  const [preview, setPreview] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -67,21 +134,18 @@ function ContentCard({
 
   useEffect(() => { load() }, [load])
 
-  async function generate() {
-    setGenerating(true)
-    setError(null)
-    try {
-      await adminReq(secret, `/courses/${course.id}/course-content/generate`, {
-        method: 'POST',
-        body: JSON.stringify({ content_type: contentType }),
-      })
-      showToast('生成完成，已保存为草稿')
-      await load()
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Generation failed')
-    } finally {
-      setGenerating(false)
-    }
+  function openEditor() {
+    const { content } = extractContent(data?.content_json ?? {})
+    const fmt = content ? detectFormat(content) : 'markdown'
+    setEditContent(content)
+    setDetectedFormat(fmt)
+    setPreview(false)
+    setEditing(prev => !prev)
+  }
+
+  function handleContentChange(text: string) {
+    setEditContent(text)
+    setDetectedFormat(detectFormat(text))
   }
 
   async function changeStatus(status: string) {
@@ -98,10 +162,14 @@ function ContentCard({
   }
 
   async function saveEdit() {
+    // 统一存储格式：{ format, content }；markdown 额外保留 markdown 键以兼容旧逻辑
+    const fmt = detectFormat(editContent)
+    const content_json: Record<string, unknown> = { format: fmt, content: editContent }
+    if (fmt === 'markdown') content_json.markdown = editContent
     try {
       await adminReq(secret, `/courses/${course.id}/course-content/${contentType}/admin`, {
         method: 'PUT',
-        body: JSON.stringify({ content_json: { markdown: editMarkdown } }),
+        body: JSON.stringify({ content_json }),
       })
       setEditing(false)
       showToast('已保存')
@@ -140,23 +208,10 @@ function ContentCard({
       <div className="flex flex-wrap gap-2 mb-4">
         {/* 粘贴/编辑 — 始终可用 */}
         <button
-          onClick={() => {
-            const md = (data?.content_json as { markdown?: string })?.markdown ?? ''
-            setEditMarkdown(md)
-            setPreview(false)
-            setEditing(!editing)
-          }}
+          onClick={openEditor}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
           style={{ background: 'rgba(99,179,237,0.12)', color: '#63B3ED', border: '1px solid rgba(99,179,237,0.25)' }}>
           ✎ {editing ? '取消' : '粘贴 / 编辑内容'}
-        </button>
-
-        {/* 自动生成 — 辅助功能 */}
-        <button onClick={generate} disabled={generating}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-          style={{ background: 'rgba(255,215,0,0.08)', color: '#999', border: '1px solid rgba(255,255,255,0.1)' }}>
-          {generating ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-          {generating ? '提取中...' : '从 PDF 提取草稿'}
         </button>
 
         {status !== 'not_generated' && (
@@ -188,6 +243,7 @@ function ContentCard({
 
       {editing && (
         <div className="space-y-2">
+          {/* 工具栏：编辑/预览 + 格式徽章 */}
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPreview(false)}
@@ -209,12 +265,25 @@ function ContentCard({
               }}>
               预览
             </button>
+            {/* 自动识别格式标签 */}
+            {editContent && (
+              <span className="ml-auto text-xs px-2 py-0.5 rounded font-mono"
+                style={{
+                  background: `${FORMAT_COLORS[detectedFormat]}18`,
+                  color: FORMAT_COLORS[detectedFormat],
+                  border: `1px solid ${FORMAT_COLORS[detectedFormat]}40`,
+                }}>
+                自动识别：{FORMAT_LABELS[detectedFormat]}
+              </span>
+            )}
           </div>
+
           {!preview ? (
             <textarea
-              value={editMarkdown}
-              onChange={e => setEditMarkdown(e.target.value)}
+              value={editContent}
+              onChange={e => handleContentChange(e.target.value)}
               rows={24}
+              placeholder={`支持粘贴 Markdown、HTML 或 JSON，自动识别格式后在前端正确渲染。\n\n示例：\n- Markdown: # 标题\\n\\n段落内容\n- HTML: <h1>标题</h1><p>段落</p>\n- JSON: {"sections":[{"title":"...","content":"..."}]}`}
               className="w-full text-sm rounded-lg p-3 font-mono leading-relaxed"
               style={{
                 background: 'rgba(0,0,0,0.3)',
@@ -224,18 +293,25 @@ function ContentCard({
               }}
             />
           ) : (
-            <div
-              className="w-full rounded-lg p-4 overflow-y-auto prose prose-invert prose-sm max-w-none"
-              style={{
-                background: 'rgba(0,0,0,0.2)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                minHeight: '400px',
-                maxHeight: '600px',
-                color: '#CCC',
-              }}>
-              <ReactMarkdown>{editMarkdown}</ReactMarkdown>
+            <div style={{ minHeight: 300 }}>
+              {detectedFormat === 'html' && <HtmlPreview content={editContent} />}
+              {detectedFormat === 'json' && <JsonPreview content={editContent} />}
+              {detectedFormat === 'markdown' && (
+                <div
+                  className="w-full rounded-lg p-4 overflow-y-auto prose prose-invert prose-sm max-w-none"
+                  style={{
+                    background: 'rgba(0,0,0,0.2)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    minHeight: 300,
+                    maxHeight: 600,
+                    color: '#CCC',
+                  }}>
+                  <ReactMarkdown>{editContent}</ReactMarkdown>
+                </div>
+              )}
             </div>
           )}
+
           <button onClick={saveEdit}
             className="px-4 py-1.5 rounded-lg text-sm font-medium"
             style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.3)' }}>

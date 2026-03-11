@@ -1,7 +1,6 @@
 """Course content routes - admin generation + user unlock/view."""
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
@@ -42,32 +41,6 @@ def admin_get_content(
         return {"status": "not_generated", "content_json": {}, "updated_at": None}
     return row
 
-
-class GenerateRequest(BaseModel):
-    content_type: str
-
-
-@router.post("/{course_id}/course-content/generate")
-async def admin_generate_content(
-    course_id: str,
-    body: GenerateRequest,
-    _: None = Depends(_require_admin),
-    db: Client = Depends(get_db),
-) -> dict[str, Any]:
-    if body.content_type not in ("summary", "outline"):
-        raise HTTPException(status_code=422, detail="content_type must be summary or outline")
-    try:
-        if body.content_type == "summary":
-            result = await asyncio.to_thread(svc.generate_summary, db, course_id)
-        else:
-            result = await asyncio.to_thread(svc.generate_outline, db, course_id)
-        return result
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        import traceback
-        logger.error("generate_content failed %s/%s:\n%s", course_id, body.content_type, traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Generation failed: {str(exc)[:200]}")
 
 
 class UpdateContentRequest(BaseModel):

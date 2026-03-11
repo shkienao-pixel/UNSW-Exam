@@ -389,6 +389,7 @@ function TypedOutputsView({
 
 // ── Summary Tab ───────────────────────────────────────────────────────────────
 
+/** 从 Markdown 文本提取 TOC */
 function extractToc(markdown: string): { id: string; title: string; level: number }[] {
   const toc: { id: string; title: string; level: number }[] = []
   for (const line of markdown.split('\n')) {
@@ -403,10 +404,159 @@ function extractToc(markdown: string): { id: string; title: string; level: numbe
   return toc
 }
 
+/** 从 HTML 文本提取 TOC */
+function extractTocFromHtml(html: string): { id: string; title: string; level: number }[] {
+  const toc: { id: string; title: string; level: number }[] = []
+  const re = /<h([1-3])[^>]*>([\s\S]*?)<\/h[1-3]>/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(html)) !== null) {
+    const level = parseInt(m[1], 10)
+    const title = m[2].replace(/<[^>]+>/g, '').trim()
+    const id = title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w\u4e00-\u9fff-]/g, '')
+    toc.push({ id, title, level })
+  }
+  return toc
+}
+
+/** 解析 content_json，返回统一的 { format, content } */
+function parseContentJson(json: Record<string, unknown>): { format: 'markdown' | 'html' | 'json'; content: string } {
+  if (json.format && json.content) {
+    return { format: json.format as 'markdown' | 'html' | 'json', content: json.content as string }
+  }
+  if (json.markdown) return { format: 'markdown', content: json.markdown as string }
+  // 旧版 weeks 格式
+  if (json.weeks && Array.isArray(json.weeks)) {
+    const blocks = (json.weeks as { week: number; title: string; content: string }[])
+      .map(w => `## ${w.title}\n\n${w.content}`)
+    return { format: 'markdown', content: '# 课程摘要\n\n' + blocks.join('\n\n---\n\n') }
+  }
+  return { format: 'markdown', content: '' }
+}
+
+/** Markdown 渲染（带 TOC anchor） */
+function MarkdownContent({ content, contentRef }: { content: string; contentRef: React.RefObject<HTMLDivElement> }) {
+  return (
+    <div ref={contentRef} className="flex-1 min-w-0">
+      <ReactMarkdown
+        components={{
+          h1: ({ children }) => {
+            const id = String(children).toLowerCase().replace(/\s+/g, '-').replace(/[^\w\u4e00-\u9fff-]/g, '')
+            return <h1 data-heading-id={id} className="text-2xl font-bold text-white mb-6 mt-0">{children}</h1>
+          },
+          h2: ({ children }) => {
+            const id = String(children).toLowerCase().replace(/\s+/g, '-').replace(/[^\w\u4e00-\u9fff-]/g, '')
+            return (
+              <h2 data-heading-id={id}
+                className="text-lg font-semibold mt-8 mb-3 pb-2"
+                style={{ color: '#FFD700', borderBottom: '1px solid rgba(255,215,0,0.15)' }}>
+                {children}
+              </h2>
+            )
+          },
+          h3: ({ children }) => {
+            const id = String(children).toLowerCase().replace(/\s+/g, '-').replace(/[^\w\u4e00-\u9fff-]/g, '')
+            return <h3 data-heading-id={id} className="text-base font-semibold mt-5 mb-2 text-white">{children}</h3>
+          },
+          hr: () => <hr className="my-8" style={{ borderColor: 'rgba(255,255,255,0.08)' }} />,
+          p: ({ children }) => <p className="mb-3 leading-relaxed text-sm" style={{ color: '#CCC' }}>{children}</p>,
+          li: ({ children }) => <li className="mb-1 text-sm" style={{ color: '#CCC' }}>{children}</li>,
+          strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+        }}>
+        {content}
+      </ReactMarkdown>
+    </div>
+  )
+}
+
+/** HTML 渲染（iframe 隔离，带 heading id 注入） */
+function HtmlContent({ content, contentRef }: { content: string; contentRef: React.RefObject<HTMLDivElement> }) {
+  // 给 h1-h3 注入 data-heading-id，以便 TOC 跳转
+  const injected = content.replace(/<h([1-3])([^>]*)>([\s\S]*?)<\/h[1-3]>/gi, (_, lvl, attrs, inner) => {
+    const title = inner.replace(/<[^>]+>/g, '').trim()
+    const id = title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w\u4e00-\u9fff-]/g, '')
+    return `<h${lvl}${attrs} data-heading-id="${id}">${inner}</h${lvl}>`
+  })
+  const html = `<!doctype html><html><head><meta charset="utf-8">
+    <style>
+      *{box-sizing:border-box}
+      body{font-family:system-ui,sans-serif;background:transparent;color:#ccc;padding:0;margin:0;font-size:13px;line-height:1.7}
+      h1{color:#fff;font-size:1.5rem;font-weight:700;margin:0 0 1.5rem}
+      h2{color:#FFD700;font-size:1.1rem;font-weight:600;margin:2rem 0 0.75rem;padding-bottom:0.5rem;border-bottom:1px solid rgba(255,215,0,0.15)}
+      h3{color:#fff;font-size:1rem;font-weight:600;margin:1.25rem 0 0.5rem}
+      p{margin:0 0 0.75rem;color:#ccc}
+      ul,ol{margin:0 0 0.75rem;padding-left:1.5rem;color:#ccc}
+      li{margin-bottom:0.25rem}
+      strong{color:#fff;font-weight:600}
+      hr{border:none;border-top:1px solid rgba(255,255,255,0.08);margin:2rem 0}
+      a{color:#63B3ED}
+      code{background:rgba(255,255,255,0.08);padding:0.1em 0.4em;border-radius:4px;font-size:0.9em;color:#A78BFA}
+      pre{background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:1rem;overflow:auto}
+      pre code{background:none;padding:0}
+      table{width:100%;border-collapse:collapse;margin:0 0 0.75rem}
+      th,td{border:1px solid rgba(255,255,255,0.1);padding:0.4rem 0.75rem;text-align:left}
+      th{background:rgba(255,215,0,0.08);color:#FFD700}
+    </style>
+    </head><body>${injected}</body></html>`
+  return (
+    <div ref={contentRef} className="flex-1 min-w-0">
+      <iframe
+        srcDoc={html}
+        title="content"
+        className="w-full rounded-xl"
+        style={{ border: 'none', minHeight: 600, background: 'transparent' }}
+        sandbox="allow-same-origin"
+        onLoad={e => {
+          // 自适应高度
+          const iframe = e.currentTarget
+          const body = iframe.contentDocument?.body
+          if (body) iframe.style.height = body.scrollHeight + 32 + 'px'
+        }}
+      />
+    </div>
+  )
+}
+
+/** JSON 内容渲染 */
+function JsonContent({ content }: { content: string }) {
+  let parsed: unknown
+  try { parsed = JSON.parse(content) } catch { parsed = null }
+
+  // 尝试渲染已知结构
+  if (parsed && typeof parsed === 'object') {
+    const obj = parsed as Record<string, unknown>
+    // { sections: [{title, content}] }
+    if (Array.isArray(obj.sections)) {
+      return (
+        <div className="flex-1 min-w-0 space-y-6">
+          {(obj.sections as { title?: string; content?: string }[]).map((s, i) => (
+            <div key={i}>
+              {s.title && <h2 className="text-lg font-semibold mb-2 pb-1" style={{ color: '#FFD700', borderBottom: '1px solid rgba(255,215,0,0.12)' }}>{s.title}</h2>}
+              {s.content && <p className="text-sm leading-relaxed" style={{ color: '#CCC' }}>{s.content}</p>}
+            </div>
+          ))}
+        </div>
+      )
+    }
+  }
+
+  // 兜底：格式化 JSON 展示
+  let pretty = content
+  try { pretty = JSON.stringify(JSON.parse(content), null, 2) } catch {}
+  return (
+    <div className="flex-1 min-w-0">
+      <pre className="rounded-xl p-4 text-xs overflow-auto"
+        style={{ background: 'rgba(0,0,0,0.3)', color: '#A78BFA', border: '1px solid rgba(167,139,250,0.15)', lineHeight: 1.6 }}>
+        {pretty}
+      </pre>
+    </div>
+  )
+}
+
 function SummaryTab({ courseId }: { courseId: string }) {
   const [status, setStatus]                   = useState<'loading' | 'not_published' | 'locked' | 'unlocked'>('loading')
   const [creditsRequired, setCreditsRequired] = useState(200)
-  const [markdown, setMarkdown]               = useState('')
+  const [format, setFormat]                   = useState<'markdown' | 'html' | 'json'>('markdown')
+  const [content, setContent]                 = useState('')
   const [unlocking, setUnlocking]             = useState(false)
   const [error, setError]                     = useState<string | null>(null)
   const contentRef                            = useRef<HTMLDivElement>(null)
@@ -422,13 +572,9 @@ function SummaryTab({ courseId }: { courseId: string }) {
   async function loadContent() {
     try {
       const res = await api.courseContent.get(courseId, 'summary')
-      const json = res.content_json as { markdown?: string; weeks?: { week: number; title: string; content: string }[] }
-      if (json.markdown) {
-        setMarkdown(json.markdown)
-      } else if (json.weeks) {
-        const blocks = json.weeks.map(w => `## ${w.title}\n\n${w.content}`)
-        setMarkdown('# 课程摘要\n\n' + blocks.join('\n\n---\n\n'))
-      }
+      const { format: fmt, content: cnt } = parseContentJson(res.content_json)
+      setFormat(fmt)
+      setContent(cnt)
     } catch { setError('加载失败，请刷新重试') }
   }
 
@@ -450,6 +596,13 @@ function SummaryTab({ courseId }: { courseId: string }) {
   }
 
   function scrollTo(id: string) {
+    if (format === 'html') {
+      // HTML 内容在 iframe 里，通过 contentDocument 操作
+      const iframe = contentRef.current?.querySelector('iframe') as HTMLIFrameElement | null
+      const el = iframe?.contentDocument?.querySelector(`[data-heading-id="${id}"]`)
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
     if (!contentRef.current) return
     const el = contentRef.current.querySelector(`[data-heading-id="${id}"]`)
     el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -486,64 +639,40 @@ function SummaryTab({ courseId }: { courseId: string }) {
     </div>
   )
 
-  const toc = extractToc(markdown)
+  const toc = format === 'markdown' ? extractToc(content) : format === 'html' ? extractTocFromHtml(content) : []
 
   return (
     <div className="flex gap-0 min-h-[70vh]">
-      {/* 左侧 TOC */}
-      <div className="w-52 flex-shrink-0 pr-4">
-        <div className="sticky top-4 space-y-0.5 max-h-[calc(100vh-140px)] overflow-y-auto">
-          <p className="text-xs font-semibold mb-3 uppercase tracking-wider" style={{ color: '#555' }}>目录</p>
-          {toc.map((item, i) => (
-            <button
-              key={i}
-              onClick={() => scrollTo(item.id)}
-              className="w-full text-left text-xs py-1.5 rounded-lg transition-all hover:bg-white/5 leading-snug"
-              style={{
-                color: item.level === 1 ? '#FFD700' : item.level === 2 ? '#CCC' : '#888',
-                paddingLeft: item.level <= 2 ? '8px' : '20px',
-                fontWeight: item.level <= 2 ? 600 : 400,
-              }}>
-              {item.title}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 分割线 */}
-      <div className="w-px flex-shrink-0 mr-6" style={{ background: 'rgba(255,255,255,0.06)' }} />
+      {/* 左侧 TOC（仅 markdown/html 有标题结构时显示） */}
+      {toc.length > 0 && (
+        <>
+          <div className="w-52 flex-shrink-0 pr-4">
+            <div className="sticky top-4 space-y-0.5 max-h-[calc(100vh-140px)] overflow-y-auto">
+              <p className="text-xs font-semibold mb-3 uppercase tracking-wider" style={{ color: '#555' }}>目录</p>
+              {toc.map((item, i) => (
+                <button
+                  key={i}
+                  onClick={() => scrollTo(item.id)}
+                  className="w-full text-left text-xs py-1.5 rounded-lg transition-all hover:bg-white/5 leading-snug"
+                  style={{
+                    color: item.level === 1 ? '#FFD700' : item.level === 2 ? '#CCC' : '#888',
+                    paddingLeft: item.level <= 2 ? '8px' : '20px',
+                    fontWeight: item.level <= 2 ? 600 : 400,
+                  }}>
+                  {item.title}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="w-px flex-shrink-0 mr-6" style={{ background: 'rgba(255,255,255,0.06)' }} />
+        </>
+      )}
 
       {/* 右侧正文 */}
-      <div ref={contentRef} className="flex-1 min-w-0">
-        {error && <p className="text-sm mb-4" style={{ color: '#FF6666' }}>{error}</p>}
-        <ReactMarkdown
-          components={{
-            h1: ({ children }) => {
-              const id = String(children).toLowerCase().replace(/\s+/g, '-').replace(/[^\w\u4e00-\u9fff-]/g, '')
-              return <h1 data-heading-id={id} className="text-2xl font-bold text-white mb-6 mt-0">{children}</h1>
-            },
-            h2: ({ children }) => {
-              const id = String(children).toLowerCase().replace(/\s+/g, '-').replace(/[^\w\u4e00-\u9fff-]/g, '')
-              return (
-                <h2 data-heading-id={id}
-                  className="text-lg font-semibold mt-8 mb-3 pb-2"
-                  style={{ color: '#FFD700', borderBottom: '1px solid rgba(255,215,0,0.15)' }}>
-                  {children}
-                </h2>
-              )
-            },
-            h3: ({ children }) => {
-              const id = String(children).toLowerCase().replace(/\s+/g, '-').replace(/[^\w\u4e00-\u9fff-]/g, '')
-              return <h3 data-heading-id={id} className="text-base font-semibold mt-5 mb-2 text-white">{children}</h3>
-            },
-            hr: () => <hr className="my-8" style={{ borderColor: 'rgba(255,255,255,0.08)' }} />,
-            p: ({ children }) => <p className="mb-3 leading-relaxed text-sm" style={{ color: '#CCC' }}>{children}</p>,
-            li: ({ children }) => <li className="mb-1 text-sm" style={{ color: '#CCC' }}>{children}</li>,
-            strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
-          }}>
-          {markdown}
-        </ReactMarkdown>
-      </div>
+      {error && <p className="text-sm mb-4" style={{ color: '#FF6666' }}>{error}</p>}
+      {format === 'markdown' && <MarkdownContent content={content} contentRef={contentRef} />}
+      {format === 'html' && <HtmlContent content={content} contentRef={contentRef} />}
+      {format === 'json' && <JsonContent content={content} />}
     </div>
   )
 }
