@@ -215,7 +215,7 @@ def gemini_generate_answer(
             config=types.GenerateContentConfig(
                 system_instruction=GEMINI_ANSWER_SYSTEM,
                 temperature=0.4,
-                max_output_tokens=2048,
+                max_output_tokens=8192,
             ),
         )
         return (resp.text or "").strip()
