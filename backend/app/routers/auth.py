@@ -64,9 +64,9 @@ def _consume_invite(supabase: Client, invite: dict) -> bool:
     result = (
         supabase.table("invites")
         .update({"use_count": invite["use_count"] + 1})
+        .select("id")  # supabase-py v2: .select() must come before .eq()
         .eq("id", invite["id"])
         .eq("use_count", invite["use_count"])  # optimistic lock: only match if unchanged
-        .select("id")  # supabase-py v2 requires .select() to get result.data
         .execute()
     )
     return bool(result.data)
