@@ -108,44 +108,25 @@ def _consume_invite(supabase: Client, invite: dict[str, Any]) -> bool:
     return result.data is True
 
 
-def _release_invite(supabase: Client, invite: dict[str, Any]) -> None:
-    """Best-effort rollback: decrement invite use_count by 1."""
-    try:
-        latest = (
-            supabase.table("invites")
-            .select("use_count")
-            .eq("id", invite["id"])
-            .limit(1)
-            .execute()
-        )
-        if not latest.data:
-            return
-        current = int(latest.data[0].get("use_count", 0))
-        new_count = max(0, current - 1)
-        supabase.table("invites").update({"use_count": new_count}).eq("id", invite["id"]).execute()
-    except Exception:
-        logger.warning("Failed to release invite %s after registration error", invite.get("id"))
-
 
 @router.post("/register", response_model=RegisterResponse, status_code=201)
 def register(body: RegisterRequest, supabase: Client = Depends(get_db)) -> RegisterResponse:
-    """Start registration by sending OTP.
+    """Start registration: validate invite (do NOT consume yet) and send OTP.
 
-    Invite is validated and consumed at registration time to avoid OTP-stage lockouts.
-    Registration is considered completed only after /auth/verify-otp succeeds.
+    Invite is consumed only after /auth/verify-otp succeeds.
     """
     invite = _validate_invite(supabase, body.invite_code)
-    consumed = _consume_invite(supabase, invite)
-    if not consumed:
-        raise AuthError("Invite code has already been used.")
 
     try:
-        resp = supabase.auth.sign_up({"email": body.email, "password": body.password})
+        resp = supabase.auth.sign_up({
+            "email": body.email,
+            "password": body.password,
+            "options": {"data": {"invite_id": str(invite["id"])}},
+        })
     except Exception as exc:
-        _release_invite(supabase, invite)
         msg = str(exc).lower()
         if "user already registered" in msg or "already been registered" in msg:
-            # Existing but not-yet-verified users should continue OTP flow.
+            # Unverified account already exists — resend OTP so user can complete registration.
             try:
                 supabase.auth.resend({"type": "signup", "email": body.email})
             except Exception as resend_exc:
@@ -155,29 +136,13 @@ def register(body: RegisterRequest, supabase: Client = Depends(get_db)) -> Regis
             return RegisterResponse(status="otp_sent", email=body.email)
         raise AuthError(_friendly_auth_error(exc, "Registration")) from exc
 
-    # If email confirmation is enabled in Supabase, session is None and OTP is required.
-    if resp.session is None:
-        return RegisterResponse(status="otp_sent", email=body.email)
-
-    try:
-        user_id = resp.session.user.id
-        credit_service.earn(supabase, user_id, 5, "welcome_bonus", note="welcome credits")
-    except Exception:
-        pass
-
-    session = resp.session
-    return RegisterResponse(
-        status="ok",
-        email=body.email,
-        access_token=session.access_token,
-        refresh_token=session.refresh_token,
-        expires_in=session.expires_in or 3600,
-    )
+    # Registration always requires OTP — never return tokens here.
+    return RegisterResponse(status="otp_sent", email=body.email)
 
 
 @router.post("/verify-otp", response_model=TokenResponse)
 def verify_otp(body: VerifyOtpRequest, supabase: Client = Depends(get_db)) -> TokenResponse:
-    """Verify the signup OTP code and finalize registration."""
+    """Verify signup OTP, consume invite code, and finalize registration."""
     try:
         resp = supabase.auth.verify_otp(
             {
@@ -192,8 +157,27 @@ def verify_otp(body: VerifyOtpRequest, supabase: Client = Depends(get_db)) -> To
     if resp.session is None:
         raise AuthError("Invalid or expired verification code.")
 
+    user_id = resp.session.user.id
+
+    # Consume the invite code that was stored in user metadata at registration time.
     try:
-        user_id = resp.session.user.id
+        metadata = resp.session.user.user_metadata or {}
+        invite_id = metadata.get("invite_id")
+        if invite_id:
+            invite_row = (
+                supabase.table("invites")
+                .select("*")
+                .eq("id", invite_id)
+                .limit(1)
+                .execute()
+            )
+            if invite_row.data:
+                _consume_invite(supabase, invite_row.data[0])
+    except Exception:
+        logger.warning("Failed to consume invite after OTP verification for user %s", user_id)
+
+    # Award welcome credits (only on first successful verification).
+    try:
         credit_service.earn(supabase, user_id, 5, "welcome_bonus", note="welcome credits")
     except Exception:
         pass

@@ -7,7 +7,6 @@ import { AlertCircle, ArrowRight, Loader2, Lock, Mail, Shield } from 'lucide-rea
 import ExamMasterLogo from '@/components/ExamMasterLogo'
 import Toast from '@/components/Toast'
 import { useAuth } from '@/lib/auth-context'
-import { api } from '@/lib/api'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -17,9 +16,6 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [emailError, setEmailError] = useState('')
   const [passwordError, setPasswordError] = useState('')
-  const [needsVerification, setNeedsVerification] = useState(false)
-  const [resendingCode, setResendingCode] = useState(false)
-  const [verifyHint, setVerifyHint] = useState('')
   const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
 
@@ -45,8 +41,6 @@ export default function LoginPage() {
     setError('')
     setEmailError('')
     setPasswordError('')
-    setVerifyHint('')
-    setNeedsVerification(false)
     setLoading(true)
 
     try {
@@ -57,29 +51,8 @@ export default function LoginPage() {
       const message = err instanceof Error ? err.message : 'Login failed, please try again.'
       bindFieldError(message)
       setError(message)
-      const s = message.toLowerCase()
-      if (s.includes('not verified') || s.includes('not confirmed') || (s.includes('邮箱') && s.includes('验证'))) {
-        setNeedsVerification(true)
-      }
     } finally {
       setLoading(false)
-    }
-  }
-
-  async function resendVerificationCode() {
-    if (!email.trim()) {
-      setEmailError('请先输入邮箱地址')
-      return
-    }
-    setResendingCode(true)
-    setVerifyHint('')
-    try {
-      await api.auth.resendOtp(email.trim())
-      setVerifyHint('验证码已重新发送，请检查邮箱（含垃圾邮箱）。')
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '重发验证码失败，请稍后重试。')
-    } finally {
-      setResendingCode(false)
     }
   }
 
@@ -179,31 +152,6 @@ export default function LoginPage() {
                 <p className="text-sm text-red-200/90">{error}</p>
               </div>
             )}
-            {verifyHint && (
-              <div className="rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-3">
-                <p className="text-sm text-emerald-100/90">{verifyHint}</p>
-              </div>
-            )}
-            {needsVerification && (
-              <div className="grid gap-2 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={resendVerificationCode}
-                  disabled={resendingCode}
-                  className="btn-outline-gold py-2.5 text-sm disabled:opacity-50"
-                >
-                  {resendingCode ? '发送中...' : '重发邮箱验证码'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => router.push(`/register?mode=otp&email=${encodeURIComponent(email.trim())}`)}
-                  className="btn-outline-gold py-2.5 text-sm"
-                >
-                  我有验证码，去验证
-                </button>
-              </div>
-            )}
-
             <button type="submit" className="btn-gold flex w-full items-center justify-center gap-2 py-3.5 text-sm" disabled={loading}>
               {loading ? (
                 <>
