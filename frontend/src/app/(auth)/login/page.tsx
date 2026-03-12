@@ -3,32 +3,31 @@
 import { FormEvent, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, Loader2, Lock, Mail, Shield } from 'lucide-react'
+import { AlertCircle, ArrowRight, Loader2, Lock, Mail, Shield } from 'lucide-react'
 import ExamMasterLogo from '@/components/ExamMasterLogo'
-import Toast, { ToastType } from '@/components/Toast'
+import Toast from '@/components/Toast'
 import { useAuth } from '@/lib/auth-context'
-
-interface ToastState { message: string; type: ToastType }
 
 export default function LoginPage() {
   const router = useRouter()
   const { login } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [toast, setToast] = useState<ToastState | null>(null)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    setToast(null)
+    setError('')
     setLoading(true)
 
     try {
       await login(email, password)
-      setToast({ message: '登录成功，正在跳转...', type: 'success' })
+      setSuccess(true)
       setTimeout(() => router.push('/dashboard'), 1000)
     } catch (err: unknown) {
-      setToast({ message: err instanceof Error ? err.message : '登录失败，请稍后重试。', type: 'error' })
+      setError(err instanceof Error ? err.message : '登录失败，请稍后重试。')
     } finally {
       setLoading(false)
     }
@@ -36,7 +35,9 @@ export default function LoginPage() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {success && (
+        <Toast message="登录成功，正在跳转..." type="success" onClose={() => setSuccess(false)} />
+      )}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(20,28,42,0.78),transparent_30%),radial-gradient(circle_at_85%_10%,rgba(200,165,90,0.08),transparent_18%),linear-gradient(180deg,#050608_0%,#080b12_50%,#050608_100%)]" />
 
       <div className="relative z-10 grid w-full max-w-[1080px] gap-8 lg:grid-cols-[0.92fr_1.08fr]">
@@ -94,10 +95,10 @@ export default function LoginPage() {
                 <Mail size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
                 <input
                   type="email"
-                  className="input-glass pl-11"
+                  className={`input-glass pl-11 ${error ? 'border-red-400/40' : ''}`}
                   placeholder="you@student.unsw.edu.au"
                   value={email}
-                  onChange={e => setEmail(e.target.value)}
+                  onChange={e => { setEmail(e.target.value); setError('') }}
                   autoComplete="email"
                   required
                 />
@@ -110,16 +111,22 @@ export default function LoginPage() {
                 <Lock size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
                 <input
                   type="password"
-                  className="input-glass pl-11"
+                  className={`input-glass pl-11 ${error ? 'border-red-400/40' : ''}`}
                   placeholder="请输入密码"
                   value={password}
-                  onChange={e => setPassword(e.target.value)}
+                  onChange={e => { setPassword(e.target.value); setError('') }}
                   autoComplete="current-password"
                   required
                 />
               </div>
             </div>
 
+            {error && (
+              <div className="flex items-start gap-2.5 rounded-2xl border border-red-400/20 bg-red-500/8 px-4 py-3">
+                <AlertCircle size={15} className="mt-0.5 shrink-0 text-red-400" />
+                <p className="text-sm text-red-200/90">{error}</p>
+              </div>
+            )}
 
             <button type="submit" className="btn-gold flex w-full items-center justify-center gap-2 py-3.5 text-sm" disabled={loading}>
               {loading ? (

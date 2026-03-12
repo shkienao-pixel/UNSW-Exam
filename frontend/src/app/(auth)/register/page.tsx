@@ -4,6 +4,7 @@ import { FormEvent, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
+  AlertCircle,
   ArrowRight,
   CheckCircle2,
   Loader2,
@@ -13,10 +14,8 @@ import {
   Ticket,
 } from 'lucide-react'
 import ExamMasterLogo from '@/components/ExamMasterLogo'
-import Toast, { ToastType } from '@/components/Toast'
+import Toast from '@/components/Toast'
 import { useAuth } from '@/lib/auth-context'
-
-interface ToastState { message: string; type: ToastType }
 
 const PERKS = [
   '新用户注册即送 5 积分',
@@ -31,33 +30,34 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [inviteCode, setInviteCode] = useState('')
-  const [toast, setToast] = useState<ToastState | null>(null)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    setToast(null)
+    setError('')
 
     if (password !== confirm) {
-      setToast({ message: '两次输入的密码不一致。', type: 'error' })
+      setError('两次输入的密码不一致，请重新确认。')
       return
     }
     if (password.length < 8) {
-      setToast({ message: '密码至少需要 8 位。', type: 'error' })
+      setError('密码至少需要 8 位，请重新输入。')
       return
     }
     if (!inviteCode.trim()) {
-      setToast({ message: '请输入邀请码。', type: 'error' })
+      setError('请输入邀请码。')
       return
     }
 
     setLoading(true)
     try {
       await register(email, password, inviteCode.trim())
-      setToast({ message: '注册成功，欢迎加入 Exam Master！', type: 'success' })
+      setSuccess(true)
       setTimeout(() => router.push('/dashboard'), 1200)
     } catch (err: unknown) {
-      setToast({ message: err instanceof Error ? err.message : '注册失败，请稍后重试。', type: 'error' })
+      setError(err instanceof Error ? err.message : '注册失败，请稍后重试。')
     } finally {
       setLoading(false)
     }
@@ -65,7 +65,9 @@ export default function RegisterPage() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {success && (
+        <Toast message="注册成功，欢迎加入 Exam Master！" type="success" onClose={() => setSuccess(false)} />
+      )}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(20,28,42,0.78),transparent_30%),radial-gradient(circle_at_85%_10%,rgba(200,165,90,0.08),transparent_18%),linear-gradient(180deg,#050608_0%,#080b12_50%,#050608_100%)]" />
 
       <div className="relative z-10 grid w-full max-w-[1120px] gap-8 lg:grid-cols-[1fr_1.04fr]">
@@ -117,10 +119,10 @@ export default function RegisterPage() {
                 <Ticket size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
                 <input
                   type="text"
-                  className="input-glass pl-11 font-mono uppercase tracking-[0.2em]"
+                  className={`input-glass pl-11 font-mono uppercase tracking-[0.2em] ${error && !inviteCode.trim() ? 'border-red-400/40' : ''}`}
                   placeholder="XXXXXXXX"
                   value={inviteCode}
-                  onChange={e => setInviteCode(e.target.value.toUpperCase())}
+                  onChange={e => { setInviteCode(e.target.value.toUpperCase()); setError('') }}
                   autoComplete="off"
                   spellCheck={false}
                   required
@@ -137,7 +139,7 @@ export default function RegisterPage() {
                   className="input-glass pl-11"
                   placeholder="you@student.unsw.edu.au"
                   value={email}
-                  onChange={e => setEmail(e.target.value)}
+                  onChange={e => { setEmail(e.target.value); setError('') }}
                   autoComplete="email"
                   required
                 />
@@ -150,10 +152,10 @@ export default function RegisterPage() {
                 <Lock size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
                 <input
                   type="password"
-                  className="input-glass pl-11"
+                  className={`input-glass pl-11 ${error && error.includes('密码') ? 'border-red-400/40' : ''}`}
                   placeholder="至少 8 位"
                   value={password}
-                  onChange={e => setPassword(e.target.value)}
+                  onChange={e => { setPassword(e.target.value); setError('') }}
                   autoComplete="new-password"
                   required
                 />
@@ -166,15 +168,21 @@ export default function RegisterPage() {
                 <Lock size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
                 <input
                   type="password"
-                  className="input-glass pl-11"
+                  className={`input-glass pl-11 ${error && error.includes('不一致') ? 'border-red-400/40' : ''}`}
                   placeholder="再次输入密码"
                   value={confirm}
-                  onChange={e => setConfirm(e.target.value)}
+                  onChange={e => { setConfirm(e.target.value); setError('') }}
                   required
                 />
               </div>
             </div>
 
+            {error && (
+              <div className="flex items-start gap-2.5 rounded-2xl border border-red-400/20 bg-red-500/8 px-4 py-3">
+                <AlertCircle size={15} className="mt-0.5 shrink-0 text-red-400" />
+                <p className="text-sm text-red-200/90">{error}</p>
+              </div>
+            )}
 
             <button type="submit" className="btn-gold flex w-full items-center justify-center gap-2 py-3.5 text-sm" disabled={loading}>
               {loading ? (
