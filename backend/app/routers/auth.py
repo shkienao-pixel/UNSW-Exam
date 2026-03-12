@@ -9,15 +9,21 @@ from typing import Any
 from fastapi import APIRouter, Depends, Response
 from supabase import Client
 
+import httpx
+
+from app.core.config import get_settings
 from app.core.dependencies import get_current_user, get_db
 from app.core.exceptions import AuthError
 from app.models.auth import (
     LoginRequest,
+    MessageResponse,
+    RequestResetRequest,
     ResendOtpRequest,
     ResendOtpResponse,
     RefreshRequest,
     RegisterRequest,
     RegisterResponse,
+    ResetPasswordRequest,
     TokenResponse,
     UserOut,
     VerifyOtpRequest,
@@ -234,6 +240,73 @@ def refresh(body: RefreshRequest, supabase: Client = Depends(get_db)) -> TokenRe
     if resp.session is None:
         raise AuthError("Token refresh failed.")
     return _build_token_response(resp.session)
+
+
+@router.post("/request-reset", response_model=MessageResponse)
+def request_reset(body: RequestResetRequest) -> MessageResponse:
+    """Send a password reset email. Always returns success to prevent email enumeration."""
+    cfg = get_settings()
+    headers = {
+        "apikey": cfg.supabase_anon_key,
+        "Authorization": f"Bearer {cfg.supabase_anon_key}",
+        "Content-Type": "application/json",
+    }
+    try:
+        httpx.post(
+            f"{cfg.supabase_url}/auth/v1/recover",
+            headers=headers,
+            json={"email": body.email},
+            params={"redirect_to": "https://exammaster.tech/reset-password"},
+            timeout=10,
+        )
+    except Exception:
+        pass  # Silently ignore to prevent email enumeration
+    return MessageResponse(message="If this email is registered, a reset link has been sent.")
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+def reset_password(body: ResetPasswordRequest) -> MessageResponse:
+    """Update user password using the access token from the reset email link."""
+    cfg = get_settings()
+    admin_headers = {
+        "apikey": cfg.supabase_service_role_key,
+        "Authorization": f"Bearer {cfg.supabase_service_role_key}",
+        "Content-Type": "application/json",
+    }
+    try:
+        r = httpx.get(
+            f"{cfg.supabase_url}/auth/v1/user",
+            headers={
+                "apikey": cfg.supabase_service_role_key,
+                "Authorization": f"Bearer {body.access_token}",
+            },
+            timeout=10,
+        )
+        if r.status_code != 200:
+            raise AuthError("Reset link is invalid or expired. Please request a new one.")
+        user_id = r.json().get("id")
+        if not user_id:
+            raise AuthError("Reset link is invalid or expired.")
+    except AuthError:
+        raise
+    except Exception as exc:
+        raise AuthError("Reset link is invalid or expired.") from exc
+
+    try:
+        r = httpx.put(
+            f"{cfg.supabase_url}/auth/v1/admin/users/{user_id}",
+            headers=admin_headers,
+            json={"password": body.new_password},
+            timeout=10,
+        )
+        if r.status_code >= 400:
+            raise AuthError("Failed to reset password. Please try again.")
+    except AuthError:
+        raise
+    except Exception as exc:
+        raise AuthError("Failed to reset password.") from exc
+
+    return MessageResponse(message="Password reset successfully. You can now log in.")
 
 
 @router.post("/logout", status_code=204, response_class=Response)

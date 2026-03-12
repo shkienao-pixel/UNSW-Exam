@@ -51,6 +51,19 @@ class ResendOtpResponse(BaseModel):
     ok: bool = True
 
 
+class RequestResetRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    access_token: str
+    new_password: str = Field(min_length=8)
+
+
+class MessageResponse(BaseModel):
+    message: str
+
+
 class UserOut(BaseModel):
     id: str
     email: str

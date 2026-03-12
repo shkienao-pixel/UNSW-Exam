@@ -219,6 +219,12 @@ export default function LoginPage() {
             </button>
           </form>
 
+          <div className="mt-3 text-right">
+            <Link href="/forgot-password" className="text-xs text-white/40 hover:text-[#c8a55a] transition-colors" style={{ textDecoration: 'none' }}>
+              忘记密码？
+            </Link>
+          </div>
+
           <div className="divider-text my-6">还没有账号？</div>
 
           <Link

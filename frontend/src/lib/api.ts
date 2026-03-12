@@ -123,6 +123,10 @@ export const api = {
       req<TokenResponse>('/auth/verify-otp', { method: 'POST', body: JSON.stringify({ email, token }) }, false),
     resendOtp: (email: string) =>
       req<{ ok: boolean }>('/auth/resend-otp', { method: 'POST', body: JSON.stringify({ email }) }, false),
+    requestReset: (email: string) =>
+      req<{ message: string }>('/auth/request-reset', { method: 'POST', body: JSON.stringify({ email }) }, false),
+    resetPassword: (access_token: string, new_password: string) =>
+      req<{ message: string }>('/auth/reset-password', { method: 'POST', body: JSON.stringify({ access_token, new_password }) }, false),
     login: (email: string, password: string) =>
       req<TokenResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }, false),
     refresh: (refresh_token: string) =>
