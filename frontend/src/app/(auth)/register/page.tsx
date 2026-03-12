@@ -86,7 +86,7 @@ function OtpStep({
       onSuccess(res as { access_token: string; refresh_token: string; expires_in: number })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Verification code invalid or expired. Please try again.')
-      setDigits(['', '', '', '', '', ''])
+      setDigits(['', '', '', '', '', '', '', ''])
       inputs.current[0]?.focus()
     } finally {
       setLoading(false)
