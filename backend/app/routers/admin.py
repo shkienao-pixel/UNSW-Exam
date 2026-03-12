@@ -314,6 +314,39 @@ def admin_list_users(
     ]
 
 
+@router.delete("/users/{user_id}", status_code=200)
+def admin_delete_user(
+    user_id: str,
+    _: None = Depends(_require_admin),
+    supabase: Client = Depends(get_db),
+) -> dict[str, Any]:
+    """Permanently delete a user from Supabase Auth and their credits record."""
+    import httpx
+    cfg = get_settings()
+    try:
+        r = httpx.delete(
+            f"{cfg.supabase_url}/auth/v1/admin/users/{user_id}",
+            headers={
+                "apikey": cfg.supabase_service_role_key,
+                "Authorization": f"Bearer {cfg.supabase_service_role_key}",
+            },
+            timeout=10,
+        )
+        r.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=500, detail=f"删除失败: {exc.response.text[:200]}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"删除失败: {exc}") from exc
+
+    # 清理积分记录（忽略失败）
+    try:
+        supabase.table("user_credits").delete().eq("user_id", user_id).execute()
+    except Exception:
+        pass
+
+    return {"ok": True, "id": user_id}
+
+
 @router.get("/users/credits")
 def admin_get_user_credits(
     _: None = Depends(_require_admin),

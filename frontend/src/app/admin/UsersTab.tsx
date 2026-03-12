@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { Loader2, CheckCircle, X, SlidersHorizontal, RefreshCw, Wifi } from 'lucide-react'
+import { Loader2, CheckCircle, X, SlidersHorizontal, RefreshCw, Wifi, Trash2 } from 'lucide-react'
 import { useLang } from '@/lib/i18n'
 import {
   User, tx, localeByLang, adminReq,
@@ -236,6 +236,17 @@ export function UsersTab({ secret }: { secret: string }) {
     return () => clearInterval(timer)
   }, [load])
 
+  async function handleDeleteUser(userId: string, email: string) {
+    if (!confirm(tt(`确认永久删除用户 ${email}？此操作不可撤销。`, `Permanently delete ${email}? This cannot be undone.`))) return
+    try {
+      await adminReq(secret, `/admin/users/${userId}`, { method: 'DELETE' })
+      setUsers(prev => prev.filter(u => u.id !== userId))
+      setToast(tt(`已删除用户 ${email}`, `Deleted ${email}`))
+    } catch (e: unknown) {
+      setToast(e instanceof Error ? e.message : tt('删除失败', 'Delete failed'))
+    }
+  }
+
   function handleAdjustSuccess(userId: string, newBalance: number) {
     setCredits(prev => ({ ...prev, [userId]: newBalance }))
     const u = users.find(u => u.id === userId)
@@ -351,6 +362,25 @@ export function UsersTab({ secret }: { secret: string }) {
                     ;(e.currentTarget as HTMLElement).style.background = 'transparent'
                   }}>
                   <SlidersHorizontal size={14} />
+                </button>
+
+                {/* 删除用户按钮 */}
+                <button
+                  onClick={() => handleDeleteUser(u.id, u.email)}
+                  title={tt('删除用户', 'Delete user')}
+                  className="flex-shrink-0 p-1.5 rounded-lg transition-all"
+                  style={{ color: '#555', border: '1px solid rgba(255,255,255,0.07)' }}
+                  onMouseEnter={e => {
+                    (e.currentTarget as HTMLElement).style.color = '#f87171'
+                    ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(248,113,113,0.35)'
+                    ;(e.currentTarget as HTMLElement).style.background = 'rgba(248,113,113,0.08)'
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLElement).style.color = '#555'
+                    ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.07)'
+                    ;(e.currentTarget as HTMLElement).style.background = 'transparent'
+                  }}>
+                  <Trash2 size={14} />
                 </button>
               </div>
             ))}
