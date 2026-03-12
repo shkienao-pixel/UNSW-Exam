@@ -37,7 +37,14 @@ function OtpStep({
   const [hint, setHint] = useState('')
   const [loading, setLoading] = useState(false)
   const [resending, setResending] = useState(false)
+  const [cooldown, setCooldown] = useState(0)
   const inputs = useRef<(HTMLInputElement | null)[]>([])
+
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const t = setTimeout(() => setCooldown(c => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [cooldown])
 
   function handleDigit(idx: number, val: string) {
     const v = val.replace(/\D/g, '').slice(-1)
@@ -87,12 +94,14 @@ function OtpStep({
   }
 
   async function resendCode() {
+    if (cooldown > 0) return
     setResending(true)
     setError('')
     setHint('')
     try {
       await api.auth.resendOtp(email)
-      setHint('Verification code has been resent. Please check your email inbox.')
+      setHint('Verification code has been resent. Please check your inbox (including spam).')
+      setCooldown(60)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to resend verification code. Please try again.')
     } finally {
@@ -183,10 +192,10 @@ function OtpStep({
         <button
           type="button"
           onClick={resendCode}
-          disabled={resending}
+          disabled={resending || cooldown > 0}
           className="text-white/70 hover:text-white transition-colors underline underline-offset-2 disabled:opacity-50"
         >
-          {resending ? 'Sending...' : 'Resend'}
+          {resending ? 'Sending...' : cooldown > 0 ? `Resend (${cooldown}s)` : 'Resend'}
         </button>
         {' '}·{' '}
         <button
