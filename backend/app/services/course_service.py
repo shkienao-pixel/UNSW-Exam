@@ -296,7 +296,6 @@ def get_scope_set(
         supabase.table("scope_sets")
         .select("id, course_id, name, is_default, created_at, updated_at")
         .eq("id", scope_set_id)
-        .eq("user_id", user_id)
         .single()
         .execute()
     )
