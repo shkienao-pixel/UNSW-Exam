@@ -1,8 +1,7 @@
-'use client'
+﻿'use client'
 
-import { FormEvent, useState, useRef } from 'react'
+import { FormEvent, ClipboardEvent, KeyboardEvent, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import {
   AlertCircle,
   ArrowRight,
@@ -16,16 +15,13 @@ import {
 } from 'lucide-react'
 import ExamMasterLogo from '@/components/ExamMasterLogo'
 import Toast from '@/components/Toast'
-import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
 
 const PERKS = [
-  '新用户注册即送 5 积分',
-  '文件审核通过可获得额外积分',
-  '优质反馈被采纳后继续加分',
+  'New users get 5 welcome credits',
+  'Upload approved files to earn extra credits',
+  'High-quality feedback can earn bonus credits',
 ]
-
-// ── Step 2：OTP 验证 ───────────────────────────────────────────────────────────
 
 function OtpStep({
   email,
@@ -38,7 +34,9 @@ function OtpStep({
 }) {
   const [digits, setDigits] = useState(['', '', '', '', '', ''])
   const [error, setError] = useState('')
+  const [hint, setHint] = useState('')
   const [loading, setLoading] = useState(false)
+  const [resending, setResending] = useState(false)
   const inputs = useRef<(HTMLInputElement | null)[]>([])
 
   function handleDigit(idx: number, val: string) {
@@ -50,13 +48,13 @@ function OtpStep({
     if (v && idx < 5) inputs.current[idx + 1]?.focus()
   }
 
-  function handleKeyDown(idx: number, e: React.KeyboardEvent) {
+  function handleKeyDown(idx: number, e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Backspace' && !digits[idx] && idx > 0) {
       inputs.current[idx - 1]?.focus()
     }
   }
 
-  function handlePaste(e: React.ClipboardEvent) {
+  function handlePaste(e: ClipboardEvent<HTMLDivElement>) {
     const text = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
     if (text.length === 6) {
       setDigits(text.split(''))
@@ -68,14 +66,19 @@ function OtpStep({
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     const code = digits.join('')
-    if (code.length < 6) { setError('请输入完整的 6 位验证码'); return }
+    if (code.length < 6) {
+      setError('Please enter the full 6-digit verification code.')
+      return
+    }
+
     setLoading(true)
     setError('')
+    setHint('')
     try {
       const res = await api.auth.verifyOtp(email, code)
       onSuccess(res as { access_token: string; refresh_token: string; expires_in: number })
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '验证码错误或已过期，请重试。')
+      setError(err instanceof Error ? err.message : 'Verification code invalid or expired. Please try again.')
       setDigits(['', '', '', '', '', ''])
       inputs.current[0]?.focus()
     } finally {
@@ -83,29 +86,47 @@ function OtpStep({
     }
   }
 
+  async function resendCode() {
+    setResending(true)
+    setError('')
+    setHint('')
+    try {
+      await api.auth.resendOtp(email)
+      setHint('Verification code has been resent. Please check your email inbox.')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to resend verification code. Please try again.')
+    } finally {
+      setResending(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col items-center text-center gap-3 pt-2">
-        <div className="w-14 h-14 rounded-2xl flex items-center justify-center"
-          style={{ background: 'rgba(200,165,90,0.12)', border: '1px solid rgba(200,165,90,0.25)' }}>
+        <div
+          className="w-14 h-14 rounded-2xl flex items-center justify-center"
+          style={{ background: 'rgba(200,165,90,0.12)', border: '1px solid rgba(200,165,90,0.25)' }}
+        >
           <MailCheck size={26} className="text-[#c8a55a]" />
         </div>
         <div>
-          <h3 className="text-xl font-semibold text-white">验证你的邮箱</h3>
+          <h3 className="text-xl font-semibold text-white">Verify your email</h3>
           <p className="mt-1.5 text-sm text-white/48 leading-6">
-            我们已发送 6 位验证码至<br />
+            We sent a 6-digit code to
+            <br />
             <span className="text-white/70 font-medium">{email}</span>
           </p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        {/* 6格验证码输入 */}
         <div className="flex justify-center gap-2.5" onPaste={handlePaste}>
           {digits.map((d, i) => (
             <input
               key={i}
-              ref={el => { inputs.current[i] = el }}
+              ref={el => {
+                inputs.current[i] = el
+              }}
               type="text"
               inputMode="numeric"
               maxLength={1}
@@ -132,76 +153,168 @@ function OtpStep({
             <p className="text-sm text-red-200/90">{error}</p>
           </div>
         )}
+        {hint && (
+          <div className="rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-3">
+            <p className="text-sm text-emerald-100/90">{hint}</p>
+          </div>
+        )}
 
-        <button type="submit" disabled={loading}
-          className="btn-gold flex w-full items-center justify-center gap-2 py-3.5 text-sm">
-          {loading
-            ? <><Loader2 size={16} className="animate-spin" />验证中...</>
-            : <><CheckCircle2 size={16} />确认验证码</>}
+        <button
+          type="submit"
+          disabled={loading}
+          className="btn-gold flex w-full items-center justify-center gap-2 py-3.5 text-sm"
+        >
+          {loading ? (
+            <>
+              <Loader2 size={16} className="animate-spin" />
+              Verifying...
+            </>
+          ) : (
+            <>
+              <CheckCircle2 size={16} />
+              Confirm code
+            </>
+          )}
         </button>
       </form>
 
       <p className="text-center text-xs text-white/28">
-        没收到邮件？请检查垃圾邮件文件夹 ·{' '}
-        <button onClick={onBack} className="text-white/48 hover:text-white/70 transition-colors underline underline-offset-2">
-          重新填写信息
+        Did not receive the code?{' '}
+        <button
+          type="button"
+          onClick={resendCode}
+          disabled={resending}
+          className="text-white/70 hover:text-white transition-colors underline underline-offset-2 disabled:opacity-50"
+        >
+          {resending ? 'Sending...' : 'Resend'}
+        </button>
+        {' '}·{' '}
+        <button
+          onClick={onBack}
+          className="text-white/48 hover:text-white/70 transition-colors underline underline-offset-2"
+          type="button"
+        >
+          Back to form
         </button>
       </p>
     </div>
   )
 }
 
-// ── Main ──────────────────────────────────────────────────────────────────────
-
 export default function RegisterPage() {
-  const router = useRouter()
-  const { login } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [inviteCode, setInviteCode] = useState('')
   const [error, setError] = useState('')
+  const [inviteError, setInviteError] = useState('')
+  const [emailError, setEmailError] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [confirmError, setConfirmError] = useState('')
   const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
   const [step, setStep] = useState<'form' | 'otp'>('form')
   const [pendingEmail, setPendingEmail] = useState('')
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const presetEmail = (params.get('email') || '').trim()
+    const presetModeOtp = params.get('mode') === 'otp'
+    if (presetEmail) {
+      setEmail(presetEmail)
+      setPendingEmail(presetEmail)
+    }
+    if (presetModeOtp && presetEmail) {
+      setStep('otp')
+    }
+  }, [])
+
+  function clearFieldErrors() {
+    setInviteError('')
+    setEmailError('')
+    setPasswordError('')
+    setConfirmError('')
+  }
+
+  function bindFieldError(message: string): void {
+    const s = message.toLowerCase()
+    if (s.includes('invite')) {
+      setInviteError(message)
+      return
+    }
+    if (s.includes('email')) {
+      setEmailError(message)
+      return
+    }
+    if (s.includes('match') || s.includes('confirm')) {
+      setConfirmError(message)
+      return
+    }
+    if (s.includes('password')) {
+      setPasswordError(message)
+    }
+  }
+
+  function goToOtpVerification() {
+    const normalizedEmail = email.trim()
+    if (!normalizedEmail) {
+      setEmailError('Please enter your email first.')
+      setError('Please enter your email first.')
+      return
+    }
+    setPendingEmail(normalizedEmail)
+    setError('')
+    clearFieldErrors()
+    setStep('otp')
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError('')
+    clearFieldErrors()
 
-    if (password !== confirm) {
-      setError('两次输入的密码不一致，请重新确认。')
+    if (!inviteCode.trim()) {
+      setInviteError('Invite code is required.')
+      setError('Invite code is required.')
+      return
+    }
+    if (!email.trim()) {
+      setEmailError('Email is required.')
+      setError('Email is required.')
       return
     }
     if (password.length < 8) {
-      setError('密码至少需要 8 位，请重新输入。')
+      setPasswordError('Password must be at least 8 characters.')
+      setError('Password must be at least 8 characters.')
       return
     }
-    if (!inviteCode.trim()) {
-      setError('请输入邀请码。')
+    if (password !== confirm) {
+      setConfirmError('Passwords do not match.')
+      setError('Passwords do not match.')
       return
     }
 
     setLoading(true)
     try {
-      const res = await api.auth.register(email, password, inviteCode.trim())
-
+      const res = await api.auth.register(email.trim(), password, inviteCode.trim())
       if (res.status === 'otp_sent') {
-        // Supabase 开了邮件验证 → 进入第二步
-        setPendingEmail(email)
+        setPendingEmail(email.trim())
         setStep('otp')
-      } else {
-        // 直接注册成功，存 token 跳转
-        if (res.access_token) {
-          localStorage.setItem('access_token', res.access_token)
-          localStorage.setItem('refresh_token', res.refresh_token!)
-        }
-        setSuccess(true)
-        setTimeout(() => { window.location.href = '/dashboard' }, 1200)
+        return
       }
+
+      if (res.access_token && res.refresh_token) {
+        localStorage.setItem('access_token', res.access_token)
+        localStorage.setItem('refresh_token', res.refresh_token)
+      }
+      setSuccess(true)
+      setTimeout(() => {
+        window.location.href = '/dashboard'
+      }, 1200)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '注册失败，请稍后重试。')
+      const message = err instanceof Error ? err.message : 'Registration failed, please try again.'
+      bindFieldError(message)
+      setError(message)
     } finally {
       setLoading(false)
     }
@@ -211,18 +324,17 @@ export default function RegisterPage() {
     localStorage.setItem('access_token', tokens.access_token)
     localStorage.setItem('refresh_token', tokens.refresh_token)
     setSuccess(true)
-    setTimeout(() => { window.location.href = '/dashboard' }, 1200)
+    setTimeout(() => {
+      window.location.href = '/dashboard'
+    }, 1200)
   }
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
-      {success && (
-        <Toast message="注册成功，欢迎加入 Exam Master！" type="success" onClose={() => setSuccess(false)} />
-      )}
+      {success && <Toast message="Registration successful. Redirecting..." type="success" onClose={() => setSuccess(false)} />}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(20,28,42,0.78),transparent_30%),radial-gradient(circle_at_85%_10%,rgba(200,165,90,0.08),transparent_18%),linear-gradient(180deg,#050608_0%,#080b12_50%,#050608_100%)]" />
 
       <div className="relative z-10 grid w-full max-w-[1120px] gap-8 lg:grid-cols-[1fr_1.04fr]">
-        {/* 左侧介绍栏 */}
         <section className="hidden rounded-[32px] border border-white/8 bg-white/[0.03] p-8 shadow-[0_24px_80px_rgba(0,0,0,0.35)] lg:flex lg:flex-col lg:justify-between">
           <div>
             <ExamMasterLogo height={34} />
@@ -231,14 +343,14 @@ export default function RegisterPage() {
               Invite-only access
             </div>
             <h1 className="mt-6 max-w-[13ch] text-5xl font-semibold leading-[0.95] tracking-[-0.06em] text-white">
-              创建你的 Exam Master 学习空间
+              Build your Exam Master workspace
             </h1>
             <p className="mt-5 max-w-[440px] text-base leading-8 text-white/52">
-              注册后即可上传自己的课程资料，生成闪卡、模拟题、摘要和 AI 问答记录，把复习过程沉淀成一套长期可用的工作流。
+              Register once and keep your uploads, generated materials, and AI answers in one place.
             </p>
           </div>
           <div className="space-y-3">
-            {PERKS.map((perk) => (
+            {PERKS.map(perk => (
               <div key={perk} className="flex items-center gap-3 rounded-[22px] border border-white/8 bg-black/16 px-4 py-3 text-sm text-white/70">
                 <CheckCircle2 className="h-4 w-4 text-[#c8a55a]" />
                 <span>{perk}</span>
@@ -247,18 +359,13 @@ export default function RegisterPage() {
           </div>
         </section>
 
-        {/* 右侧表单 */}
         <section className="glass-gold p-6 sm:p-8">
           <div className="lg:hidden mb-6">
             <ExamMasterLogo height={32} />
           </div>
 
           {step === 'otp' ? (
-            <OtpStep
-              email={pendingEmail}
-              onSuccess={handleOtpSuccess}
-              onBack={() => { setStep('form'); setError('') }}
-            />
+            <OtpStep email={pendingEmail} onSuccess={handleOtpSuccess} onBack={() => { setStep('form'); setError('') }} />
           ) : (
             <>
               <div>
@@ -266,23 +373,27 @@ export default function RegisterPage() {
                   <Shield className="h-3.5 w-3.5 text-[#c8a55a]" />
                   Register with invite code
                 </div>
-                <h2 className="mt-5 text-3xl font-semibold tracking-[-0.04em] text-white">创建账号</h2>
+                <h2 className="mt-5 text-3xl font-semibold tracking-[-0.04em] text-white">Create account</h2>
                 <p className="mt-3 text-sm leading-7 text-white/48">
-                  仅限邀请码注册。创建后即可访问课程资料上传、生成记录、错题追踪与学习工作台。
+                  Account is activated after email verification.
                 </p>
               </div>
 
               <form onSubmit={handleSubmit} className="mt-8 space-y-4">
                 <div>
-                  <label className="form-label">邀请码</label>
+                  <label className="form-label">Invite code</label>
                   <div className="relative">
                     <Ticket size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
                     <input
                       type="text"
-                      className={`input-glass pl-11 font-mono uppercase tracking-[0.2em] ${error && !inviteCode.trim() ? 'border-red-400/40' : ''}`}
+                      className={`input-glass pl-11 font-mono uppercase tracking-[0.2em] ${inviteError ? 'border-red-400/40' : ''}`}
                       placeholder="XXXXXXXX"
                       value={inviteCode}
-                      onChange={e => { setInviteCode(e.target.value.toUpperCase()); setError('') }}
+                      onChange={e => {
+                        setInviteCode(e.target.value.toUpperCase())
+                        setError('')
+                        setInviteError('')
+                      }}
                       autoComplete="off"
                       spellCheck={false}
                       required
@@ -291,15 +402,19 @@ export default function RegisterPage() {
                 </div>
 
                 <div>
-                  <label className="form-label">邮箱地址</label>
+                  <label className="form-label">Email address</label>
                   <div className="relative">
                     <Mail size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
                     <input
                       type="email"
-                      className="input-glass pl-11"
+                      className={`input-glass pl-11 ${emailError ? 'border-red-400/40' : ''}`}
                       placeholder="you@student.unsw.edu.au"
                       value={email}
-                      onChange={e => { setEmail(e.target.value); setError('') }}
+                      onChange={e => {
+                        setEmail(e.target.value)
+                        setError('')
+                        setEmailError('')
+                      }}
                       autoComplete="email"
                       required
                     />
@@ -307,15 +422,19 @@ export default function RegisterPage() {
                 </div>
 
                 <div>
-                  <label className="form-label">密码</label>
+                  <label className="form-label">Password</label>
                   <div className="relative">
                     <Lock size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
                     <input
                       type="password"
-                      className={`input-glass pl-11 ${error && error.includes('密码') ? 'border-red-400/40' : ''}`}
-                      placeholder="至少 8 位"
+                      className={`input-glass pl-11 ${passwordError ? 'border-red-400/40' : ''}`}
+                      placeholder="At least 8 characters"
                       value={password}
-                      onChange={e => { setPassword(e.target.value); setError('') }}
+                      onChange={e => {
+                        setPassword(e.target.value)
+                        setError('')
+                        setPasswordError('')
+                      }}
                       autoComplete="new-password"
                       required
                     />
@@ -323,15 +442,19 @@ export default function RegisterPage() {
                 </div>
 
                 <div>
-                  <label className="form-label">确认密码</label>
+                  <label className="form-label">Confirm password</label>
                   <div className="relative">
                     <Lock size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
                     <input
                       type="password"
-                      className={`input-glass pl-11 ${error && error.includes('不一致') ? 'border-red-400/40' : ''}`}
-                      placeholder="再次输入密码"
+                      className={`input-glass pl-11 ${confirmError ? 'border-red-400/40' : ''}`}
+                      placeholder="Enter password again"
                       value={confirm}
-                      onChange={e => { setConfirm(e.target.value); setError('') }}
+                      onChange={e => {
+                        setConfirm(e.target.value)
+                        setError('')
+                        setConfirmError('')
+                      }}
                       required
                     />
                   </div>
@@ -345,15 +468,31 @@ export default function RegisterPage() {
                 )}
 
                 <button type="submit" className="btn-gold flex w-full items-center justify-center gap-2 py-3.5 text-sm" disabled={loading}>
-                  {loading
-                    ? <><Loader2 size={16} className="animate-spin" />正在注册</>
-                    : <><ArrowRight size={16} />立即注册</>}
+                  {loading ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Registering...
+                    </>
+                  ) : (
+                    <>
+                      <ArrowRight size={16} />
+                      Register now
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={goToOtpVerification}
+                  className="btn-outline-gold flex w-full items-center justify-center gap-2 py-3 text-sm"
+                >
+                  Enter verification code
                 </button>
               </form>
 
-              <div className="divider-text my-6">已有账号？</div>
+              <div className="divider-text my-6">Already have an account?</div>
               <Link href="/login" className="btn-outline-gold flex w-full items-center justify-center gap-2 py-3 text-sm" style={{ textDecoration: 'none' }}>
-                去登录
+                Go to login
               </Link>
             </>
           )}

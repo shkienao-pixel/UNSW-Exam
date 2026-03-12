@@ -38,6 +38,7 @@ from app.services.text_extractor import extract_text as _extract_raw_text
 _CHUNK_TARGET   = 800   # target chars per chunk
 _CHUNK_MAX      = 1200  # hard max before forced split
 _CHUNK_MIN      = 80    # discard chunks shorter than this
+_CHUNK_OVERLAP  = 100   # overlap chars when hard-splitting oversized paragraphs
 _TOP_K          = 6     # default retrieval count
 
 _CHINESE_RE = re.compile(r'[\u4e00-\u9fff]')
@@ -88,9 +89,31 @@ def _clean(text: str) -> str:
 
 # ── Chunking ──────────────────────────────────────────────────────────────────
 
+def _split_oversized_paragraph(para: str, max_len: int, overlap: int) -> list[str]:
+    """Hard split a very long paragraph into bounded windows."""
+    if len(para) <= max_len:
+        return [para]
+
+    step = max(1, max_len - overlap)
+    out: list[str] = []
+    start = 0
+    while start < len(para):
+        end = min(len(para), start + max_len)
+        part = para[start:end].strip()
+        if part:
+            out.append(part)
+        if end >= len(para):
+            break
+        start += step
+    return out
+
+
 def _chunk(text: str) -> list[str]:
-    """Paragraph-aware chunking with overlap."""
-    paras = [p.strip() for p in re.split(r'\n\n+', text) if p.strip()]
+    """Paragraph-aware chunking with overlap and hard bounds."""
+    raw_paras = [p.strip() for p in re.split(r'\n\n+', text) if p.strip()]
+    paras: list[str] = []
+    for para in raw_paras:
+        paras.extend(_split_oversized_paragraph(para, _CHUNK_MAX, _CHUNK_OVERLAP))
 
     chunks: list[str] = []
     current: list[str] = []
@@ -104,13 +127,18 @@ def _chunk(text: str) -> list[str]:
             chunks.append('\n\n'.join(current))
             # Overlap: keep last paragraph for context continuity
             overlap = current[-1]
-            current = [overlap, para]
-            current_len = len(overlap) + para_len
+            if len(overlap) + para_len <= _CHUNK_MAX:
+                current = [overlap, para]
+                current_len = len(overlap) + para_len
+            else:
+                # If overlap would overflow hard max, drop overlap for this chunk.
+                current = [para]
+                current_len = para_len
         else:
             current.append(para)
             current_len += para_len
 
-        # Hard-split oversized paragraphs (e.g., dense slides)
+        # Fallback guard: if a chunk still exceeds hard max, flush it.
         if current_len > _CHUNK_MAX:
             chunks.append('\n\n'.join(current))
             current = []

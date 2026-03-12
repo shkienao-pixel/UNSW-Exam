@@ -1,4 +1,4 @@
-"""Authentication routes: register, login, refresh, logout, me."""
+"""Authentication routes: register, verify OTP, login, refresh, logout, me."""
 
 from __future__ import annotations
 
@@ -11,7 +11,17 @@ from supabase import Client
 
 from app.core.dependencies import get_current_user, get_db
 from app.core.exceptions import AuthError
-from app.models.auth import LoginRequest, RefreshRequest, RegisterRequest, RegisterResponse, TokenResponse, UserOut, VerifyOtpRequest
+from app.models.auth import (
+    LoginRequest,
+    ResendOtpRequest,
+    ResendOtpResponse,
+    RefreshRequest,
+    RegisterRequest,
+    RegisterResponse,
+    TokenResponse,
+    UserOut,
+    VerifyOtpRequest,
+)
 from app.services import credit_service
 
 router = APIRouter()
@@ -26,8 +36,36 @@ def _build_token_response(session: Any) -> TokenResponse:
     )
 
 
-def _validate_invite(supabase: Client, code: str) -> dict:
-    """Validate an invite code WITHOUT consuming it. Returns invite row."""
+def _friendly_auth_error(exc: Exception, action: str) -> str:
+    raw = str(exc).strip()
+    s = raw.lower()
+
+    if "invalid login credentials" in s:
+        return "Invalid email or password."
+    if "email not confirmed" in s or "email not verified" in s:
+        return "Email not verified. Please complete email verification first."
+    if "already confirmed" in s or "already verified" in s:
+        return "This email is already verified. Please log in."
+    if "user already registered" in s or "already been registered" in s:
+        return "This email is already registered. Please complete email verification or log in."
+    if "invite" in s and "invalid" in s:
+        return "Invalid invite code."
+    if "invite" in s and "expired" in s:
+        return "Invite code expired."
+    if "invite" in s and ("used" in s or "max uses" in s):
+        return "Invite code has already been used."
+    if "password" in s and ("least" in s or "short" in s):
+        return "Password must be at least 8 characters."
+    if "otp" in s or "token" in s:
+        return "Invalid or expired verification code."
+
+    if raw:
+        return f"{action} failed: {raw}"
+    return f"{action} failed."
+
+
+def _validate_invite(supabase: Client, code: str) -> dict[str, Any]:
+    """Validate an invite code without consuming it."""
     try:
         row = (
             supabase.table("invites")
@@ -37,30 +75,26 @@ def _validate_invite(supabase: Client, code: str) -> dict:
             .execute()
         )
     except Exception as exc:
-        raise AuthError("Could not verify invite code") from exc
+        raise AuthError("Could not verify invite code.") from exc
 
     if not row.data:
-        raise AuthError("Invalid invite code")
+        raise AuthError("Invalid invite code.")
 
     invite = row.data[0]
 
     if invite["use_count"] >= invite["max_uses"]:
-        raise AuthError("This invite code has already been used")
+        raise AuthError("Invite code has already been used.")
 
     if invite.get("expires_at"):
         expires = datetime.fromisoformat(invite["expires_at"].replace("Z", "+00:00"))
         if datetime.now(timezone.utc) > expires:
-            raise AuthError("This invite code has expired")
+            raise AuthError("Invite code expired.")
 
     return invite
 
 
-def _consume_invite(supabase: Client, invite: dict) -> bool:
-    """Atomically consume one invite use via PostgreSQL RPC.
-
-    Uses a DB-level function with optimistic locking to handle concurrency safely.
-    Returns True if consumed, False if already full or concurrent race lost.
-    """
+def _consume_invite(supabase: Client, invite: dict[str, Any]) -> bool:
+    """Atomically consume one invite use via DB RPC."""
     result = supabase.rpc(
         "consume_invite",
         {"p_id": invite["id"], "p_current_use_count": invite["use_count"]},
@@ -68,46 +102,60 @@ def _consume_invite(supabase: Client, invite: dict) -> bool:
     return result.data is True
 
 
-def _release_invite(supabase: Client, invite: dict) -> None:
-    """Roll back use_count if registration fails after consume."""
+def _release_invite(supabase: Client, invite: dict[str, Any]) -> None:
+    """Best-effort rollback: decrement invite use_count by 1."""
     try:
-        supabase.table("invites").update({"use_count": invite["use_count"]}).eq("id", invite["id"]).execute()
+        latest = (
+            supabase.table("invites")
+            .select("use_count")
+            .eq("id", invite["id"])
+            .limit(1)
+            .execute()
+        )
+        if not latest.data:
+            return
+        current = int(latest.data[0].get("use_count", 0))
+        new_count = max(0, current - 1)
+        supabase.table("invites").update({"use_count": new_count}).eq("id", invite["id"]).execute()
     except Exception:
         logger.warning("Failed to release invite %s after registration error", invite.get("id"))
 
 
 @router.post("/register", response_model=RegisterResponse, status_code=201)
 def register(body: RegisterRequest, supabase: Client = Depends(get_db)) -> RegisterResponse:
-    """Create a new user account (requires valid invite code).
+    """Start registration by sending OTP.
 
-    If Supabase email confirmation is enabled, returns {status: "otp_sent"}
-    and the user must call /auth/verify-otp to complete registration.
-    Otherwise returns tokens directly.
+    Invite is validated and consumed at registration time to avoid OTP-stage lockouts.
+    Registration is considered completed only after /auth/verify-otp succeeds.
     """
-    # Step 1: validate invite（只读校验）
     invite = _validate_invite(supabase, body.invite_code)
-
-    # Step 2: consume invite FIRST（先消费，防止并发超限）
     consumed = _consume_invite(supabase, invite)
     if not consumed:
-        raise AuthError("邀请码已被用完，请联系管理员获取新邀请码。")
+        raise AuthError("Invite code has already been used.")
 
-    # Step 3: create account — if this fails, roll back use_count
     try:
         resp = supabase.auth.sign_up({"email": body.email, "password": body.password})
     except Exception as exc:
         _release_invite(supabase, invite)
-        raise AuthError(f"注册失败：{exc}") from exc
+        msg = str(exc).lower()
+        if "user already registered" in msg or "already been registered" in msg:
+            # Existing but not-yet-verified users should continue OTP flow.
+            try:
+                supabase.auth.resend({"type": "signup", "email": body.email})
+            except Exception as resend_exc:
+                resend_msg = str(resend_exc).lower()
+                if "already confirmed" in resend_msg or "already verified" in resend_msg:
+                    raise AuthError("This email is already registered and verified. Please log in.") from resend_exc
+            return RegisterResponse(status="otp_sent", email=body.email)
+        raise AuthError(_friendly_auth_error(exc, "Registration")) from exc
 
-    # Supabase 开了 email confirmation → session is None，等待 OTP 验证
+    # If email confirmation is enabled in Supabase, session is None and OTP is required.
     if resp.session is None:
-        # 邀请码已消费，账号已创建，等用户验证邮箱（不回退邀请码）
         return RegisterResponse(status="otp_sent", email=body.email)
 
-    # 直接注册成功（未开启 email confirmation）
     try:
         user_id = resp.session.user.id
-        credit_service.earn(supabase, user_id, 5, "welcome_bonus", note="新用户欢迎积分")
+        credit_service.earn(supabase, user_id, 5, "welcome_bonus", note="welcome credits")
     except Exception:
         pass
 
@@ -123,27 +171,41 @@ def register(body: RegisterRequest, supabase: Client = Depends(get_db)) -> Regis
 
 @router.post("/verify-otp", response_model=TokenResponse)
 def verify_otp(body: VerifyOtpRequest, supabase: Client = Depends(get_db)) -> TokenResponse:
-    """Verify the 6-digit OTP sent to the user's email after registration."""
+    """Verify the signup OTP code and finalize registration."""
     try:
-        resp = supabase.auth.verify_otp({
-            "email": body.email,
-            "token": body.token,
-            "type": "signup",
-        })
+        resp = supabase.auth.verify_otp(
+            {
+                "email": body.email,
+                "token": body.token,
+                "type": "signup",
+            }
+        )
     except Exception as exc:
-        raise AuthError(f"验证失败：{exc}") from exc
+        raise AuthError(_friendly_auth_error(exc, "OTP verification")) from exc
 
     if resp.session is None:
-        raise AuthError("验证码错误或已过期，请重新尝试。")
+        raise AuthError("Invalid or expired verification code.")
 
-    # 验证成功后发放欢迎积分（如果还没发过）
     try:
         user_id = resp.session.user.id
-        credit_service.earn(supabase, user_id, 5, "welcome_bonus", note="新用户欢迎积分")
+        credit_service.earn(supabase, user_id, 5, "welcome_bonus", note="welcome credits")
     except Exception:
         pass
 
     return _build_token_response(resp.session)
+
+
+@router.post("/resend-otp", response_model=ResendOtpResponse)
+def resend_signup_otp(
+    body: ResendOtpRequest,
+    supabase: Client = Depends(get_db),
+) -> ResendOtpResponse:
+    """Resend signup verification code to an email."""
+    try:
+        supabase.auth.resend({"type": "signup", "email": body.email})
+    except Exception as exc:
+        raise AuthError(_friendly_auth_error(exc, "Resend verification code")) from exc
+    return ResendOtpResponse(ok=True)
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -154,40 +216,40 @@ def login(body: LoginRequest, supabase: Client = Depends(get_db)) -> TokenRespon
             {"email": body.email, "password": body.password}
         )
     except Exception as exc:
-        raise AuthError(f"Login failed: {exc}") from exc
+        raise AuthError(_friendly_auth_error(exc, "Login")) from exc
 
     if resp.session is None:
-        raise AuthError("Login failed: no session returned")
+        raise AuthError("Login failed. Please check email and password.")
     return _build_token_response(resp.session)
 
 
 @router.post("/refresh", response_model=TokenResponse)
 def refresh(body: RefreshRequest, supabase: Client = Depends(get_db)) -> TokenResponse:
-    """Exchange a refresh_token for a new access_token."""
+    """Exchange a refresh token for a new access token."""
     try:
         resp = supabase.auth.refresh_session(body.refresh_token)
     except Exception as exc:
         raise AuthError(f"Token refresh failed: {exc}") from exc
 
     if resp.session is None:
-        raise AuthError("Token refresh failed")
+        raise AuthError("Token refresh failed.")
     return _build_token_response(resp.session)
 
 
 @router.post("/logout", status_code=204, response_class=Response)
 def logout(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(get_current_user),
     supabase: Client = Depends(get_db),
 ) -> Response:
-    """Invalidate the current session."""
+    """Invalidate current session (best effort)."""
     try:
         supabase.auth.sign_out()
     except Exception:
-        pass  # Best-effort logout
+        pass
     return Response(status_code=204)
 
 
 @router.get("/me", response_model=UserOut)
-def me(current_user: dict = Depends(get_current_user)) -> UserOut:
-    """Return the currently authenticated user."""
+def me(current_user: dict[str, Any] = Depends(get_current_user)) -> UserOut:
+    """Return current authenticated user."""
     return UserOut(id=current_user["id"], email=current_user["email"])

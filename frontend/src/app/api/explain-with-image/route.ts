@@ -9,7 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { buildImagenPrompt, verifyAndDeduct } from '../generate/_shared'
+import { buildImagenPrompt, verifyCreditReady, commitCreditDeduction } from '../generate/_shared'
 
 /**
  * Bug 5 fix:
@@ -41,9 +41,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ image_data_url: null, error: 'Gemini API key not configured' }, { status: 503 })
   }
 
-  // Verify token + deduct credit before calling Imagen (fixes #3)
-  const authErr = await verifyAndDeduct(token, 'gen_ask')
-  if (authErr) return authErr
+  // Validate token + available balance first; deduct only after generation succeeds.
+  const checkErr = await verifyCreditReady(token, 'gen_ask')
+  if (checkErr) return checkErr
 
   try {
     const body = await req.json() as { question?: string; answer?: string }
@@ -56,12 +56,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const prompt = buildImagenPrompt(question, answer)
     const imageDataUrl = await callImagenWithFallback(prompt, geminiKey)
 
+    if (!imageDataUrl) {
+      return NextResponse.json({ image_data_url: null, error: 'Image generation failed, no credits deducted.' }, { status: 502 })
+    }
+
+    const deductErr = await commitCreditDeduction(token, 'gen_ask')
+    if (deductErr) return deductErr
+
     return NextResponse.json({ image_data_url: imageDataUrl } satisfies ExplainImageResponse)
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Image generation failed'
     console.error('[explain-with-image] all models failed:', msg)
-    return NextResponse.json({ image_data_url: null })
+    return NextResponse.json({ image_data_url: null, error: msg }, { status: 500 })
   }
 }
 

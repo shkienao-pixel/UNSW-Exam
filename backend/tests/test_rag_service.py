@@ -221,6 +221,24 @@ class TestChunk:
         assert len(chunks) >= 1
         assert any("Z" in c for c in chunks)
 
+    def test_oversized_paragraph_respects_chunk_max(self):
+        """Very long paragraph should be split so each chunk <= CHUNK_MAX."""
+        from app.services.rag_service import _CHUNK_MAX
+        big_para = "A" * 3000
+        chunks = _chunk(big_para)
+        assert len(chunks) >= 2
+        assert all(len(c) <= _CHUNK_MAX for c in chunks)
+
+    def test_overlap_does_not_create_oversized_chunk(self):
+        """Overlap + next paragraph should not exceed hard max."""
+        from app.services.rag_service import _CHUNK_MAX
+        para_a = "A" * 700
+        para_b = "B" * 900
+        text = f"{para_a}\n\n{para_b}"
+        chunks = _chunk(text)
+        assert len(chunks) >= 1
+        assert all(len(c) <= _CHUNK_MAX for c in chunks)
+
     def test_chunks_cover_all_content(self):
         """No content should be silently lost (spot-check first/last words)."""
         text = "FIRST_WORD " + ("middle " * 200) + " LAST_WORD"

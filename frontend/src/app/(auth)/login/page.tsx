@@ -7,6 +7,7 @@ import { AlertCircle, ArrowRight, Loader2, Lock, Mail, Shield } from 'lucide-rea
 import ExamMasterLogo from '@/components/ExamMasterLogo'
 import Toast from '@/components/Toast'
 import { useAuth } from '@/lib/auth-context'
+import { api } from '@/lib/api'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -14,12 +15,38 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [emailError, setEmailError] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [needsVerification, setNeedsVerification] = useState(false)
+  const [resendingCode, setResendingCode] = useState(false)
+  const [verifyHint, setVerifyHint] = useState('')
   const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  function bindFieldError(message: string): boolean {
+    const s = message.toLowerCase()
+    if (s.includes('invalid login credentials') || s.includes('email or password')) {
+      setPasswordError(message)
+      return true
+    }
+    if (s.includes('password')) {
+      setPasswordError(message)
+      return true
+    }
+    if (s.includes('email') || s.includes('invite')) {
+      setEmailError(message)
+      return true
+    }
+    return false
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError('')
+    setEmailError('')
+    setPasswordError('')
+    setVerifyHint('')
+    setNeedsVerification(false)
     setLoading(true)
 
     try {
@@ -27,9 +54,32 @@ export default function LoginPage() {
       setSuccess(true)
       setTimeout(() => router.push('/dashboard'), 1000)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '登录失败，请稍后重试。')
+      const message = err instanceof Error ? err.message : 'Login failed, please try again.'
+      bindFieldError(message)
+      setError(message)
+      const s = message.toLowerCase()
+      if (s.includes('not verified') || s.includes('not confirmed') || (s.includes('邮箱') && s.includes('验证'))) {
+        setNeedsVerification(true)
+      }
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function resendVerificationCode() {
+    if (!email.trim()) {
+      setEmailError('请先输入邮箱地址')
+      return
+    }
+    setResendingCode(true)
+    setVerifyHint('')
+    try {
+      await api.auth.resendOtp(email.trim())
+      setVerifyHint('验证码已重新发送，请检查邮箱（含垃圾邮箱）。')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '重发验证码失败，请稍后重试。')
+    } finally {
+      setResendingCode(false)
     }
   }
 
@@ -95,14 +145,15 @@ export default function LoginPage() {
                 <Mail size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
                 <input
                   type="email"
-                  className={`input-glass pl-11 ${error ? 'border-red-400/40' : ''}`}
+                  className={`input-glass pl-11 ${emailError ? 'border-red-400/40' : ''}`}
                   placeholder="you@student.unsw.edu.au"
                   value={email}
-                  onChange={e => { setEmail(e.target.value); setError('') }}
+                  onChange={e => { setEmail(e.target.value); setError(''); setEmailError('') }}
                   autoComplete="email"
                   required
                 />
               </div>
+              {emailError && <p className="mt-1 text-xs text-red-300">{emailError}</p>}
             </div>
 
             <div>
@@ -111,20 +162,45 @@ export default function LoginPage() {
                 <Lock size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
                 <input
                   type="password"
-                  className={`input-glass pl-11 ${error ? 'border-red-400/40' : ''}`}
+                  className={`input-glass pl-11 ${passwordError ? 'border-red-400/40' : ''}`}
                   placeholder="请输入密码"
                   value={password}
-                  onChange={e => { setPassword(e.target.value); setError('') }}
+                  onChange={e => { setPassword(e.target.value); setError(''); setPasswordError('') }}
                   autoComplete="current-password"
                   required
                 />
               </div>
+              {passwordError && <p className="mt-1 text-xs text-red-300">{passwordError}</p>}
             </div>
 
             {error && (
               <div className="flex items-start gap-2.5 rounded-2xl border border-red-400/20 bg-red-500/8 px-4 py-3">
                 <AlertCircle size={15} className="mt-0.5 shrink-0 text-red-400" />
                 <p className="text-sm text-red-200/90">{error}</p>
+              </div>
+            )}
+            {verifyHint && (
+              <div className="rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-3">
+                <p className="text-sm text-emerald-100/90">{verifyHint}</p>
+              </div>
+            )}
+            {needsVerification && (
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={resendVerificationCode}
+                  disabled={resendingCode}
+                  className="btn-outline-gold py-2.5 text-sm disabled:opacity-50"
+                >
+                  {resendingCode ? '发送中...' : '重发邮箱验证码'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/register?mode=otp&email=${encodeURIComponent(email.trim())}`)}
+                  className="btn-outline-gold py-2.5 text-sm"
+                >
+                  我有验证码，去验证
+                </button>
               </div>
             )}
 

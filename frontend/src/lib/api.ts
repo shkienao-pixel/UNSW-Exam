@@ -15,11 +15,21 @@ function getToken(): string | null {
 
 function humanizeError(raw: string, status?: number): string {
   const s = raw.toLowerCase()
+  if (s.includes('invalid login credentials'))
+    return '邮箱或密码错误，请重新输入'
+  if (s.includes('email not confirmed') || s.includes('email not verified'))
+    return '邮箱尚未验证，请先完成验证码验证'
+  if (s.includes('invalid invite code'))
+    return '邀请码无效，请检查后重试'
+  if (s.includes('invite code has already been used'))
+    return '邀请码已被使用完，请联系管理员获取新邀请码'
+  if (s.includes('invite code has expired'))
+    return '邀请码已过期，请联系管理员获取新邀请码'
   if (s.includes('server disconnected') || s.includes('network') || s.includes('disconnected'))
     return '网络连接中断，请检查网络后重试'
   if (s.includes('token expired') || s.includes('expired'))
     return '登录已过期，请重新登录'
-  if (s.includes('token validation failed') || s.includes('invalid token') || s.includes('invalid or expired') || s.includes('missing authorization') || status === 401)
+  if (s.includes('token validation failed') || s.includes('invalid token') || s.includes('invalid or expired') || s.includes('missing authorization'))
     return '身份验证失败，请重新登录'
   if (s.includes('storage upload failed') || s.includes('bucket'))
     return '文件上传失败，请检查存储配置或文件格式'
@@ -75,8 +85,8 @@ async function _fetch<T>(url: string, options: RequestInit = {}, handle401 = fal
 }
 
 /** 调用后端 FastAPI（自动附加 API_URL 前缀，401 时跳转登录）。 */
-function req<T>(path: string, options: RequestInit = {}): Promise<T> {
-  return _fetch<T>(API_URL + path, options, true)
+function req<T>(path: string, options: RequestInit = {}, autoRedirect401 = true): Promise<T> {
+  return _fetch<T>(API_URL + path, options, autoRedirect401)
 }
 
 /** 调用 Next.js 内部 API route（相对路径，不处理 401 跳转）。 */
@@ -105,14 +115,18 @@ export const api = {
   auth: {
     register: (email: string, password: string, invite_code: string) =>
       req<{ status: string; email?: string; access_token?: string; refresh_token?: string; expires_in?: number }>(
-        '/auth/register', { method: 'POST', body: JSON.stringify({ email, password, invite_code }) }
+        '/auth/register',
+        { method: 'POST', body: JSON.stringify({ email, password, invite_code }) },
+        false,
       ),
     verifyOtp: (email: string, token: string) =>
-      req<TokenResponse>('/auth/verify-otp', { method: 'POST', body: JSON.stringify({ email, token }) }),
+      req<TokenResponse>('/auth/verify-otp', { method: 'POST', body: JSON.stringify({ email, token }) }, false),
+    resendOtp: (email: string) =>
+      req<{ ok: boolean }>('/auth/resend-otp', { method: 'POST', body: JSON.stringify({ email }) }, false),
     login: (email: string, password: string) =>
-      req<TokenResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+      req<TokenResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }, false),
     refresh: (refresh_token: string) =>
-      req<TokenResponse>('/auth/refresh', { method: 'POST', body: JSON.stringify({ refresh_token }) }),
+      req<TokenResponse>('/auth/refresh', { method: 'POST', body: JSON.stringify({ refresh_token }) }, false),
     logout: () =>
       req('/auth/logout', { method: 'POST' }),
     me: () =>

@@ -13,7 +13,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getGeminiClient, MULTIMODAL_VQA_SYSTEM, BACKEND, verifyAndDeduct } from '../_shared'
+import {
+  getGeminiClient,
+  MULTIMODAL_VQA_SYSTEM,
+  BACKEND,
+  verifyCreditReady,
+  commitCreditDeduction,
+} from '../_shared'
 
 export interface AskResponse {
   question: string
@@ -42,10 +48,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       if (!courseId)  return NextResponse.json({ error: 'course_id is required' },  { status: 400 })
 
       if (imageFile && imageFile.size > 0) {
-        // Verify token + deduct credit before calling Gemini (fixes #3 + #4)
-        const authErr = await verifyAndDeduct(token, 'gen_ask')
-        if (authErr) return authErr
-        return handleVQA(queryText, imageFile)
+        // 1) validate token + balance, 2) generate, 3) deduct only after success
+        const checkErr = await verifyCreditReady(token, 'gen_ask')
+        if (checkErr) return checkErr
+
+        const payload = await handleVQA(queryText, imageFile)
+
+        const deductErr = await commitCreditDeduction(token, 'gen_ask')
+        if (deductErr) return deductErr
+
+        return NextResponse.json(payload)
       }
 
       return forwardToFastAPI(
@@ -74,16 +86,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
 // ── Path A: Gemini 1.5 Pro 多模态 VQA ────────────────────────────────────────
 
-async function handleVQA(query: string, imageFile: File): Promise<NextResponse> {
+async function handleVQA(query: string, imageFile: File): Promise<AskResponse> {
   const geminiKey = process.env.GEMINI_API_KEY
   if (!geminiKey) {
-    return NextResponse.json({ error: 'Gemini API key not configured' }, { status: 503 })
+    throw new Error('Gemini API key not configured')
   }
 
   const mimeType = imageFile.type || 'image/jpeg'
   const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic']
   if (!allowedTypes.includes(mimeType)) {
-    return NextResponse.json({ error: `Unsupported image type: ${mimeType}` }, { status: 400 })
+    throw new Error(`Unsupported image type: ${mimeType}`)
   }
 
   const imageBytes  = await imageFile.arrayBuffer()
@@ -98,14 +110,17 @@ async function handleVQA(query: string, imageFile: File): Promise<NextResponse> 
   ])
 
   const answer = result.response.text()
+  if (!answer?.trim()) {
+    throw new Error('Empty response from vision model')
+  }
 
-  return NextResponse.json({
+  return {
     question:   query,
     answer,
     sources:    [],
     image_url:  null,
     model_used: 'gemini-2.5-pro',
-  } satisfies AskResponse)
+  } satisfies AskResponse
 }
 
 // ── Path B: 转发至 FastAPI RAG 流水线 ────────────────────────────────────────

@@ -11,7 +11,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, Header, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from supabase import Client
 
@@ -280,6 +280,7 @@ def reindex_course(
 
 @router.get("/users")
 def admin_list_users(
+    include_unverified: bool = True,
     _: None = Depends(_require_admin),
 ) -> list[dict[str, Any]]:
     """List all registered users via Supabase REST admin API."""
@@ -302,6 +303,10 @@ def admin_list_users(
         raise HTTPException(status_code=500, detail=f"Supabase admin API error [{type(exc).__name__}]: {exc}") from exc
 
     raw_users = data.get("users", data) if isinstance(data, dict) else data
+    # Hide soft-deleted accounts
+    raw_users = [u for u in raw_users if not u.get("deleted_at")]
+    if not include_unverified:
+        raw_users = [u for u in raw_users if u.get("email_confirmed_at")]
     return [
         {
             "id":              u.get("id", ""),
@@ -342,34 +347,99 @@ def admin_confirm_user_email(
 @router.delete("/users/{user_id}", status_code=200)
 def admin_delete_user(
     user_id: str,
+    email: Optional[str] = Query(default=None),
     _: None = Depends(_require_admin),
     supabase: Client = Depends(get_db),
 ) -> dict[str, Any]:
-    """Permanently delete a user from Supabase Auth and their credits record."""
+    """Delete user in Supabase Auth.
+
+    Notes:
+    - Missing user is treated as already deleted (idempotent).
+    - Also best-effort deletes other accounts with the same email to avoid
+      "deleted user pops back" caused by duplicate rows.
+    """
     import httpx
+
     cfg = get_settings()
+    already_deleted = False
+    deleted_duplicates = 0
+    target_email: str | None = (email or "").strip().lower() or None
+    headers = {
+        "apikey": cfg.supabase_service_role_key,
+        "Authorization": f"Bearer {cfg.supabase_service_role_key}",
+    }
+
+    # Read target email first (best effort), used for duplicate cleanup.
+    try:
+        r_get = httpx.get(
+            f"{cfg.supabase_url}/auth/v1/admin/users/{user_id}",
+            headers=headers,
+            timeout=10,
+        )
+        if r_get.status_code < 400:
+            j = r_get.json()
+            if isinstance(j, dict):
+                user_obj = j.get("user", j)
+                if isinstance(user_obj, dict):
+                    target_email = (user_obj.get("email") or "").strip().lower() or target_email
+    except Exception:
+        pass
+
     try:
         r = httpx.delete(
-            f"{cfg.supabase_url}/auth/v1/admin/users/{user_id}",
-            headers={
-                "apikey": cfg.supabase_service_role_key,
-                "Authorization": f"Bearer {cfg.supabase_service_role_key}",
-            },
+            f"{cfg.supabase_url}/auth/v1/admin/users/{user_id}?should_soft_delete=false",
+            headers=headers,
             timeout=10,
         )
         r.raise_for_status()
     except httpx.HTTPStatusError as exc:
-        raise HTTPException(status_code=500, detail=f"删除失败: {exc.response.text[:200]}") from exc
+        if exc.response is not None and exc.response.status_code == 404:
+            already_deleted = True
+        else:
+            raise HTTPException(status_code=500, detail=f"Delete failed: {exc.response.text[:200]}") from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"删除失败: {exc}") from exc
+        raise HTTPException(status_code=500, detail=f"Delete failed: {exc}") from exc
 
-    # 清理积分记录（忽略失败）
+    # Best-effort: remove duplicate accounts with the same email.
+    if target_email:
+        try:
+            r_list = httpx.get(
+                f"{cfg.supabase_url}/auth/v1/admin/users",
+                headers=headers,
+                timeout=10,
+            )
+            if r_list.status_code < 400:
+                data = r_list.json()
+                users = data.get("users", data) if isinstance(data, dict) else data
+                for u in users or []:
+                    uid = u.get("id")
+                    uemail = (u.get("email") or "").lower()
+                    if uid and uid != user_id and uemail and uemail == target_email:
+                        try:
+                            dr = httpx.delete(
+                                f"{cfg.supabase_url}/auth/v1/admin/users/{uid}?should_soft_delete=false",
+                                headers=headers,
+                                timeout=10,
+                            )
+                            if dr.status_code < 400 or dr.status_code == 404:
+                                deleted_duplicates += 1
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
+    # Cleanup credit row (best effort)
     try:
         supabase.table("user_credits").delete().eq("user_id", user_id).execute()
     except Exception:
         pass
 
-    return {"ok": True, "id": user_id}
+    return {
+        "ok": True,
+        "id": user_id,
+        "already_deleted": already_deleted,
+        "deleted_duplicates": deleted_duplicates,
+    }
 
 
 @router.get("/users/credits")

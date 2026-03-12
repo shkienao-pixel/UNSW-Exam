@@ -29,13 +29,14 @@ export const BACKEND = process.env.BACKEND_URL || 'http://localhost:8005'
  * - 同时解决 #3（Next API 不验证 token 真伪）和 #4（带图问答绕过积分）。
  * - 返回 null 表示成功；返回 NextResponse 表示需要直接返回给客户端（401/402/500）。
  */
-export async function verifyAndDeduct(
+async function _callCreditsApi(
   token: string,
+  endpoint: '/credits/check' | '/credits/deduct',
   creditType: string,
 ): Promise<import('next/server').NextResponse | null> {
   const { NextResponse } = await import('next/server')
   try {
-    const res = await fetch(`${BACKEND}/credits/deduct`, {
+    const res = await fetch(`${BACKEND}${endpoint}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -43,13 +44,37 @@ export async function verifyAndDeduct(
       },
       body: JSON.stringify({ type_: creditType }),
     })
-    if (res.ok) return null   // success
+    if (res.ok) return null
     const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))
     const detail = (err as { detail?: string }).detail ?? `HTTP ${res.status}`
     return NextResponse.json({ error: detail }, { status: res.status })
   } catch {
-    return NextResponse.json({ error: '鉴权服务不可达，请稍后重试' }, { status: 503 })
+    return NextResponse.json({ error: 'Auth service unavailable, please retry.' }, { status: 503 })
   }
+}
+
+export async function verifyCreditReady(
+  token: string,
+  creditType: string,
+): Promise<import('next/server').NextResponse | null> {
+  return _callCreditsApi(token, '/credits/check', creditType)
+}
+
+export async function commitCreditDeduction(
+  token: string,
+  creditType: string,
+): Promise<import('next/server').NextResponse | null> {
+  return _callCreditsApi(token, '/credits/deduct', creditType)
+}
+
+// Backward-compatible wrapper (old behavior).
+export async function verifyAndDeduct(
+  token: string,
+  creditType: string,
+): Promise<import('next/server').NextResponse | null> {
+  const verifyErr = await verifyCreditReady(token, creditType)
+  if (verifyErr) return verifyErr
+  return commitCreditDeduction(token, creditType)
 }
 
 // ── System Prompts ────────────────────────────────────────────────────────────

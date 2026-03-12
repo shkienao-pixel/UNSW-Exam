@@ -43,6 +43,14 @@ class VerifyOtpRequest(BaseModel):
     token: str = Field(min_length=6, max_length=6)
 
 
+class ResendOtpRequest(BaseModel):
+    email: EmailStr
+
+
+class ResendOtpResponse(BaseModel):
+    ok: bool = True
+
+
 class UserOut(BaseModel):
     id: str
     email: str

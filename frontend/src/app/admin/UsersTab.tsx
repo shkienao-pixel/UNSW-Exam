@@ -210,7 +210,7 @@ export function UsersTab({ secret }: { secret: string }) {
     if (silent) setRefreshing(true)
     try {
       const [usersData, creditsData] = await Promise.all([
-        adminReq<User[]>(secret, '/admin/users'),
+        adminReq<User[]>(secret, '/admin/users?include_unverified=true'),
         adminReq<Record<string, number>>(secret, '/admin/users/credits'),
       ])
       setUsers(prev => {
@@ -242,19 +242,45 @@ export function UsersTab({ secret }: { secret: string }) {
     if (!deleteTarget) return
     setDeleting(true)
     try {
-      await adminReq(secret, `/admin/users/${deleteTarget.id}`, { method: 'DELETE' })
+      const res = await adminReq<{ ok: boolean; id: string; already_deleted?: boolean }>(
+        secret,
+        '/admin/users/' + deleteTarget.id + '?email=' + encodeURIComponent(deleteTarget.email),
+        { method: 'DELETE' },
+      )
+
       setUsers(prev => prev.filter(u => u.id !== deleteTarget.id))
-      setToast(tt(`已删除用户 ${deleteTarget.email}`, `Deleted ${deleteTarget.email}`))
+      setCredits(prev => {
+        const next = { ...prev }
+        delete next[deleteTarget.id]
+        return next
+      })
+
+      if (res.already_deleted) {
+        setToast(tt(`User ${deleteTarget.email} was already removed`, `${deleteTarget.email} was already removed`))
+      } else {
+        setToast(tt(`Deleted ${deleteTarget.email}`, `Deleted ${deleteTarget.email}`))
+      }
       setDeleteTarget(null)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : tt('删除失败', 'Delete failed'))
+      const msg = e instanceof Error ? e.message : ''
+      if (msg.toLowerCase().includes('not found')) {
+        setUsers(prev => prev.filter(u => u.id !== deleteTarget.id))
+        setCredits(prev => {
+          const next = { ...prev }
+          delete next[deleteTarget.id]
+          return next
+        })
+        setToast(tt(`User ${deleteTarget.email} was already removed`, `${deleteTarget.email} was already removed`))
+      } else {
+        setError(e instanceof Error ? e.message : tt('Delete failed', 'Delete failed'))
+      }
       setDeleteTarget(null)
     } finally {
       setDeleting(false)
     }
   }
 
-  function handleAdjustSuccess(userId: string, newBalance: number) {
+function handleAdjustSuccess(userId: string, newBalance: number) {
     setCredits(prev => ({ ...prev, [userId]: newBalance }))
     const u = users.find(u => u.id === userId)
     setToast(
