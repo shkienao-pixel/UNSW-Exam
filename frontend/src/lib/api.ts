@@ -6,6 +6,12 @@ import type {
   DocType, Feedback, FeedbackStatus, CourseContentStatus,
 } from './types'
 
+export type StreamEvent =
+  | { type: 'status'; phase: 'filtering' | 'generating' }
+  | { type: 'token';  text: string }
+  | { type: 'done';   answer: string; sources: AskResponse['sources']; image_url: string | null; model_used: string }
+  | { type: 'error';  message: string; code?: string }
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8005'
 
 function getToken(): string | null {
@@ -230,6 +236,56 @@ export const api = {
         { method: 'POST', body: JSON.stringify({ question, scope_set_id, context_mode: contextMode }) },
       )
     },
+    askStream: async function* (
+      courseId: string,
+      question: string,
+      scope_set_id?: number,
+      contextMode: 'all' | 'revision' = 'all',
+      signal?: AbortSignal,
+    ): AsyncGenerator<StreamEvent> {
+      const token = getToken()
+      const res = await fetch(`${API_URL}/courses/${courseId}/generate/ask/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ question, scope_set_id, context_mode: contextMode }),
+        signal,
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }))
+        const raw = (err as Record<string, string>).detail || (err as Record<string, string>).error || `HTTP ${res.status}`
+        if (res.status === 402) {
+          const e = new Error(raw) as Error & { code: string; balance?: number; required?: number }
+          e.code = 'INSUFFICIENT_CREDITS'
+          throw e
+        }
+        throw new Error(humanizeError(raw, res.status))
+      }
+
+      const reader = res.body!.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim()
+            if (data) {
+              try { yield JSON.parse(data) as StreamEvent } catch { /* skip */ }
+            }
+          }
+        }
+      }
+    },
+
     explainWithImage: (question: string, answer: string) =>
       nextReq<ExplainImageResponse>('/api/explain-with-image', {
         method: 'POST',

@@ -224,6 +224,49 @@ def gemini_generate_answer(
         return ""
 
 
+def gemini_generate_answer_stream(
+    query: str,
+    filtered_context: str,
+    gemini_key: str,
+):
+    """Stage 2 (流式版本): Gemini 流式生成回答，逐块 yield 文本。
+
+    失败时静默结束（调用方降级到 GPT 整块输出）。
+    """
+    if filtered_context.strip():
+        user_content = (
+            f"参考资料（来自课程材料）：\n\n{filtered_context}"
+            f"\n\n---\n\n学生问题：{query}"
+        )
+    else:
+        user_content = (
+            f"学生问题：{query}\n\n"
+            "(参考资料：NO_RELEVANT_INFO — 请执行系统指令中的兜底协议)"
+        )
+
+    try:
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=gemini_key)
+        response = client.models.generate_content_stream(
+            model="gemini-3.1-pro-preview",
+            contents=user_content,
+            config=types.GenerateContentConfig(
+                system_instruction=GEMINI_ANSWER_SYSTEM,
+                temperature=0.4,
+                max_output_tokens=8192,
+            ),
+        )
+        for chunk in response:
+            text = getattr(chunk, "text", None) or ""
+            if text:
+                yield text
+    except Exception as exc:
+        logger.warning("Gemini stream generation failed: %s", exc)
+        return
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  STAGE 3a — Should we generate a visual aid?
 # ═══════════════════════════════════════════════════════════════════════════════

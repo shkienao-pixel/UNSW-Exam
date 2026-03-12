@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef, Suspense } from 'react'
 import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
+import type { StreamEvent } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/i18n'
 import { useGeneration } from '@/lib/generation-context'
@@ -12,7 +13,7 @@ import {
   FileText, Upload, Loader2, Zap, History, Settings2,
   CheckSquare, ChevronDown, ChevronRight, MessageSquare, BookOpen, Send, RotateCcw,
   ExternalLink, Trash2, Languages, HelpCircle, ImagePlus, X, Sparkles,
-  Code, Lock, Target, Layers3, ListTree,
+  Code, Lock, Target, Layers3, ListTree, Square,
 } from 'lucide-react'
 import { addMistake } from '@/lib/mistakes-store'
 import MistakesView from '@/components/MistakesView'
@@ -1043,6 +1044,8 @@ type Message = {
   explainFailed?: boolean      // 生成失败标记
   loadingExplain?: boolean
   contextMode?: 'all' | 'revision'  // 生成该回答时的检索范围
+  streaming?: boolean          // 流式输出进行中
+  streamStatus?: 'filtering' | 'generating' | 'slow'  // 当前阶段
 }
 
 // ── 图片灯箱 ─────────────────────────────────────────────────────────────────
@@ -1092,6 +1095,7 @@ function AskTab({ courseId, scopeSets, artifacts }: {
   const bottomRef     = useRef<HTMLDivElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const autoSentRef   = useRef(false)
+  const abortRef      = useRef<AbortController | null>(null)
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
@@ -1117,31 +1121,115 @@ function AskTab({ courseId, scopeSets, artifacts }: {
     const q = (overrideInput ?? input).trim()
     if (!q || loading) return
 
-    const userMsg: Message = {
-      role: 'user',
-      content: q,
-      imagePreview: imagePreview ?? undefined,
-    }
+    const capturedImageFile = imageFile
 
     setInput('')
     clearImage()
-    setMessages(prev => [...prev, userMsg])
+    setMessages(prev => [...prev, {
+      role: 'user',
+      content: q,
+      imagePreview: imagePreview ?? undefined,
+    }])
     setLoading(true)
 
+    // ── 有图片 → VQA 非流式路径 ─────────────────────────────────────────────
+    if (capturedImageFile) {
+      try {
+        const res = await api.generate.ask(courseId, q, scopeSetId, capturedImageFile, contextMode)
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: res.answer,
+          sources: res.sources,
+          contextMode,
+        }])
+      } catch (err: unknown) {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: err instanceof Error ? err.message : '请求失败',
+        }])
+      } finally { setLoading(false) }
+      return
+    }
+
+    // ── 无图片 → 流式路径 ────────────────────────────────────────────────────
+    const abort = new AbortController()
+    abortRef.current = abort
+
+    // 插入流式占位消息
+    setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: '',
+      streaming: true,
+      streamStatus: 'filtering',
+      contextMode,
+    }])
+
+    // 1.5s 后仍无 token → 显示"深度思考"提示
+    const slowTimer = setTimeout(() => {
+      setMessages(prev => prev.map((m, i) =>
+        i === prev.length - 1 && m.streaming ? { ...m, streamStatus: 'slow' } : m
+      ))
+    }, 1500)
+
+    let gotFirstToken = false
+
     try {
-      const res = await api.generate.ask(courseId, q, scopeSetId, imageFile ?? undefined, contextMode)
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: res.answer,
-        sources: res.sources,
-        contextMode,
-      }])
+      for await (const event of api.generate.askStream(courseId, q, scopeSetId, contextMode, abort.signal)) {
+        if (abort.signal.aborted) break
+
+        if (event.type === 'status') {
+          setMessages(prev => prev.map((m, i) =>
+            i === prev.length - 1 && m.streaming ? { ...m, streamStatus: event.phase } : m
+          ))
+        } else if (event.type === 'token') {
+          if (!gotFirstToken) {
+            gotFirstToken = true
+            clearTimeout(slowTimer)
+          }
+          setMessages(prev => prev.map((m, i) =>
+            i === prev.length - 1 && m.streaming
+              ? { ...m, content: m.content + event.text, streamStatus: 'generating' }
+              : m
+          ))
+        } else if (event.type === 'done') {
+          clearTimeout(slowTimer)
+          setMessages(prev => prev.map((m, i) =>
+            i === prev.length - 1 && m.streaming ? {
+              ...m,
+              streaming:    false,
+              streamStatus: undefined,
+              content:      event.answer,
+              sources:      event.sources,
+            } : m
+          ))
+        } else if (event.type === 'error') {
+          clearTimeout(slowTimer)
+          setMessages(prev => prev.map((m, i) =>
+            i === prev.length - 1 && m.streaming ? {
+              ...m,
+              streaming:    false,
+              streamStatus: undefined,
+              content:      event.message,
+            } : m
+          ))
+        }
+      }
     } catch (err: unknown) {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: err instanceof Error ? err.message : '请求失败',
-      }])
-    } finally { setLoading(false) }
+      clearTimeout(slowTimer)
+      const isAbort = err instanceof DOMException && err.name === 'AbortError'
+      setMessages(prev => prev.map((m, i) =>
+        i === prev.length - 1 && m.streaming ? {
+          ...m,
+          streaming:    false,
+          streamStatus: undefined,
+          content:      isAbort ? (m.content || '（已停止生成）') : (err instanceof Error ? err.message : '请求失败'),
+        } : m
+      ))
+    } finally {
+      clearTimeout(slowTimer)
+      abortRef.current = null
+      setLoading(false)
+    }
   }
 
   async function generateExplainImage(msgIndex: number) {
@@ -1243,32 +1331,50 @@ function AskTab({ courseId, scopeSets, artifacts }: {
                 }}>
                 {m.role === 'assistant'
                   ? (
-                    <div className="prose prose-invert prose-sm max-w-none">
-                      <ReactMarkdown
-                        components={{
-                          // 移动端响应式图片：强制 max-width 100%，防止溢出聊天气泡
-                          img: ({ src, alt }) => {
-                            const imgSrc = typeof src === 'string' ? src : ''
-                            return (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={imgSrc}
-                                alt={alt ?? 'AI 生成图'}
-                                style={{
-                                  maxWidth: '100%',
-                                  height: 'auto',
-                                  borderRadius: '0.75rem',
-                                  display: 'block',
-                                  marginTop: '0.75rem',
-                                  cursor: imgSrc ? 'zoom-in' : undefined,
-                                }}
-                                onClick={() => imgSrc && setLightboxSrc(imgSrc)}
-                              />
-                            )
-                          },
-                        }}
-                      >{m.content}</ReactMarkdown>
-                    </div>
+                    m.streaming && !m.content ? (
+                      // 流式占位：显示阶段状态
+                      <div className="flex items-center gap-2" style={{ color: '#666' }}>
+                        <Loader2 size={14} className="animate-spin" />
+                        <span className="text-xs">
+                          {m.streamStatus === 'filtering'   ? '正在搜索相关资料…'     :
+                           m.streamStatus === 'generating'  ? '正在生成回答…'         :
+                           m.streamStatus === 'slow'        ? '正在深度思考，稍等片刻…' :
+                           t('ask_thinking')}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="prose prose-invert prose-sm max-w-none">
+                        <ReactMarkdown
+                          components={{
+                            img: ({ src, alt }) => {
+                              const imgSrc = typeof src === 'string' ? src : ''
+                              return (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={imgSrc}
+                                  alt={alt ?? 'AI 生成图'}
+                                  style={{
+                                    maxWidth: '100%',
+                                    height: 'auto',
+                                    borderRadius: '0.75rem',
+                                    display: 'block',
+                                    marginTop: '0.75rem',
+                                    cursor: imgSrc ? 'zoom-in' : undefined,
+                                  }}
+                                  onClick={() => imgSrc && setLightboxSrc(imgSrc)}
+                                />
+                              )
+                            },
+                          }}
+                        >{m.content}</ReactMarkdown>
+                        {m.streaming && (
+                          <span
+                            className="inline-block w-0.5 h-4 ml-0.5 align-middle animate-pulse"
+                            style={{ background: '#FFD700', borderRadius: '1px' }}
+                          />
+                        )}
+                      </div>
+                    )
                   )
                   : m.content}
               </div>
@@ -1341,7 +1447,7 @@ function AskTab({ courseId, scopeSets, artifacts }: {
             </div>
           </div>
         ))}
-        {loading && (
+        {loading && !messages.at(-1)?.streaming && (
           <div className="flex justify-start">
             <div className="px-4 py-3 rounded-2xl text-sm" style={{ background: 'rgba(255,255,255,0.05)', color: '#666' }}>
               <Loader2 size={14} className="animate-spin inline mr-2" />{t('ask_thinking')}
@@ -1442,15 +1548,29 @@ function AskTab({ courseId, scopeSets, artifacts }: {
           <ImagePlus size={16} />
         </button>
 
-        <input className="input-glass flex-1 text-sm" placeholder={t('ask_placeholder')}
+        <input className="input-glass flex-1 text-sm" placeholder={loading ? '生成中，可随时点击停止…' : t('ask_placeholder')}
           value={input} onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
           disabled={loading || approvedCount === 0} />
 
-        <button className="btn-gold px-4" onClick={() => send()}
-          disabled={loading || !input.trim() || approvedCount === 0}>
-          <Send size={14} />
-        </button>
+        {loading ? (
+          <button
+            className="px-4 rounded-xl transition-colors"
+            style={{
+              background: 'rgba(239,68,68,0.15)',
+              border: '1px solid rgba(239,68,68,0.35)',
+              color: '#F87171',
+            }}
+            onClick={() => abortRef.current?.abort()}
+            title="停止生成">
+            <Square size={14} />
+          </button>
+        ) : (
+          <button className="btn-gold px-4" onClick={() => send()}
+            disabled={loading || !input.trim() || approvedCount === 0}>
+            <Send size={14} />
+          </button>
+        )}
       </div>
 
       </div>{/* end 底部输入区 */}

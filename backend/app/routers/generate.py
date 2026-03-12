@@ -29,6 +29,7 @@ import logging
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from supabase import Client
 
@@ -40,6 +41,7 @@ from app.services.course_service import (
 )
 from app.services.rag_service import get_artifact_ids_by_doc_type, get_course_chunks_sampled
 from app.services import job_service, generate_service
+from app.services.credit_service import credit_guard
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -286,6 +288,151 @@ def ask_question(
             "image_url":  image_url,
             "model_used": model_used,
         }
+
+
+@router.post("/{course_id}/generate/ask/stream")
+def ask_question_stream(
+    course_id: str,
+    body: AskRequest,
+    current_user: dict = Depends(get_current_user),
+    supabase: Client  = Depends(get_db),
+) -> StreamingResponse:
+    """流式 SSE 版 /ask：tokens 实时推送给前端，降低用户等待焦虑。
+
+    SSE 事件格式（data: JSON）：
+      {"type": "status",  "phase": "filtering"|"generating"}
+      {"type": "token",   "text": "..."}
+      {"type": "done",    "answer": "...", "sources": [...], "image_url": null, "model_used": "..."}
+      {"type": "error",   "message": "...", "code": "INSUFFICIENT_CREDITS"|null}
+    """
+    get_course(supabase, course_id)
+
+    art_ids: list[int] | None = None
+    if body.scope_set_id:
+        scope = get_scope_set(supabase, current_user["id"], body.scope_set_id)
+        ids = scope.get("artifact_ids") or []
+        art_ids = ids if ids else None
+    elif body.context_mode == "revision":
+        revision_ids = get_artifact_ids_by_doc_type(supabase, course_id, ["revision"])
+        art_ids = revision_ids if revision_ids else None
+
+    from app.services.llm_key_service import get_api_key
+    openai_key: str  = get_api_key("openai", supabase) or get_settings().openai_api_key
+    gemini_key: Optional[str] = get_api_key("gemini", supabase)
+
+    from app.services.gemini_service import (
+        gpt_filter_chunks,
+        gemini_generate_answer_stream,
+    )
+    from app.services.rag_service import search_chunks
+    from app.services.credit_service import spend, earn, COSTS
+    from app.core.exceptions import InsufficientCreditsError
+
+    chunks = search_chunks(supabase, course_id, body.question, top_k=8, artifact_ids=art_ids)
+
+    sources: list[dict] = []
+    if chunks:
+        seen: set[int] = set()
+        for c in chunks:
+            aid = c["artifact_id"]
+            if aid not in seen:
+                seen.add(aid)
+                sources.append({
+                    "artifact_id": aid,
+                    "file_name":   c.get("file_name", ""),
+                    "storage_url": c.get("storage_url", ""),
+                })
+
+    def _sse(data: dict) -> str:
+        return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+    def event_stream():
+        # Stage 1: GPT filter
+        yield _sse({"type": "status", "phase": "filtering"})
+
+        if chunks:
+            filtered_context = gpt_filter_chunks(body.question, chunks, openai_key)
+        else:
+            ctx, _ = generate_service._fallback_extract(
+                supabase, current_user["id"], course_id, art_ids, max_chars=60_000
+            )
+            if not ctx.strip():
+                yield _sse({
+                    "type": "done",
+                    "answer": "No course material is available yet. Please wait for file approval/indexing.",
+                    "sources": [],
+                    "image_url": None,
+                    "model_used": "none",
+                })
+                return
+            filtered_context = ctx
+
+        # 扣积分
+        cost = COSTS.get("gen_ask", 3)
+        try:
+            spend(supabase, current_user["id"], cost, "gen_ask")
+        except InsufficientCreditsError as e:
+            yield _sse({"type": "error", "message": str(e), "code": "INSUFFICIENT_CREDITS"})
+            return
+        except Exception as e:
+            yield _sse({"type": "error", "message": str(e)})
+            return
+
+        yield _sse({"type": "status", "phase": "generating"})
+
+        full_answer = ""
+        model_used  = "gpt-4o"
+
+        try:
+            if gemini_key:
+                for token in gemini_generate_answer_stream(body.question, filtered_context, gemini_key):
+                    full_answer += token
+                    yield _sse({"type": "token", "text": token})
+                if full_answer:
+                    model_used = "gemini-3.1-pro-preview"
+
+            if not full_answer:
+                # GPT-4o 兜底（整块输出）
+                system = (
+                    "You are a knowledgeable course tutor. "
+                    "Answer the student's question based the course material excerpts provided. "
+                    "Be clear and educational. Synthesize information across multiple sources. "
+                    "Respond in the same language as the question. "
+                    "Do NOT add a sources section."
+                )
+                context_msg = (
+                    f"Course material:\n\n{filtered_context}\n\n---\n\nQuestion: {body.question}"
+                    if filtered_context.strip()
+                    else body.question
+                )
+                full_answer = generate_service._chat(system, context_msg, openai_key)
+                yield _sse({"type": "token", "text": full_answer})
+                model_used = "gpt-4o"
+
+            yield _sse({
+                "type":       "done",
+                "answer":     full_answer,
+                "sources":    sources,
+                "image_url":  None,
+                "model_used": model_used,
+            })
+
+        except Exception as e:
+            # 生成失败 → 自动退款
+            try:
+                earn(supabase, current_user["id"], cost, "refund", note="gen_ask 失败退款")
+            except Exception as refund_err:
+                logger.error("Streaming refund failed: %s", refund_err)
+            yield _sse({"type": "error", "message": str(e)})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control":    "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/{course_id}/generate/translate")
