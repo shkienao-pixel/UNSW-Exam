@@ -196,6 +196,8 @@ export function UsersTab({ secret }: { secret: string }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [adjustTarget, setAdjustTarget] = useState<User | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const [toast, setToast] = useState('')
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [refreshing, setRefreshing] = useState(false)
@@ -236,14 +238,19 @@ export function UsersTab({ secret }: { secret: string }) {
     return () => clearInterval(timer)
   }, [load])
 
-  async function handleDeleteUser(userId: string, email: string) {
-    if (!confirm(tt(`确认永久删除用户 ${email}？此操作不可撤销。`, `Permanently delete ${email}? This cannot be undone.`))) return
+  async function confirmDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
     try {
-      await adminReq(secret, `/admin/users/${userId}`, { method: 'DELETE' })
-      setUsers(prev => prev.filter(u => u.id !== userId))
-      setToast(tt(`已删除用户 ${email}`, `Deleted ${email}`))
+      await adminReq(secret, `/admin/users/${deleteTarget.id}`, { method: 'DELETE' })
+      setUsers(prev => prev.filter(u => u.id !== deleteTarget.id))
+      setToast(tt(`已删除用户 ${deleteTarget.email}`, `Deleted ${deleteTarget.email}`))
+      setDeleteTarget(null)
     } catch (e: unknown) {
-      setToast(e instanceof Error ? e.message : tt('删除失败', 'Delete failed'))
+      setError(e instanceof Error ? e.message : tt('删除失败', 'Delete failed'))
+      setDeleteTarget(null)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -292,6 +299,43 @@ export function UsersTab({ secret }: { secret: string }) {
           {tt('立即刷新', 'Refresh')}
         </button>
       </div>
+
+      {/* 删除确认 Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.78)' }}
+          onClick={() => !deleting && setDeleteTarget(null)}>
+          <div className="w-full max-w-sm mx-4 rounded-2xl p-6 space-y-4"
+            style={{ background: '#0c0c1a', border: '1px solid rgba(248,113,113,0.25)', boxShadow: '0 24px_80px rgba(0,0,0,0.8)' }}
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.25)' }}>
+                <Trash2 size={18} style={{ color: '#f87171' }} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">{tt('确认删除用户', 'Delete User')}</p>
+                <p className="text-xs mt-0.5" style={{ color: '#888' }}>{tt('此操作不可撤销', 'This cannot be undone')}</p>
+              </div>
+            </div>
+            <div className="px-3 py-2.5 rounded-xl text-sm truncate" style={{ background: 'rgba(255,255,255,0.04)', color: '#ccc', border: '1px solid rgba(255,255,255,0.07)' }}>
+              {deleteTarget.email}
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteTarget(null)} disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl text-sm"
+                style={{ background: 'rgba(255,255,255,0.05)', color: '#666', border: '1px solid rgba(255,255,255,0.08)' }}>
+                {tt('取消', 'Cancel')}
+              </button>
+              <button onClick={confirmDelete} disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+                style={{ background: 'rgba(248,113,113,0.18)', color: '#f87171', border: '1px solid rgba(248,113,113,0.35)' }}>
+                {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                {deleting ? tt('删除中...', 'Deleting...') : tt('确认删除', 'Delete')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {adjustTarget && (
         <PointsAdjustModal
@@ -366,7 +410,7 @@ export function UsersTab({ secret }: { secret: string }) {
 
                 {/* 删除用户按钮 */}
                 <button
-                  onClick={() => handleDeleteUser(u.id, u.email)}
+                  onClick={() => setDeleteTarget(u)}
                   title={tt('删除用户', 'Delete user')}
                   className="flex-shrink-0 p-1.5 rounded-lg transition-all"
                   style={{ color: '#555', border: '1px solid rgba(255,255,255,0.07)' }}
