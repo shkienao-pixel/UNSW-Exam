@@ -13,7 +13,10 @@ import {
   Ticket,
 } from 'lucide-react'
 import ExamMasterLogo from '@/components/ExamMasterLogo'
+import Toast, { ToastType } from '@/components/Toast'
 import { useAuth } from '@/lib/auth-context'
+
+interface ToastState { message: string; type: ToastType }
 
 const PERKS = [
   '新用户注册即送 5 积分',
@@ -28,32 +31,33 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [inviteCode, setInviteCode] = useState('')
-  const [error, setError] = useState('')
+  const [toast, setToast] = useState<ToastState | null>(null)
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    setError('')
+    setToast(null)
 
     if (password !== confirm) {
-      setError('两次输入的密码不一致。')
+      setToast({ message: '两次输入的密码不一致。', type: 'error' })
       return
     }
     if (password.length < 8) {
-      setError('密码至少需要 8 位。')
+      setToast({ message: '密码至少需要 8 位。', type: 'error' })
       return
     }
     if (!inviteCode.trim()) {
-      setError('请输入邀请码。')
+      setToast({ message: '请输入邀请码。', type: 'error' })
       return
     }
 
     setLoading(true)
     try {
       await register(email, password, inviteCode.trim())
-      router.push('/dashboard')
+      setToast({ message: '注册成功，欢迎加入 Exam Master！', type: 'success' })
+      setTimeout(() => router.push('/dashboard'), 1200)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '注册失败，请稍后重试。')
+      setToast({ message: err instanceof Error ? err.message : '注册失败，请稍后重试。', type: 'error' })
     } finally {
       setLoading(false)
     }
@@ -61,6 +65,7 @@ export default function RegisterPage() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(20,28,42,0.78),transparent_30%),radial-gradient(circle_at_85%_10%,rgba(200,165,90,0.08),transparent_18%),linear-gradient(180deg,#050608_0%,#080b12_50%,#050608_100%)]" />
 
       <div className="relative z-10 grid w-full max-w-[1120px] gap-8 lg:grid-cols-[1fr_1.04fr]">
@@ -170,11 +175,6 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {error ? (
-              <div className="rounded-2xl border border-red-400/18 bg-red-500/8 px-4 py-3 text-sm text-red-200/88">
-                {error}
-              </div>
-            ) : null}
 
             <button type="submit" className="btn-gold flex w-full items-center justify-center gap-2 py-3.5 text-sm" disabled={loading}>
               {loading ? (

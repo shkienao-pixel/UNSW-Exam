@@ -5,26 +5,30 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowRight, Loader2, Lock, Mail, Shield } from 'lucide-react'
 import ExamMasterLogo from '@/components/ExamMasterLogo'
+import Toast, { ToastType } from '@/components/Toast'
 import { useAuth } from '@/lib/auth-context'
+
+interface ToastState { message: string; type: ToastType }
 
 export default function LoginPage() {
   const router = useRouter()
   const { login } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const [toast, setToast] = useState<ToastState | null>(null)
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    setError('')
+    setToast(null)
     setLoading(true)
 
     try {
       await login(email, password)
-      router.push('/dashboard')
+      setToast({ message: '登录成功，正在跳转...', type: 'success' })
+      setTimeout(() => router.push('/dashboard'), 1000)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '登录失败，请稍后重试。')
+      setToast({ message: err instanceof Error ? err.message : '登录失败，请稍后重试。', type: 'error' })
     } finally {
       setLoading(false)
     }
@@ -32,6 +36,7 @@ export default function LoginPage() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(20,28,42,0.78),transparent_30%),radial-gradient(circle_at_85%_10%,rgba(200,165,90,0.08),transparent_18%),linear-gradient(180deg,#050608_0%,#080b12_50%,#050608_100%)]" />
 
       <div className="relative z-10 grid w-full max-w-[1080px] gap-8 lg:grid-cols-[0.92fr_1.08fr]">
@@ -115,11 +120,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {error ? (
-              <div className="rounded-2xl border border-red-400/18 bg-red-500/8 px-4 py-3 text-sm text-red-200/88">
-                {error}
-              </div>
-            ) : null}
 
             <button type="submit" className="btn-gold flex w-full items-center justify-center gap-2 py-3.5 text-sm" disabled={loading}>
               {loading ? (
