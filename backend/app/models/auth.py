@@ -27,6 +27,22 @@ class TokenResponse(BaseModel):
     expires_in: int
 
 
+class RegisterResponse(BaseModel):
+    """注册接口响应：需要邮箱验证时返回 otp_sent，否则直接返回 token。"""
+    status: str  # "ok" | "otp_sent"
+    email: str | None = None
+    # 直接登录时才有以下字段
+    access_token: str | None = None
+    refresh_token: str | None = None
+    token_type: str = "bearer"
+    expires_in: int | None = None
+
+
+class VerifyOtpRequest(BaseModel):
+    email: EmailStr
+    token: str = Field(min_length=6, max_length=6)
+
+
 class UserOut(BaseModel):
     id: str
     email: str

@@ -104,7 +104,11 @@ async function _pollJob(courseId: string, jobId: string, timeoutMs = 180_000): P
 export const api = {
   auth: {
     register: (email: string, password: string, invite_code: string) =>
-      req<TokenResponse>('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, invite_code }) }),
+      req<{ status: string; email?: string; access_token?: string; refresh_token?: string; expires_in?: number }>(
+        '/auth/register', { method: 'POST', body: JSON.stringify({ email, password, invite_code }) }
+      ),
+    verifyOtp: (email: string, token: string) =>
+      req<TokenResponse>('/auth/verify-otp', { method: 'POST', body: JSON.stringify({ email, token }) }),
     login: (email: string, password: string) =>
       req<TokenResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
     refresh: (refresh_token: string) =>

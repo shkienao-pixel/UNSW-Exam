@@ -11,7 +11,7 @@ from supabase import Client
 
 from app.core.dependencies import get_current_user, get_db
 from app.core.exceptions import AuthError
-from app.models.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse, UserOut
+from app.models.auth import LoginRequest, RefreshRequest, RegisterRequest, RegisterResponse, TokenResponse, UserOut, VerifyOtpRequest
 from app.services import credit_service
 
 router = APIRouter()
@@ -80,10 +80,15 @@ def _release_invite(supabase: Client, invite: dict) -> None:
         logger.warning("Failed to release invite %s after registration error", invite.get("id"))
 
 
-@router.post("/register", response_model=TokenResponse, status_code=201)
-def register(body: RegisterRequest, supabase: Client = Depends(get_db)) -> TokenResponse:
-    """Create a new user account (requires valid invite code) and return tokens."""
-    # Step 1: validate invite（只读校验，邀请码是否存在/未满/未过期）
+@router.post("/register", response_model=RegisterResponse, status_code=201)
+def register(body: RegisterRequest, supabase: Client = Depends(get_db)) -> RegisterResponse:
+    """Create a new user account (requires valid invite code).
+
+    If Supabase email confirmation is enabled, returns {status: "otp_sent"}
+    and the user must call /auth/verify-otp to complete registration.
+    Otherwise returns tokens directly.
+    """
+    # Step 1: validate invite（只读校验）
     invite = _validate_invite(supabase, body.invite_code)
 
     # Step 2: consume invite FIRST（先消费，防止并发超限）
@@ -98,16 +103,49 @@ def register(body: RegisterRequest, supabase: Client = Depends(get_db)) -> Token
         _release_invite(supabase, invite)
         raise AuthError(f"注册失败：{exc}") from exc
 
+    # Supabase 开了 email confirmation → session is None，等待 OTP 验证
     if resp.session is None:
-        _release_invite(supabase, invite)
-        raise AuthError("注册成功，请检查邮箱完成验证后再登录。")
+        # 邀请码已消费，账号已创建，等用户验证邮箱（不回退邀请码）
+        return RegisterResponse(status="otp_sent", email=body.email)
 
-    # 新用户 welcome bonus +5 积分
+    # 直接注册成功（未开启 email confirmation）
     try:
         user_id = resp.session.user.id
         credit_service.earn(supabase, user_id, 5, "welcome_bonus", note="新用户欢迎积分")
     except Exception:
-        pass  # 积分失败不阻断注册
+        pass
+
+    session = resp.session
+    return RegisterResponse(
+        status="ok",
+        email=body.email,
+        access_token=session.access_token,
+        refresh_token=session.refresh_token,
+        expires_in=session.expires_in or 3600,
+    )
+
+
+@router.post("/verify-otp", response_model=TokenResponse)
+def verify_otp(body: VerifyOtpRequest, supabase: Client = Depends(get_db)) -> TokenResponse:
+    """Verify the 6-digit OTP sent to the user's email after registration."""
+    try:
+        resp = supabase.auth.verify_otp({
+            "email": body.email,
+            "token": body.token,
+            "type": "signup",
+        })
+    except Exception as exc:
+        raise AuthError(f"验证失败：{exc}") from exc
+
+    if resp.session is None:
+        raise AuthError("验证码错误或已过期，请重新尝试。")
+
+    # 验证成功后发放欢迎积分（如果还没发过）
+    try:
+        user_id = resp.session.user.id
+        credit_service.earn(supabase, user_id, 5, "welcome_bonus", note="新用户欢迎积分")
+    except Exception:
+        pass
 
     return _build_token_response(resp.session)
 
