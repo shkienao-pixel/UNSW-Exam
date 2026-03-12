@@ -12,8 +12,9 @@ from typing import Any
 from supabase import Client
 
 from app.core.config import get_settings
+from app.core.exceptions import InsufficientCreditsError
 from app.core.supabase_client import get_supabase
-from app.services import generate_service, job_service
+from app.services import credit_service, generate_service, job_service
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,14 @@ _GEN_FN = {
     "quiz": generate_service.run_quiz,
     "outline": generate_service.run_outline,
     "flashcards": generate_service.run_flashcards,
+}
+
+# job_type → credit type（与 credit_service.COSTS 中的 key 对应）
+_JOB_CREDIT_TYPE: dict[str, str] = {
+    "summary":    "gen_summary",
+    "quiz":       "gen_quiz",
+    "outline":    "gen_outline",
+    "flashcards": "gen_flashcards",
 }
 
 
@@ -41,18 +50,47 @@ async def _run_job(db: Client, job: dict[str, Any], worker_id: str) -> None:
     user_id = str(job.get("user_id", ""))
     course_id = str(job.get("course_id", ""))
     payload = job.get("request_payload") or {}
+    credit_type = _JOB_CREDIT_TYPE.get(job_type)
 
     if job_type not in _GEN_FN:
         await asyncio.to_thread(job_service.fail_job, db, job_id, f"Unsupported job_type: {job_type}")
         return
 
+    credit_spent = False
     try:
         body = _payload_to_body(payload if isinstance(payload, dict) else {})
+
+        # 在实际生成时才扣积分（不是入队时）
+        if credit_type:
+            cost = credit_service.COSTS.get(credit_type, 1)
+            try:
+                await asyncio.to_thread(
+                    credit_service.spend, db, user_id, cost, credit_type, job_id
+                )
+                credit_spent = True
+            except InsufficientCreditsError as e:
+                await asyncio.to_thread(
+                    job_service.fail_job, db, job_id,
+                    f"积分不足：当前 {e.balance} 积分，需要 {e.required} 积分"
+                )
+                return
+
         output = await asyncio.to_thread(_GEN_FN[job_type], db, user_id, course_id, body)
         await asyncio.to_thread(job_service.finish_job, db, job_id, output["id"])
         logger.info("generation job done worker=%s job=%s output=%s", worker_id, job_id, output["id"])
+
     except Exception as exc:
         logger.error("generation job failed worker=%s job=%s err=%s", worker_id, job_id, exc, exc_info=True)
+        # 生成失败时退款（如果已扣）
+        if credit_spent and credit_type:
+            cost = credit_service.COSTS.get(credit_type, 1)
+            try:
+                await asyncio.to_thread(
+                    credit_service.earn, db, user_id, cost, "refund", job_id,
+                    f"{credit_type} 生成失败退款"
+                )
+            except Exception as refund_err:
+                logger.error("credit refund failed job=%s: %s", job_id, refund_err)
         await asyncio.to_thread(job_service.fail_job, db, job_id, str(exc))
 
 

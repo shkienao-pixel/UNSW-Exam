@@ -34,7 +34,6 @@ from supabase import Client
 
 from app.core.config import get_settings
 from app.core.dependencies import get_current_user, get_db
-from app.services.credit_service import credit_guard
 from app.services.course_service import (
     get_course,
     get_scope_set,
@@ -126,8 +125,7 @@ async def gen_summary(
 ) -> dict[str, Any]:
     """Kick off async summary generation. Returns {job_id} immediately."""
     get_course(supabase, course_id)
-    with credit_guard(supabase, current_user["id"], "gen_summary"):
-        job_id = _enqueue_generation_job(supabase, current_user["id"], course_id, "summary", body)
+    job_id = _enqueue_generation_job(supabase, current_user["id"], course_id, "summary", body)
     return {"job_id": job_id}
 
 
@@ -140,8 +138,7 @@ async def gen_quiz(
 ) -> dict[str, Any]:
     """Kick off async quiz generation. Returns {job_id} immediately."""
     get_course(supabase, course_id)
-    with credit_guard(supabase, current_user["id"], "gen_quiz"):
-        job_id = _enqueue_generation_job(supabase, current_user["id"], course_id, "quiz", body)
+    job_id = _enqueue_generation_job(supabase, current_user["id"], course_id, "quiz", body)
     return {"job_id": job_id}
 
 
@@ -154,8 +151,7 @@ async def gen_outline(
 ) -> dict[str, Any]:
     """Kick off async outline generation. Returns {job_id} immediately."""
     get_course(supabase, course_id)
-    with credit_guard(supabase, current_user["id"], "gen_outline"):
-        job_id = _enqueue_generation_job(supabase, current_user["id"], course_id, "outline", body)
+    job_id = _enqueue_generation_job(supabase, current_user["id"], course_id, "outline", body)
     return {"job_id": job_id}
 
 
@@ -168,8 +164,7 @@ async def gen_flashcards(
 ) -> dict[str, Any]:
     """Kick off async flashcards generation. Returns {job_id} immediately."""
     get_course(supabase, course_id)
-    with credit_guard(supabase, current_user["id"], "gen_flashcards"):
-        job_id = _enqueue_generation_job(supabase, current_user["id"], course_id, "flashcards", body)
+    job_id = _enqueue_generation_job(supabase, current_user["id"], course_id, "flashcards", body)
     return {"job_id": job_id}
 
 

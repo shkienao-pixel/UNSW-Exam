@@ -450,7 +450,7 @@ function parseContentJson(json: Record<string, unknown>): {
 }
 
 /** Markdown 渲染（带 TOC anchor） */
-function MarkdownContent({ content, contentRef }: { content: string; contentRef: React.RefObject<HTMLDivElement> }) {
+function MarkdownContent({ content, contentRef }: { content: string; contentRef: React.RefObject<HTMLDivElement | null> }) {
   return (
     <div ref={contentRef} className="flex-1 min-w-0">
       <ReactMarkdown
@@ -485,7 +485,7 @@ function MarkdownContent({ content, contentRef }: { content: string; contentRef:
 }
 
 /** HTML 渲染（iframe 隔离，带 heading id 注入） */
-function HtmlContent({ content, contentRef }: { content: string; contentRef: React.RefObject<HTMLDivElement> }) {
+function HtmlContent({ content, contentRef }: { content: string; contentRef: React.RefObject<HTMLDivElement | null> }) {
   // 给 h1-h3 注入 data-heading-id，以便 TOC 跳转
   const injected = content.replace(/<h([1-3])([^>]*)>([\s\S]*?)<\/h[1-3]>/gi, (_, lvl, attrs, inner) => {
     const title = inner.replace(/<[^>]+>/g, '').trim()
