@@ -121,7 +121,7 @@ function OtpStep({
         <div>
           <h3 className="text-xl font-semibold text-white">Verify your email</h3>
           <p className="mt-1.5 text-sm text-white/48 leading-6">
-            We sent a 6-digit code to
+            We sent an 8-digit code to
             <br />
             <span className="text-white/70 font-medium">{email}</span>
           </p>

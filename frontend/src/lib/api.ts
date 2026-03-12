@@ -19,8 +19,9 @@ function getToken(): string | null {
   return localStorage.getItem('access_token')
 }
 
-function humanizeError(raw: string, status?: number): string {
-  const s = raw.toLowerCase()
+function humanizeError(raw: unknown, status?: number): string {
+  const str = typeof raw === 'string' ? raw : Array.isArray(raw) ? JSON.stringify(raw) : String(raw ?? '')
+  const s = str.toLowerCase()
   if (s.includes('invalid login credentials'))
     return '邮箱或密码错误，请重新输入'
   if (s.includes('email not confirmed') || s.includes('email not verified'))
@@ -45,7 +46,7 @@ function humanizeError(raw: string, status?: number): string {
     return '服务器内部错误，请稍后重试'
   if (status === 503)
     return '服务暂时不可用，请稍后重试'
-  return raw || `请求失败 (HTTP ${status ?? '?'})`
+  return str || `请求失败 (HTTP ${status ?? '?'})`
 }
 
 /** 共用 fetch 逻辑。handle401=true 时遇到 401 自动清除 token 并跳转登录页。 */
