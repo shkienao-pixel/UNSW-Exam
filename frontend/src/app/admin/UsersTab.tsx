@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { Loader2, CheckCircle, X, SlidersHorizontal, RefreshCw, Wifi, Trash2 } from 'lucide-react'
+import { Loader2, CheckCircle, X, SlidersHorizontal, RefreshCw, Wifi, Trash2, MailCheck } from 'lucide-react'
 import { useLang } from '@/lib/i18n'
 import {
   User, tx, localeByLang, adminReq,
@@ -385,9 +385,28 @@ export function UsersTab({ secret }: { secret: string }) {
                 </div>
 
                 {/* 验证状态 */}
-                <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium flex-shrink-0 ${u.email_confirmed ? 'badge-success' : 'badge-warning'}`}>
-                  {u.email_confirmed ? tt('已验证', 'Verified') : tt('未验证', 'Unverified')}
-                </span>
+                {u.email_confirmed ? (
+                  <span className="text-xs px-2.5 py-0.5 rounded-full font-medium flex-shrink-0 badge-success">
+                    {tt('已验证', 'Verified')}
+                  </span>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      try {
+                        await adminReq(secret, `/admin/users/${u.id}/confirm-email`, { method: 'POST' })
+                        setUsers(prev => prev.map(x => x.id === u.id ? { ...x, email_confirmed: true } : x))
+                        setToast(tt(`已手动确认 ${u.email} 的邮箱`, `Confirmed ${u.email}`))
+                      } catch (e: unknown) {
+                        setError(e instanceof Error ? e.message : tt('确认失败', 'Failed'))
+                      }
+                    }}
+                    title={tt('点击手动确认邮箱，使其可以登录', 'Click to confirm email so user can login')}
+                    className="text-xs px-2.5 py-0.5 rounded-full font-medium flex-shrink-0 flex items-center gap-1 transition-all badge-warning hover:bg-yellow-400/20"
+                  >
+                    <MailCheck size={11} />
+                    {tt('未验证', 'Unverified')}
+                  </button>
+                )}
 
                 {/* 调整积分按钮 */}
                 <button

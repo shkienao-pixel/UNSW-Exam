@@ -314,6 +314,31 @@ def admin_list_users(
     ]
 
 
+@router.post("/users/{user_id}/confirm-email", status_code=200)
+def admin_confirm_user_email(
+    user_id: str,
+    _: None = Depends(_require_admin),
+) -> dict[str, Any]:
+    """强制确认用户邮箱（用于 OTP 未完成导致无法登录的情况）。"""
+    import httpx
+    cfg = get_settings()
+    try:
+        r = httpx.put(
+            f"{cfg.supabase_url}/auth/v1/admin/users/{user_id}",
+            headers={
+                "apikey": cfg.supabase_service_role_key,
+                "Authorization": f"Bearer {cfg.supabase_service_role_key}",
+                "Content-Type": "application/json",
+            },
+            json={"email_confirm": True},
+            timeout=10,
+        )
+        r.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=500, detail=f"确认失败: {exc.response.text[:200]}") from exc
+    return {"ok": True, "id": user_id}
+
+
 @router.delete("/users/{user_id}", status_code=200)
 def admin_delete_user(
     user_id: str,
