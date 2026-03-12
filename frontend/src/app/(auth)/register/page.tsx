@@ -32,7 +32,7 @@ function OtpStep({
   onSuccess: (tokens: { access_token: string; refresh_token: string; expires_in: number }) => void
   onBack: () => void
 }) {
-  const [digits, setDigits] = useState(['', '', '', '', '', ''])
+  const [digits, setDigits] = useState(['', '', '', '', '', '', '', ''])
   const [error, setError] = useState('')
   const [hint, setHint] = useState('')
   const [loading, setLoading] = useState(false)
@@ -52,7 +52,7 @@ function OtpStep({
     next[idx] = v
     setDigits(next)
     setError('')
-    if (v && idx < 5) inputs.current[idx + 1]?.focus()
+    if (v && idx < 7) inputs.current[idx + 1]?.focus()
   }
 
   function handleKeyDown(idx: number, e: KeyboardEvent<HTMLInputElement>) {
@@ -62,10 +62,10 @@ function OtpStep({
   }
 
   function handlePaste(e: ClipboardEvent<HTMLDivElement>) {
-    const text = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6)
-    if (text.length === 6) {
+    const text = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 8)
+    if (text.length === 8) {
       setDigits(text.split(''))
-      inputs.current[5]?.focus()
+      inputs.current[7]?.focus()
     }
     e.preventDefault()
   }
@@ -73,8 +73,8 @@ function OtpStep({
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     const code = digits.join('')
-    if (code.length < 6) {
-      setError('Please enter the full 6-digit verification code.')
+    if (code.length < 8) {
+      setError('Please enter the full 8-digit verification code.')
       return
     }
 
