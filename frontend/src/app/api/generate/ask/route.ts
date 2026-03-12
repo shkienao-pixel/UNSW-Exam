@@ -102,7 +102,7 @@ async function handleVQA(query: string, imageFile: File): Promise<AskResponse> {
   const base64Image = Buffer.from(imageBytes).toString('base64')
 
   const genai = getGeminiClient()
-  const model = genai.getGenerativeModel({ model: 'gemini-2.5-pro' })
+  const model = genai.getGenerativeModel({ model: 'gemini-3.1-pro-preview' })
 
   const result = await model.generateContent([
     { inlineData: { data: base64Image, mimeType: mimeType as Parameters<typeof model.generateContent>[0] extends Array<infer Item> ? Item extends { inlineData: { mimeType: infer M } } ? M : never : never } },
@@ -119,7 +119,7 @@ async function handleVQA(query: string, imageFile: File): Promise<AskResponse> {
     answer,
     sources:    [],
     image_url:  null,
-    model_used: 'gemini-2.5-pro',
+    model_used: 'gemini-3.1-pro-preview',
   } satisfies AskResponse
 }
 

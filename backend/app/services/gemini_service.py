@@ -210,7 +210,7 @@ def gemini_generate_answer(
 
         client = genai.Client(api_key=gemini_key)
         resp = client.models.generate_content(
-            model="gemini-2.5-pro",
+            model="gemini-3.1-pro-preview",
             contents=user_content,
             config=types.GenerateContentConfig(
                 system_instruction=GEMINI_ANSWER_SYSTEM,

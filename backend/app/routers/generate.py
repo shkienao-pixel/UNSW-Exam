@@ -248,7 +248,7 @@ def ask_question(
         if gemini_key:
             answer = gemini_generate_answer(body.question, filtered_context, gemini_key)
             if answer:
-                model_used = "gemini-2.5-pro"
+                model_used = "gemini-3.1-pro-preview"
 
         if not answer:
             system = (
