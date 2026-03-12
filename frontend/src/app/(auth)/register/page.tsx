@@ -255,18 +255,6 @@ export default function RegisterPage() {
     }
   }
 
-  function goToOtpVerification() {
-    const normalizedEmail = email.trim()
-    if (!normalizedEmail) {
-      setEmailError('Please enter your email first.')
-      setError('Please enter your email first.')
-      return
-    }
-    setPendingEmail(normalizedEmail)
-    setError('')
-    clearFieldErrors()
-    setStep('otp')
-  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -479,14 +467,6 @@ export default function RegisterPage() {
                       Register now
                     </>
                   )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={goToOtpVerification}
-                  className="btn-outline-gold flex w-full items-center justify-center gap-2 py-3 text-sm"
-                >
-                  Enter verification code
                 </button>
               </form>
 
