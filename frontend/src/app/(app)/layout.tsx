@@ -13,7 +13,7 @@ import FloatingProgress from '@/components/FloatingProgress'
 import ExamCountdown from '@/components/ExamCountdown'
 import {
   LayoutDashboard, LogOut, ArrowLeft, Loader2, BookOpen, ChevronLeft, Menu, X, MessageSquarePlus, Send, CreditCard,
-  LibraryBig, Layers3, FileWarning, Target, FileText, ListTree, MessageCircleMore, Sparkles, SlidersHorizontal, Globe,
+  LibraryBig, Layers3, FileWarning, Target, FileText, ListTree, MessageCircleMore, Sparkles, SlidersHorizontal, Globe, RefreshCw,
 } from 'lucide-react'
 
 // ── Feature navigation config ─────────────────────────────────────────────────
