@@ -48,6 +48,23 @@
 
 ## Changelog
 
+### v0.9.0 (2026-03-13)
+
+**Features:**
+- **Streaming Q&A** — `/ask` endpoint now streams answer tokens in real-time via SSE. Frontend shows phase status (searching → generating → deep thinking after 1.5s), blinking cursor during output, and a stop button to cancel mid-stream
+- **Registration hardened** — OTP email verification is now strictly required; no bypass path. Invite code is consumed only after successful OTP verification (not at form submit)
+- **Login simplified** — Removed "email not verified" special handling; login is now a single flow: correct password = in, wrong = error
+- **Resend SMTP via Resend.com** — Replaced Supabase's shared SMTP with a custom Resend integration (exammaster.tech domain, SPF/DKIM/DMARC verified) for reliable email delivery
+- **OTP resend cooldown** — 60-second cooldown on the resend button to prevent spam
+
+**Fixes:**
+- OTP input upgraded to 8 digits (Supabase sends 8-digit codes)
+- `humanizeError` now handles non-string `detail` responses (prevents minified `e.toLowerCase` crash)
+- `credit_guard` import was missing from `generate.py` — fixed
+- `gemini_generate_answer` max_output_tokens was 2048 → raised to 8192 (fixes truncated answers)
+
+---
+
 ### v0.8.0 (2026-03-12)
 
 **Features:**
