@@ -40,7 +40,7 @@ class RegisterResponse(BaseModel):
 
 class VerifyOtpRequest(BaseModel):
     email: EmailStr
-    token: str = Field(min_length=6, max_length=6)
+    token: str = Field(min_length=6, max_length=8)
 
 
 class ResendOtpRequest(BaseModel):
