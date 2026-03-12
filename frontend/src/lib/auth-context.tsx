@@ -53,8 +53,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(async (email: string, password: string, inviteCode: string) => {
     const resp = await api.auth.register(email, password, inviteCode)
-    localStorage.setItem('access_token', resp.access_token)
-    localStorage.setItem('refresh_token', resp.refresh_token)
+    // otp_sent: no token yet, caller handles the OTP step
+    if (resp.status === 'otp_sent') return
+    if (resp.access_token) {
+      localStorage.setItem('access_token', resp.access_token)
+      localStorage.setItem('refresh_token', resp.refresh_token!)
+    }
     localStorage.removeItem('user_role')
     const me = await api.auth.me()
     setRole('user')

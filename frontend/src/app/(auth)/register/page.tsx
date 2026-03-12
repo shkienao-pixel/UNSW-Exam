@@ -198,7 +198,7 @@ export default function RegisterPage() {
           localStorage.setItem('refresh_token', res.refresh_token!)
         }
         setSuccess(true)
-        setTimeout(() => router.push('/dashboard'), 1200)
+        setTimeout(() => { window.location.href = '/dashboard' }, 1200)
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '注册失败，请稍后重试。')
@@ -211,7 +211,7 @@ export default function RegisterPage() {
     localStorage.setItem('access_token', tokens.access_token)
     localStorage.setItem('refresh_token', tokens.refresh_token)
     setSuccess(true)
-    setTimeout(() => router.push('/dashboard'), 1200)
+    setTimeout(() => { window.location.href = '/dashboard' }, 1200)
   }
 
   return (
