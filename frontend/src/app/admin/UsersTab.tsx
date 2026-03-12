@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { Loader2, CheckCircle, X, SlidersHorizontal } from 'lucide-react'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { Loader2, CheckCircle, X, SlidersHorizontal, RefreshCw, Wifi } from 'lucide-react'
 import { useLang } from '@/lib/i18n'
 import {
   User, tx, localeByLang, adminReq,
@@ -197,24 +197,44 @@ export function UsersTab({ secret }: { secret: string }) {
   const [error, setError] = useState('')
   const [adjustTarget, setAdjustTarget] = useState<User | null>(null)
   const [toast, setToast] = useState('')
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const prevCountRef = useRef<number | null>(null)
 
-  const load = useCallback(async () => {
-    setError('')
+  const POLL_INTERVAL = 15_000 // 15秒
+
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setError('')
+    if (silent) setRefreshing(true)
     try {
       const [usersData, creditsData] = await Promise.all([
         adminReq<User[]>(secret, '/admin/users'),
         adminReq<Record<string, number>>(secret, '/admin/users/credits'),
       ])
-      setUsers(usersData)
+      setUsers(prev => {
+        // 检测新注册用户
+        if (prevCountRef.current !== null && usersData.length > prevCountRef.current) {
+          const diff = usersData.length - prevCountRef.current
+          setToast(tt(`🎉 ${diff} 位新用户刚刚注册！`, `🎉 ${diff} new user(s) just registered!`))
+        }
+        prevCountRef.current = usersData.length
+        return usersData
+      })
       setCredits(creditsData)
+      setLastUpdated(new Date())
     } catch (e: unknown) {
-      setError(String(e))
+      if (!silent) setError(String(e))
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
-  }, [secret])
+  }, [secret]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    load()
+    const timer = setInterval(() => load(true), POLL_INTERVAL)
+    return () => clearInterval(timer)
+  }, [load])
 
   function handleAdjustSuccess(userId: string, newBalance: number) {
     setCredits(prev => ({ ...prev, [userId]: newBalance }))
@@ -231,6 +251,37 @@ export function UsersTab({ secret }: { secret: string }) {
   return (
     <div className="space-y-4 fade-in-up">
       {toast && <Toast message={toast} onDone={() => setToast('')} />}
+
+      {/* 实时状态栏 */}
+      <div className="flex items-center justify-between px-3 py-2 rounded-xl"
+        style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="flex items-center gap-2">
+          <div className="relative flex items-center">
+            <Wifi size={13} style={{ color: '#4ade80' }} />
+            <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+          </div>
+          <span className="text-xs" style={{ color: '#555' }}>
+            {tt('实时监控 · 每 15 秒自动刷新', 'Live · auto-refresh every 15s')}
+          </span>
+          {lastUpdated && (
+            <span className="text-xs" style={{ color: '#383838' }}>
+              · {tt('上次更新', 'Last updated')} {lastUpdated.toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+        <button
+          onClick={() => load(true)}
+          disabled={refreshing}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all"
+          style={{ color: '#555', border: '1px solid rgba(255,255,255,0.07)' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#FFD700'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,215,0,0.3)' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#555'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.07)' }}
+        >
+          <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} />
+          {tt('立即刷新', 'Refresh')}
+        </button>
+      </div>
+
       {adjustTarget && (
         <PointsAdjustModal
           user={{ ...adjustTarget, credits: credits[adjustTarget.id] ?? 0 }}
