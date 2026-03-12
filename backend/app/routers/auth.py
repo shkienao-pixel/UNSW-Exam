@@ -56,20 +56,16 @@ def _validate_invite(supabase: Client, code: str) -> dict:
 
 
 def _consume_invite(supabase: Client, invite: dict) -> bool:
-    """Atomically consume one invite use via optimistic locking.
+    """Atomically consume one invite use via PostgreSQL RPC.
 
-    Updates use_count only when it still equals the value we read (invite["use_count"]).
-    Returns True if consumed successfully, False if a concurrent registration beat us.
+    Uses a DB-level function with optimistic locking to handle concurrency safely.
+    Returns True if consumed, False if already full or concurrent race lost.
     """
-    result = (
-        supabase.table("invites")
-        .update({"use_count": invite["use_count"] + 1})
-        .select("id")  # supabase-py v2: .select() must come before .eq()
-        .eq("id", invite["id"])
-        .eq("use_count", invite["use_count"])  # optimistic lock: only match if unchanged
-        .execute()
-    )
-    return bool(result.data)
+    result = supabase.rpc(
+        "consume_invite",
+        {"p_id": invite["id"], "p_current_use_count": invite["use_count"]},
+    ).execute()
+    return result.data is True
 
 
 def _release_invite(supabase: Client, invite: dict) -> None:
