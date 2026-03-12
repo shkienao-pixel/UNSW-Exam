@@ -59,45 +59,48 @@ def _consume_invite(supabase: Client, invite: dict) -> bool:
     """Atomically consume one invite use via optimistic locking.
 
     Updates use_count only when it still equals the value we read (invite["use_count"]).
-    Returns True if consumed, False if a concurrent registration already changed it.
+    Returns True if consumed successfully, False if a concurrent registration beat us.
     """
     result = (
         supabase.table("invites")
         .update({"use_count": invite["use_count"] + 1})
         .eq("id", invite["id"])
         .eq("use_count", invite["use_count"])  # optimistic lock: only match if unchanged
+        .select("id")  # supabase-py v2 requires .select() to get result.data
         .execute()
     )
     return bool(result.data)
 
 
+def _release_invite(supabase: Client, invite: dict) -> None:
+    """Roll back use_count if registration fails after consume."""
+    try:
+        supabase.table("invites").update({"use_count": invite["use_count"]}).eq("id", invite["id"]).execute()
+    except Exception:
+        logger.warning("Failed to release invite %s after registration error", invite.get("id"))
+
+
 @router.post("/register", response_model=TokenResponse, status_code=201)
 def register(body: RegisterRequest, supabase: Client = Depends(get_db)) -> TokenResponse:
     """Create a new user account (requires valid invite code) and return tokens."""
-    # Step 1: validate invite — no DB write, failure here does NOT consume the code
+    # Step 1: validate invite（只读校验，邀请码是否存在/未满/未过期）
     invite = _validate_invite(supabase, body.invite_code)
 
-    # Step 2: create account — invite untouched if this fails
+    # Step 2: consume invite FIRST（先消费，防止并发超限）
+    consumed = _consume_invite(supabase, invite)
+    if not consumed:
+        raise AuthError("邀请码已被用完，请联系管理员获取新邀请码。")
+
+    # Step 3: create account — if this fails, roll back use_count
     try:
         resp = supabase.auth.sign_up({"email": body.email, "password": body.password})
     except Exception as exc:
-        raise AuthError(f"Registration failed: {exc}") from exc
+        _release_invite(supabase, invite)
+        raise AuthError(f"注册失败：{exc}") from exc
 
     if resp.session is None:
-        raise AuthError(
-            "Registration successful. Please check your email to confirm your account."
-        )
-
-    # Step 3: consume invite atomically — detect concurrent-registration race
-    try:
-        consumed = _consume_invite(supabase, invite)
-        if not consumed:
-            logger.warning(
-                "Invite code %s race: use_count changed between validate and consume",
-                invite.get("id"),
-            )
-    except Exception:
-        pass  # non-fatal: account is live, invite tracking failure is recoverable
+        _release_invite(supabase, invite)
+        raise AuthError("注册成功，请检查邮箱完成验证后再登录。")
 
     # 新用户 welcome bonus +5 积分
     try:
