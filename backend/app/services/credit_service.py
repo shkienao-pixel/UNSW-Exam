@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 # ── 消费定价表 ────────────────────────────────────────────────
 COSTS: dict[str, int] = {
-    "gen_flashcards":  1,
-    "gen_quiz":        120,
+    "gen_flashcards":  100,
+    "gen_quiz":        100,
     "gen_summary":     1,
     "gen_outline":     5,
     "gen_plan":        5,

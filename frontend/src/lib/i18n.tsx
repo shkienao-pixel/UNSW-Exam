@@ -74,7 +74,7 @@ const dict = {
   credits_estimator_cost_1: { zh: '50 积分 / 份', en: '50 credits / file' },
   credits_estimator_value_1: { zh: '解锁全文阅读 + AI 自动提取核心考点 + 生成思维导图预览', en: 'Full access + key-point extraction + mindmap preview' },
   credits_estimator_item_2: { zh: '全真模拟试题', en: 'Full Mock Exam' },
-  credits_estimator_cost_2: { zh: '120 积分 / 套', en: '120 credits / set' },
+  credits_estimator_cost_2: { zh: '100 积分 / 套', en: '100 credits / set' },
   credits_estimator_value_2: { zh: '对标历年真题逻辑，生成含解析的完整考卷', en: 'Past-exam aligned full paper with explanations' },
   credits_estimator_item_3: { zh: 'AI 深度追问', en: 'AI Deep Follow-up' },
   credits_estimator_cost_3: { zh: '30 积分 / 10 次', en: '30 credits / 10 rounds' },

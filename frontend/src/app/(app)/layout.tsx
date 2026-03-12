@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useCallback, useEffect, useState, Suspense } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
@@ -88,15 +88,25 @@ function SidebarHeader({
   role,
   credits,
   onToggleCollapse,
+  onRefreshCredits,
 }: {
   collapsed: boolean
   user: { email: string } | null
   role?: string | null
   credits?: number | null
   onToggleCollapse?: () => void
+  onRefreshCredits?: () => void
 }) {
   const { t } = useLang()
+  const [refreshing, setRefreshing] = useState(false)
   const lowCredits = (credits ?? 0) < 100
+
+  async function handleRefresh() {
+    if (!onRefreshCredits || refreshing) return
+    setRefreshing(true)
+    await onRefreshCredits()
+    setRefreshing(false)
+  }
   return (
     <div className="border-b border-white/7 p-3">
       <div className={`${SIDEBAR_CARD} ${collapsed ? 'flex flex-col items-center gap-2 p-2.5' : 'p-3'}`}>
@@ -125,16 +135,28 @@ function SidebarHeader({
             <p className="truncate text-xs text-white/34">{user?.email}</p>
             {role !== 'guest' && credits !== null && credits !== undefined ? (
               <>
-                <div
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-semibold shadow-[0_0_22px_rgba(200,165,90,0.08)] ${lowCredits ? 'animate-pulse' : ''}`}
-                  style={{
-                    border: `1px solid ${lowCredits ? 'rgba(239,68,68,0.35)' : 'rgba(200,165,90,0.18)'}`,
-                    background: lowCredits ? 'rgba(239,68,68,0.1)' : 'rgba(200,165,90,0.1)',
-                    color: lowCredits ? '#fca5a5' : '#e6cf98',
-                  }}
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  <span className="text-base leading-none">{credits} 积分</span>
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-semibold shadow-[0_0_22px_rgba(200,165,90,0.08)] ${lowCredits ? 'animate-pulse' : ''}`}
+                    style={{
+                      border: `1px solid ${lowCredits ? 'rgba(239,68,68,0.35)' : 'rgba(200,165,90,0.18)'}`,
+                      background: lowCredits ? 'rgba(239,68,68,0.1)' : 'rgba(200,165,90,0.1)',
+                      color: lowCredits ? '#fca5a5' : '#e6cf98',
+                    }}
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    <span className="text-base leading-none">{credits} 积分</span>
+                  </div>
+                  {onRefreshCredits && (
+                    <button
+                      onClick={handleRefresh}
+                      disabled={refreshing}
+                      title="刷新积分"
+                      className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-white/40 transition hover:border-white/16 hover:text-white/70 disabled:opacity-40"
+                    >
+                      <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
+                    </button>
+                  )}
                 </div>
                 {lowCredits && (
                   <p className="text-[11px] text-red-300/85">{t('sidebar_low_credits')}</p>
@@ -390,7 +412,7 @@ function SidebarFooter({
 // Sidebar shell (shared by mobile drawer and desktop)
 
 function SidebarShell({
-  courseId, currentCourse, courses, pathname, collapsed, user, logout, role, credits, onNavClick,
+  courseId, currentCourse, courses, pathname, collapsed, user, logout, role, credits, onNavClick, onRefreshCredits,
 }: {
   courseId: string | null
   currentCourse: Course | undefined
@@ -402,10 +424,11 @@ function SidebarShell({
   role?: string | null
   credits?: number | null
   onNavClick?: () => void
+  onRefreshCredits?: () => void
 }) {
   return (
     <>
-      <SidebarHeader collapsed={collapsed} user={user} role={role} credits={credits} />
+      <SidebarHeader collapsed={collapsed} user={user} role={role} credits={credits} onRefreshCredits={onRefreshCredits} />
 
       {courseId
         ? (
@@ -437,6 +460,14 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
     if (!loading && !user) router.replace('/')
   }, [user, loading, router])
 
+  const refreshCredits = useCallback(async () => {
+    if (role === 'guest') return
+    try {
+      const r = await api.credits.balance()
+      setCredits(r.balance)
+    } catch {}
+  }, [role])
+
   useEffect(() => {
     if (user) {
       api.courses.list().then(setCourses).catch(() => {})
@@ -463,7 +494,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const sidebarWidth = collapsed ? 80 : 240
 
   const sidebarProps = {
-    courseId, currentCourse, courses, pathname, collapsed, user, logout, role, credits,
+    courseId, currentCourse, courses, pathname, collapsed, user, logout, role, credits, onRefreshCredits: refreshCredits,
   }
 
   return (
@@ -496,6 +527,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
           role={role}
           credits={credits}
           onToggleCollapse={() => setCollapsed(v => !v)}
+          onRefreshCredits={refreshCredits}
         />
 
         {/* Logo + collapse toggle (desktop only) */}
