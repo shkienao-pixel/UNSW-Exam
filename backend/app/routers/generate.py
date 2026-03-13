@@ -245,7 +245,7 @@ def ask_question(
             filtered_context = ctx
 
         answer = ""
-        model_used = "gpt-4o"
+        model_used = "gpt-5.4"
 
         if gemini_key:
             answer = gemini_generate_answer(body.question, filtered_context, gemini_key)
@@ -266,7 +266,7 @@ def ask_question(
                 else body.question
             )
             answer = generate_service._chat(system, context_msg, openai_key)
-            model_used = "gpt-4o"
+            model_used = "gpt-5.4"
 
         image_url: Optional[str] = None
         if gemini_key and should_generate_image(body.question, answer):
@@ -407,7 +407,7 @@ def ask_question_stream(
                 )
                 full_answer = generate_service._chat(system, context_msg, openai_key)
                 yield _sse({"type": "token", "text": full_answer})
-                model_used = "gpt-4o"
+                model_used = "gpt-5.4"
 
             yield _sse({
                 "type":       "done",
@@ -470,7 +470,7 @@ def translate_texts(
     from openai import OpenAI
     client = OpenAI(api_key=openai_key, timeout=60.0)
     resp = client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-5.4",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": numbered},

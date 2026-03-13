@@ -155,7 +155,7 @@ def gpt_filter_chunks(
         from openai import OpenAI
         client = OpenAI(api_key=openai_key)
         resp = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-5.4",
             messages=[
                 {"role": "system", "content": GPT_FILTER_SYSTEM},
                 {"role": "user",   "content": user_msg},

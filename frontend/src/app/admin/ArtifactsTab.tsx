@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import {
   Loader2, CheckCircle, XCircle, ChevronLeft,
-  DatabaseZap, Upload, RefreshCw,
+  DatabaseZap, Upload, RefreshCw, Search,
 } from 'lucide-react'
 import { useLang } from '@/lib/i18n'
 import {
@@ -43,7 +43,7 @@ function getLectureWeekBucket(fileName: string): LectureWeekBucket | null {
 
 // 闂傚倷绀侀崯鍧楀储濠婂牆纾婚柟鍓х帛閻撳啴鏌涜箛鎿冩Ц濞?Artifacts tab (闂傚倷绀佸﹢閬嶁€﹂崼銉嬪洭骞庣粵瀣櫔閻庤娲栧ú銊╂儗濞嗘挻鍊甸柨婵嗛閺嬬喐銇勯幘鍐测挃缂? 闂傚倷绀侀崯鍧楀储濠婂牆纾婚柟鍓х帛閻撳啴鏌涜箛鎿冩Ц濞存粓绠栧娲礃閹绘帒杈呴梺绋款儐閹瑰洭寮诲澶婄濠㈣泛锕ｆ竟鏇㈡⒒娴ｇ鏆遍柛妯荤矒瀹曟垿骞樼紒妯煎帗闂佺绻愰ˇ顖涚妤ｅ啯鈷戦柛鎰絻鐢劑鏌涚€ｎ偅宕岄柡灞界Ч瀹曟寰勬繝浣割棜闂傚倷绀侀崯鍧楀储濠婂牆纾婚柟鍓х帛閻撳啴鏌涜箛鎿冩Ц濞存粓绠栧娲礃閹绘帒杈呴梺绋款儐閹瑰洭寮诲澶婄濠㈣泛锕ｆ竟鏇㈡⒒娴ｇ鏆遍柛妯荤矒瀹曟垿骞樼紒妯煎帗闂佺绻愰ˇ顖涚妤ｅ啯鈷戦柛鎰絻鐢劑鏌涚€ｎ偅宕岄柡灞界Ч瀹曟寰勬繝浣割棜闂傚倷绀侀崯鍧楀储濠婂牆纾婚柟鍓х帛閻撳啴鏌涜箛鎿冩Ц濞存粓绠栧娲礃閹绘帒杈呴梺绋款儐閹瑰洭寮诲澶婄濠㈣泛锕ｆ竟鏇㈡⒒娴ｇ鏆遍柛妯荤矒瀹曟垿骞樼紒妯煎帗闂佺绻愰ˇ顖涚妤ｅ啯鈷戦柛鎰絻鐢劑鏌涚€ｎ偅宕岄柡灞界Ч瀹曟寰勬繝浣割棜闂傚倷绀侀崯鍧楀储濠婂牆纾婚柟鍓х帛閻撳啴鏌涜箛鎿冩Ц濞存粓绠栧娲礃閹绘帒杈呴梺绋款儐閹瑰洭寮诲澶婄濠㈣泛锕ｆ竟鏇㈡⒒娴ｇ鏆遍柛妯荤矒瀹曟垿骞樼紒妯煎帗闂佺绻愰ˇ顖涚妤ｅ啯鈷戦柛鎰絻鐢劑鏌涚€ｎ偅宕岄柡灞界Ч瀹曟寰勬繝浣割棜闂傚倷绀侀崯鍧楀储濠婂牆纾婚柟鍓х帛閻撳啴鏌涜箛鎿冩Ц濞存粓绠栧娲礃閹绘帒杈呴梺绋款儐閹瑰洭寮诲澶婄濠㈣泛锕ｆ竟鏇㈡⒒娴ｇ鏆遍柛妯荤矒瀹曟垿骞樼紒妯煎帗闂佺绻愰ˇ顖涚妤ｅ啯鈷戦柛鎰絻鐢劑鏌涚€ｎ偅宕岄柡灞界Ч瀹曟寰勬繝浣割棜闂傚倷绀侀崯鍧楀储濠婂牆纾婚柟鍓х帛閻撳啴鏌涜箛鎿冩Ц濞存粓绠栧娲礃閹绘帒杈呴梺绋款儐閹瑰洭寮诲澶婄濠㈣泛锕ｆ竟鏇㈡⒒娴ｇ鏆遍柛妯荤矒瀹曟垿骞樼紒妯煎帗闂佺绻愰ˇ顖涚妤ｅ啯鈷戦柛鎰絻鐢劑鏌涚€ｎ偅宕岄柡灞界Ч瀹曟寰勬繝浣割棜闂傚倷绀侀崯鍧楀储濠婂牆纾?
 
-export function ArtifactsTab({ secret }: { secret: string }) {
+export function ArtifactsTab({ secret, coursesVersion }: { secret: string; coursesVersion?: number }) {
   const { lang } = useLang()
   const tt = (zh: string, en: string) => tx(lang, zh, en)
   const locale = localeByLang(lang)
@@ -66,6 +66,7 @@ export function ArtifactsTab({ secret }: { secret: string }) {
   const [updatingDocType, setUpdatingDocType] = useState<number | null>(null)
   const [docTypeFilter, setDocTypeFilter] = useState<DocType | 'all'>('all')
   const [lectureWeekFilter, setLectureWeekFilter] = useState<'all' | LectureWeekBucket>('all')
+  const [fileSearch, setFileSearch] = useState('')
 
   // 闂傚倷绀侀幉锛勬暜閹烘嚚娲晝閳ь剟鎮?status 闂傚倷绀侀幖顐﹀疮椤愶附鍋夊┑鍌滎焾闂傤垶鏌涘┑鍕姢缁惧墽鍋撻妵鍕籍閸屾艾浠橀梺璇叉唉瀹曠數妲愰幒妤婃晝闁靛鍠栧▓顓㈡⒑閻戔晛澧查柣鐕傜畱椤洦绻濆顒傚€為梺闈涱煭缁犳垼顣?
   useEffect(() => {
@@ -108,7 +109,7 @@ export function ArtifactsTab({ secret }: { secret: string }) {
       .then(setCourses)
       .catch((e: unknown) => setError(String(e)))
       .finally(() => setLoadingCourses(false))
-  }, [secret])
+  }, [secret, coursesVersion])
 
   // 闂傚倷绀侀幉鈥愁潖缂佹ɑ鍙忛柟顖ｇ亹瑜版帒鐐婃い鎺嶈兌閸斿灚绻濋姀锝嗙【闁挎洩绠撳铏鐎涙ê浠梺鎼炲劀閸愶絾瀵栭梻浣哥枃椤曆囧Χ閹间礁绠氶柛鎰靛枛缁€瀣亜閹哄秷鍏岄柍褜鍓﹂崰鏍箒?
   const loadFiles = useCallback(async (courseId: string, status: string) => {
@@ -467,6 +468,21 @@ export function ArtifactsTab({ secret }: { secret: string }) {
           </div>
         </div>
       )}
+      {/* 文件名搜索框 */}
+      {!loadingFiles && artifacts.length > 0 && (
+        <div className="relative">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'rgba(255,255,255,0.3)' }} />
+          <input
+            value={fileSearch}
+            onChange={e => setFileSearch(e.target.value)}
+            placeholder={tt('搜索文件名…', 'Search filename…')}
+            className="w-full pl-8 pr-3 py-2 rounded-xl text-sm outline-none transition-all"
+            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', color: '#ccc' }}
+            onFocus={e => { e.currentTarget.style.borderColor = 'rgba(255,215,0,0.4)' }}
+            onBlur={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)' }}
+          />
+        </div>
+      )}
       {loadingFiles ? <Spinner /> : (() => {
         let displayedArtifacts =
           statusFilter === 'approved' && docTypeFilter !== 'all'
@@ -478,6 +494,12 @@ export function ArtifactsTab({ secret }: { secret: string }) {
             a => getLectureWeekBucket(a.file_name || '') === lectureWeekFilter,
           )
         }
+
+        if (fileSearch.trim()) {
+          const q = fileSearch.toLowerCase()
+          displayedArtifacts = displayedArtifacts.filter(a => (a.file_name || '').toLowerCase().includes(q))
+        }
+
         return (
         <div className="space-y-2">
           {displayedArtifacts.map(a => (
@@ -612,7 +634,9 @@ export function ArtifactsTab({ secret }: { secret: string }) {
           ))}
           {displayedArtifacts.length === 0 && (
             <Empty text={
-              statusFilter === 'approved' && docTypeFilter === 'lecture' && lectureWeekFilter !== 'all'
+              fileSearch.trim()
+                ? tt(`未找到匹配「${fileSearch}」的文件`, `No files match "${fileSearch}"`)
+                : statusFilter === 'approved' && docTypeFilter === 'lecture' && lectureWeekFilter !== 'all'
                 ? tt(
                   `${selectedCourse.code} \u5728\u8be5\u5206\u5468\u6682\u65e0\u8bb2\u4e49`,
                   `${selectedCourse.code} has no lecture files in this week bucket`,

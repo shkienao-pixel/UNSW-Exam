@@ -34,6 +34,7 @@ export default function AdminPage() {
   const [tab, setTab] = useState<Tab>('courses')
   const [secretInput, setSecretInput] = useState('')
   const [secret, setSecret] = useState('')
+  const [coursesVersion, setCoursesVersion] = useState(0)
   const { t, lang, setLang } = useLang()
   const tabs = getTabs(t)
 
@@ -174,8 +175,8 @@ export default function AdminPage() {
       </div>
 
       <div className="rounded-[24px] border border-white/8 bg-white/[0.03] p-5 shadow-[0_20px_64px_rgba(0,0,0,0.26)]">
-        <div style={{ display: tab === 'courses'        ? undefined : 'none' }}><CoursesTab        secret={secret} /></div>
-        <div style={{ display: tab === 'artifacts'      ? undefined : 'none' }}><ArtifactsTab      secret={secret} /></div>
+        <div style={{ display: tab === 'courses'        ? undefined : 'none' }}><CoursesTab        secret={secret} onCoursesChanged={() => setCoursesVersion(v => v + 1)} /></div>
+        <div style={{ display: tab === 'artifacts'      ? undefined : 'none' }}><ArtifactsTab      secret={secret} coursesVersion={coursesVersion} /></div>
         <div style={{ display: tab === 'users'          ? undefined : 'none' }}><UsersTab          secret={secret} /></div>
         <div style={{ display: tab === 'invites'        ? undefined : 'none' }}><InvitesTab        secret={secret} /></div>
         <div style={{ display: tab === 'api-keys'       ? undefined : 'none' }}><ApiKeysTab        secret={secret} /></div>

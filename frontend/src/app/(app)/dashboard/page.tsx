@@ -10,6 +10,7 @@ import {
   Loader2,
   Shield,
   Sparkles,
+  Search,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
@@ -62,6 +63,7 @@ function glowStyle() {
 export default function DashboardPage() {
   const [courses, setCourses] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
   const { role } = useAuth()
   const guestDemoExamAt = useMemo(() => {
     // Keep guest demo countdown stable in each session (about 18 days out).
@@ -78,7 +80,12 @@ export default function DashboardPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const displayCourses = role === 'guest' ? courses.filter(c => c.code === 'COMP9517') : courses
+  const displayCourses = (role === 'guest' ? courses.filter(c => c.code === 'COMP9517') : courses)
+    .filter(c => {
+      if (!search.trim()) return true
+      const q = search.toLowerCase()
+      return c.code.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)
+    })
   const averageMastery = displayCourses.length
     ? Math.round(displayCourses.reduce((sum, course) => sum + getCourseInsight(course, role).mastery, 0) / displayCourses.length)
     : 0
@@ -150,16 +157,32 @@ export default function DashboardPage() {
       ) : null}
 
       <section className="mt-8">
-        <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
           <div>
             <h2 className="text-xl font-semibold tracking-[-0.03em] text-white">个性化课程工作台</h2>
             <p className="mt-1 text-sm text-white/42">
               选择一个课程，进入你的专属复习空间。进度、资料与待练任务会持续沉淀。
             </p>
           </div>
-          <div className="hidden items-center gap-2 rounded-full border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-white/46 sm:flex">
-            <Sparkles className="h-3.5 w-3.5 text-[#c8a55a]" />
-            平均掌握度 {averageMastery}%
+          <div className="flex items-center gap-3">
+            {!loading && courses.length > 3 && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 pointer-events-none text-white/30" />
+                <input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="搜索课程…"
+                  className="pl-9 pr-4 py-2 rounded-full text-sm outline-none transition-all w-44"
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#ccc' }}
+                  onFocus={e => { e.currentTarget.style.borderColor = 'rgba(200,165,90,0.5)' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)' }}
+                />
+              </div>
+            )}
+            <div className="hidden items-center gap-2 rounded-full border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-white/46 sm:flex">
+              <Sparkles className="h-3.5 w-3.5 text-[#c8a55a]" />
+              平均掌握度 {averageMastery}%
+            </div>
           </div>
         </div>
 
@@ -172,8 +195,17 @@ export default function DashboardPage() {
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-white/8 bg-black/16">
               <BookOpen className="h-7 w-7 text-white/28" />
             </div>
-            <p className="mt-5 text-base font-medium text-white/68">暂无课程</p>
-            <p className="mt-2 text-sm text-white/38">课程由管理员统一管理，请联系管理员添加。</p>
+            {search.trim() ? (
+              <>
+                <p className="mt-5 text-base font-medium text-white/68">未找到匹配的课程</p>
+                <button onClick={() => setSearch('')} className="mt-3 text-sm text-[#c8a55a]/70 hover:text-[#c8a55a]">清除搜索</button>
+              </>
+            ) : (
+              <>
+                <p className="mt-5 text-base font-medium text-white/68">暂无课程</p>
+                <p className="mt-2 text-sm text-white/38">课程由管理员统一管理，请联系管理员添加。</p>
+              </>
+            )}
           </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

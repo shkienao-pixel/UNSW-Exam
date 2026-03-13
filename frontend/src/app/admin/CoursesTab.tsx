@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import {
   Loader2, Trash2, Plus, ChevronRight,
-  AlertTriangle, X, Calendar, Info, CalendarDays,
+  AlertTriangle, X, Calendar, Info, CalendarDays, Search,
 } from 'lucide-react'
 import { useLang } from '@/lib/i18n'
 import {
@@ -349,12 +349,13 @@ function DeleteConfirmModal({
 
 // ── 课程管理 Tab ──────────────────────────────────────────────────────────────
 
-export function CoursesTab({ secret }: { secret: string }) {
+export function CoursesTab({ secret, onCoursesChanged }: { secret: string; onCoursesChanged?: () => void }) {
   const { lang } = useLang()
   const tt = (zh: string, en: string) => tx(lang, zh, en)
   const locale = localeByLang(lang)
   const [courses, setCourses] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
   const [code, setCode] = useState('')
   const [name, setName] = useState('')
   const [examInput, setExamInput] = useState('')
@@ -386,6 +387,7 @@ export function CoursesTab({ secret }: { secret: string }) {
       })
       setCode(''); setName(''); setExamInput('')
       await load()
+      onCoursesChanged?.()
     } catch (e: unknown) { setError(String(e)) }
     finally { setCreating(false) }
   }
@@ -397,7 +399,7 @@ export function CoursesTab({ secret }: { secret: string }) {
           course={selectedCourse}
           secret={secret}
           onClose={() => setSelectedCourse(null)}
-          onDeleted={() => { setSelectedCourse(null); load() }}
+          onDeleted={() => { setSelectedCourse(null); load(); onCoursesChanged?.() }}
           onUpdated={(updated) => {
             setSelectedCourse(updated)
             setCourses(prev => prev.map(c => c.id === updated.id ? updated : c))
@@ -426,9 +428,28 @@ export function CoursesTab({ secret }: { secret: string }) {
           </ActionBtn>
         </div>
       </div>
+      {/* 搜索框 */}
+      {!loading && courses.length > 0 && (
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'rgba(255,255,255,0.3)' }} />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder={tt('搜索课程代码或名称…', 'Search by code or name…')}
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm outline-none transition-all"
+            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', color: '#ccc' }}
+            onFocus={e => { e.currentTarget.style.borderColor = 'rgba(255,215,0,0.4)' }}
+            onBlur={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)' }}
+          />
+        </div>
+      )}
       {loading ? <Spinner /> : (
         <div className="space-y-2">
-          {courses.map(c => (
+          {courses.filter(c => {
+            if (!search.trim()) return true
+            const q = search.toLowerCase()
+            return c.code.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)
+          }).map(c => (
             <button
               key={c.id}
               className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all duration-200 text-left"
@@ -464,6 +485,11 @@ export function CoursesTab({ secret }: { secret: string }) {
             </button>
           ))}
           {courses.length === 0 && <Empty text={tt('暂无课程', 'No courses yet')} />}
+          {courses.length > 0 && courses.filter(c => {
+            if (!search.trim()) return true
+            const q = search.toLowerCase()
+            return c.code.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)
+          }).length === 0 && <Empty text={tt(`未找到匹配「${search}」的课程`, `No courses match "${search}"`)} />}
         </div>
       )}
     </div>

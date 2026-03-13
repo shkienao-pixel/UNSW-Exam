@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { Loader2, CheckCircle, X, SlidersHorizontal, RefreshCw, Wifi, Trash2, MailCheck } from 'lucide-react'
+import { Loader2, CheckCircle, X, SlidersHorizontal, RefreshCw, Wifi, Trash2, MailCheck, Search } from 'lucide-react'
 import { useLang } from '@/lib/i18n'
 import {
   User, tx, localeByLang, adminReq,
@@ -195,6 +195,8 @@ export function UsersTab({ secret }: { secret: string }) {
   const [credits, setCredits] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [verifiedFilter, setVerifiedFilter] = useState<'all' | 'verified' | 'unverified'>('all')
   const [adjustTarget, setAdjustTarget] = useState<User | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -290,7 +292,14 @@ function handleAdjustSuccess(userId: string, newBalance: number) {
     )
   }
 
-  const userWithCredits = users.map(u => ({ ...u, credits: credits[u.id] ?? 0 }))
+  const userWithCredits = users
+    .map(u => ({ ...u, credits: credits[u.id] ?? 0 }))
+    .filter(u => {
+      if (search.trim() && !u.email.toLowerCase().includes(search.toLowerCase())) return false
+      if (verifiedFilter === 'verified' && !u.email_confirmed) return false
+      if (verifiedFilter === 'unverified' && u.email_confirmed) return false
+      return true
+    })
 
   return (
     <div className="space-y-4 fade-in-up">
@@ -372,6 +381,33 @@ function handleAdjustSuccess(userId: string, newBalance: number) {
         />
       )}
       {error && <ErrorBox msg={error} />}
+      {!loading && users.length > 0 && (
+        <div className="flex gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-48">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'rgba(255,255,255,0.3)' }} />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder={tt('搜索邮箱…', 'Search email…')}
+              className="w-full pl-8 pr-3 py-2 rounded-xl text-sm outline-none transition-all"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', color: '#ccc' }}
+              onFocus={e => { e.currentTarget.style.borderColor = 'rgba(255,215,0,0.4)' }}
+              onBlur={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)' }}
+            />
+          </div>
+          {(['all', 'verified', 'unverified'] as const).map(f => (
+            <button key={f} onClick={() => setVerifiedFilter(f)}
+              className="px-3 py-2 rounded-xl text-xs font-medium transition-all"
+              style={{
+                background: verifiedFilter === f ? 'rgba(255,215,0,0.1)' : 'rgba(255,255,255,0.04)',
+                color: verifiedFilter === f ? '#FFD700' : '#555',
+                border: verifiedFilter === f ? '1px solid rgba(255,215,0,0.3)' : '1px solid rgba(255,255,255,0.08)',
+              }}>
+              {f === 'all' ? tt('全部', 'All') : f === 'verified' ? tt('已验证', 'Verified') : tt('未验证', 'Unverified')}
+            </button>
+          ))}
+        </div>
+      )}
       {loading ? <Spinner /> : (
         <>
           <div className="space-y-2">
@@ -474,8 +510,11 @@ function handleAdjustSuccess(userId: string, newBalance: number) {
               </div>
             ))}
             {users.length === 0 && <Empty text={tt('暂无用户', 'No users yet')} />}
+            {users.length > 0 && userWithCredits.length === 0 && <Empty text={tt('未找到匹配的用户', 'No users match the filter')} />}
           </div>
-          <p className="text-xs" style={{ color: '#444' }}>{tt('共', 'Total')} {users.length} {tt('个用户', 'users')}</p>
+          <p className="text-xs" style={{ color: '#444' }}>
+            {tt('显示', 'Showing')} {userWithCredits.length} / {users.length} {tt('个用户', 'users')}
+          </p>
         </>
       )}
     </div>

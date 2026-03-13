@@ -187,7 +187,7 @@ def _chat(system: str, user: str, key: str) -> str:
     # Issue 1 fix: 120s timeout prevents worker disconnects on slow LLM calls
     client = OpenAI(api_key=key, timeout=120.0)
     resp = client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-5.4",
         messages=[
             {"role": "system", "content": system},
             {"role": "user",   "content": user},

@@ -177,7 +177,7 @@ def _chat(
     key = openai_key or get_settings().openai_api_key
     client = OpenAI(api_key=key, timeout=120.0)
     resp = client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-5.4",
         messages=[
             {"role": "system", "content": system},
             {"role": "user",   "content": user},
@@ -239,7 +239,7 @@ def run_summary(db: Client, user_id: str, course_id: str, body) -> dict:
 
     return create_output(
         db, user_id, course_id, "summary", content,
-        scope_set_id=body.scope_set_id, model_used="gpt-4o",
+        scope_set_id=body.scope_set_id, model_used="gpt-5.4",
     )
 
 
@@ -333,7 +333,7 @@ Format:
     content = json.dumps({"questions": questions, "sources": sources}, ensure_ascii=False)
     return create_output(
         db, user_id, course_id, "quiz", content,
-        scope_set_id=body.scope_set_id, model_used="gpt-4o",
+        scope_set_id=body.scope_set_id, model_used="gpt-5.4",
     )
 
 
@@ -371,7 +371,7 @@ def run_outline(db: Client, user_id: str, course_id: str, body) -> dict:
 
     return create_output(
         db, user_id, course_id, "outline", content,
-        scope_set_id=body.scope_set_id, model_used="gpt-4o",
+        scope_set_id=body.scope_set_id, model_used="gpt-5.4",
     )
 
 
@@ -442,5 +442,5 @@ def run_flashcards(db: Client, user_id: str, course_id: str, body) -> dict:
 
     return create_output(
         db, user_id, course_id, "flashcards", content,
-        scope_set_id=body.scope_set_id, model_used="gpt-4o",
+        scope_set_id=body.scope_set_id, model_used="gpt-5.4",
     )
