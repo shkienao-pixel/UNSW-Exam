@@ -76,6 +76,15 @@ function CoursePageInner() {
     return <AskTab courseId={courseId} scopeSets={scopeSets} artifacts={artifacts} />
   }
 
+  // 知识摘要视图：管理员上传的结构化课程摘要
+  if (view === 'course-summary') {
+    return (
+      <div className="mx-auto w-full max-w-[1180px] flex-1 overflow-y-auto px-5 py-8 sm:px-6 lg:py-10">
+        <SummaryTab courseId={courseId} />
+      </div>
+    )
+  }
+
   // 摘要→知识图谱视图：flex 布局，高度撑满（内部分栏+滚动）
   if (view === 'summary') {
     return (

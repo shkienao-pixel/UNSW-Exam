@@ -13,6 +13,7 @@ const dict = {
   flashcards:     { zh: '闪卡',      en: 'Flashcards'    },
   quiz:           { zh: '模拟题',    en: 'Quiz'          },
   summary:        { zh: '摘要',      en: 'Summary'       },
+  knowledge_summary: { zh: '知识摘要', en: 'Knowledge' },
   outline:        { zh: '大纲',      en: 'Outline'       },
   ask:            { zh: 'AI 问答',   en: 'AI Q&A'        },
   generate:       { zh: 'AI 生成',   en: 'AI Generate'   },
