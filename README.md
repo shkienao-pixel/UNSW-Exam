@@ -48,6 +48,29 @@
 
 ## Changelog
 
+### v1.1.0 (2026-03-14)
+
+**Term Enrollment System:**
+- **My Courses dashboard** — Dashboard redesigned into two sections: "My Courses (T1)" (enrolled) and "More Courses" (available to enroll); shows term, enrolled count, and remaining slots
+- **Term-scoped enrollment** — Students spend 100 credits to enroll in a course per term (T1/T2/T3); max 4 courses per term; enrollment expires when the term changes
+- **Course access guard** — Visiting an unenrolled course shows a lock screen with one-click enroll; enrollment deducts credits and unlocks immediately
+- **Enrollment API** — `GET /enrollments/status`, `POST /enrollments`, `GET /enrollments/check/{course_id}`; term config (`CURRENT_TERM`, `CURRENT_YEAR`) in `.env`
+
+**14-Day Exam Planner:**
+- **Admin blueprint management** — Admin pastes a JSON blueprint (`knowledge_points[]` + `papers[]`) per course via the new "考试计划" tab in the admin panel
+- **Dynamic daily plan** — System distributes remaining (not-done) KPs and papers evenly across remaining days until `exam_date`; plan regenerates on each load
+- **Progress tracking** — Each item has a checkbox; state persisted in `planner_progress` table with optimistic UI updates
+- **Frontend** — New "考试计划" sidebar entry; stats bars, per-day collapsible cards, today auto-expanded, completion trophy badge
+
+**Admin UX improvements:**
+- **Searchable course picker** — CourseContentTab and PlannerBlueprintTab both replaced `<select>` dropdown with a type-to-filter searchable picker (by course name or code)
+
+**DB migrations:**
+- `024_planner.sql` — `planner_blueprints` + `planner_progress` tables
+- `025_enrollments.sql` — `enrollments` table with term/year scoping
+
+---
+
 ### v1.0.0 (2026-03-14)
 
 **Security hardening (full audit pass):**
@@ -704,6 +727,29 @@ Access `/admin` and enter the `X-Admin-Secret` in the UI.
 ---
 
 ## 更新日志
+
+### v1.1.0（2026-03-14）
+
+**学期选课系统：**
+- **Dashboard 改造** — 首页分为"我的课程（T1）"（已选）和"更多课程"（可选）两个区域，顶部显示当前学期、已选数量和剩余名额
+- **学期绑定选课** — 学生花 100 积分选课，每门课仅当前学期（T1/T2/T3）有效，换学期需重新选课，每学期最多 4 门
+- **课程访问拦截** — 访问未选课程时显示锁屏，一键选课后立即解锁
+- **选课 API** — `GET /enrollments/status`、`POST /enrollments`、`GET /enrollments/check/{course_id}`；学期配置（`CURRENT_TERM`、`CURRENT_YEAR`）在 `.env` 中管理
+
+**14 天考试计划：**
+- **管理员蓝图管理** — 管理员在后台"考试计划"Tab 为每门课上传 JSON 蓝图（`knowledge_points[]` + `papers[]`）
+- **动态每日计划** — 系统将未完成的知识点和试卷均分到考试日期前的剩余天数，每次加载实时生成
+- **进度追踪** — 每项任务带勾选框，进度持久化到 `planner_progress` 表，支持乐观更新
+- **前端** — 侧边栏新增"考试计划"入口，统计进度条、每日折叠卡片（今天自动展开）、全部完成显示奖杯徽章
+
+**管理后台 UX 优化：**
+- **课程可搜索选择器** — 课程内容和计划蓝图两个 Tab 的课程选择器由 `<select>` 改为可输入过滤的搜索选择器
+
+**数据库迁移：**
+- `024_planner.sql` — `planner_blueprints` + `planner_progress` 表
+- `025_enrollments.sql` — `enrollments` 表（学期/年份范围）
+
+---
 
 ### v1.0.0（2026-03-14）
 
