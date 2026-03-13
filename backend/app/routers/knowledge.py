@@ -446,9 +446,8 @@ def build_knowledge(
         raise
     except Exception as exc:
         logger.error("Knowledge build failed: %s", exc, exc_info=True)
-        result = _mock_knowledge(body.course_id)
-        _save_knowledge(supabase, current_user["id"], body.course_id, result, body.scope_set_id)
-        return result
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail="知识大纲生成失败，请稍后重试。")
 
 
 @router.get("/knowledge/outline")

@@ -381,7 +381,7 @@ def ask_question_stream(
         yield _sse({"type": "status", "phase": "generating"})
 
         full_answer = ""
-        model_used  = "gpt-4o"
+        model_used  = "gpt-5.4"
 
         try:
             if gemini_key:

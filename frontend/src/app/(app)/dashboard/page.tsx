@@ -259,7 +259,7 @@ export default function DashboardPage() {
 
                   <div className="mt-6 rounded-[20px] border border-white/7 bg-black/18 p-4">
                     <div className="flex items-center justify-between text-xs text-white/44">
-                      <span>考点掌握度</span>
+                      <span>考点掌握度 <span className="text-white/24">(估算)</span></span>
                       <span>{insight.mastery}%</span>
                     </div>
                     <div className="mt-3 h-1.5 rounded-full bg-white/8">

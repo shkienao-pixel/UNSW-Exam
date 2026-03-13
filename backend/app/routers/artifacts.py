@@ -168,9 +168,17 @@ def unlock_artifact(
     # 写入解锁记录
     try:
         supabase.table("user_unlocked_files").insert({"user_id": user_id, "artifact_id": artifact_id}).execute()
-    except Exception:
-        # 并发情况下可能唯一约束冲突，忽略
-        pass
+    except Exception as exc:
+        # 唯一约束冲突说明并发请求已完成解锁 — 退款并返回已解锁
+        err_str = str(exc).lower()
+        if any(k in err_str for k in ("duplicate", "unique", "23505")):
+            logger.warning("Concurrent unlock detected for artifact %s user %s — refunding", artifact_id, user_id)
+            try:
+                credit_service.earn(supabase, user_id, unlock_cost, "refund", str(artifact_id), note="并发解锁退款")
+            except Exception as refund_err:
+                logger.error("Refund after concurrent unlock failed: %s", refund_err)
+            return {"ok": True, "already_unlocked": True, "storage_url": art.get("storage_url")}
+        raise
 
     return {"ok": True, "already_unlocked": False, "storage_url": art.get("storage_url")}
 
