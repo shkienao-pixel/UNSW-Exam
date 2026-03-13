@@ -130,7 +130,10 @@ def get_current_user(
                     "Auth fallback: local JWT decode accepted for user=%s (Supabase unreachable)",
                     user_id,
                 )
-                return {"id": user_id, "email": email, "is_guest": False}
+                from app.core.config import get_settings as _gs
+                _cfg2 = _gs()
+                is_guest_fallback = bool(_cfg2.guest_email and email == _cfg2.guest_email)
+                return {"id": user_id, "email": email, "is_guest": is_guest_fallback}
             except AuthError:
                 raise
             except Exception as local_exc:

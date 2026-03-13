@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import hmac
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 from supabase import Client
 
@@ -51,10 +51,20 @@ class GrantRequest(BaseModel):
     note: str | None = None
 
 
-def _require_admin(x_admin_secret: str = Header(default="")) -> None:
+def _require_admin(
+    request: Request,
+    x_admin_secret: str = Header(default=""),
+) -> None:
+    # 复用 admin.py 里的速率限制器，防止暴力枚举 secret
+    from app.routers.admin import _check_admin_rate_limit, _record_admin_fail
+    import logging as _logging
+    ip = request.client.host if request.client else "unknown"
+    _check_admin_rate_limit(ip)
     if not x_admin_secret or not any(
         hmac.compare_digest(x_admin_secret, s) for s in get_settings().admin_secrets_set
     ):
+        _record_admin_fail(ip)
+        _logging.getLogger(__name__).warning("Admin auth failure (credits) from IP=%s", ip)
         raise HTTPException(status_code=403, detail="Forbidden")
 
 

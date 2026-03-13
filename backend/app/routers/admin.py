@@ -6,12 +6,15 @@ Used by the Next.js admin panel — never exposed to end users.
 
 from __future__ import annotations
 
+import collections
 import hmac
 import logging
+import time
+import threading
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
 from supabase import Client
 
@@ -39,13 +42,63 @@ except Exception:
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# ── Simple in-memory rate limiter for admin auth failures ─────────────────────
+# 每个 IP 在滑动窗口内允许的最大失败次数；超出后锁定一段时间。
+_RATE_WINDOW_SEC = 60        # 滑动窗口长度（秒）
+_RATE_MAX_FAILS  = 10        # 窗口内允许的最大失败次数
+_RATE_LOCKOUT_SEC = 300      # 达到上限后锁定时长（秒）
 
-def _require_admin(x_admin_secret: str = Header(default="")) -> None:
+_fail_times: dict[str, collections.deque] = {}   # ip → deque of fail timestamps
+_lockout_until: dict[str, float] = {}            # ip → lockout expiry timestamp
+_rate_lock = threading.Lock()
+
+
+def _check_admin_rate_limit(ip: str) -> None:
+    """在失败计数超限时抛出 429，防止暴力枚举 admin secret。"""
+    now = time.time()
+    with _rate_lock:
+        # 检查是否仍在锁定期
+        if _lockout_until.get(ip, 0) > now:
+            remaining = int(_lockout_until[ip] - now)
+            raise HTTPException(
+                status_code=429,
+                detail=f"Too many failed admin attempts. Try again in {remaining}s.",
+            )
+        # 清理窗口外的旧记录
+        dq = _fail_times.get(ip)
+        if dq:
+            while dq and dq[0] < now - _RATE_WINDOW_SEC:
+                dq.popleft()
+
+
+def _record_admin_fail(ip: str) -> None:
+    """记录一次失败；失败次数达到上限时触发锁定。"""
+    now = time.time()
+    with _rate_lock:
+        dq = _fail_times.setdefault(ip, collections.deque())
+        dq.append(now)
+        if len(dq) >= _RATE_MAX_FAILS:
+            _lockout_until[ip] = now + _RATE_LOCKOUT_SEC
+            dq.clear()
+            logger.warning(
+                "Admin rate limit exceeded for IP=%s — locked out for %ds",
+                ip, _RATE_LOCKOUT_SEC,
+            )
+
+
+def _require_admin(
+    request: Request,
+    x_admin_secret: str = Header(default=""),
+) -> None:
+    ip = request.client.host if request.client else "unknown"
+    _check_admin_rate_limit(ip)
     cfg = get_settings()
     # hmac.compare_digest: constant-time comparison prevents timing attacks
     if not x_admin_secret or not any(
         hmac.compare_digest(x_admin_secret, s) for s in cfg.admin_secrets_set
     ):
+        _record_admin_fail(ip)
+        logger.warning("Admin auth failure from IP=%s", ip)
         raise HTTPException(status_code=403, detail="Admin access required")
 
 

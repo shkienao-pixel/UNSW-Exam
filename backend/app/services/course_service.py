@@ -207,19 +207,22 @@ def save_artifact(
     if uploaded_by is not None:
         payload["uploaded_by"] = uploaded_by
 
-    # Check for an existing record with the same (course_id, file_hash).
-    # Using upsert would silently overwrite status/user_id/doc_type when a
-    # different user uploads the same file — instead, return the existing row.
-    existing = (
-        supabase.table("artifacts")
-        .select("*")
-        .eq("course_id", course_id)
-        .eq("file_hash", file_hash)
-        .limit(1)
-        .execute()
-    )
-    if existing.data:
-        return existing.data[0]
+    # 只对「同一上传者」去重：同一用户重复上传相同文件时返回现有记录，
+    # 避免产生多余行。不同用户上传相同内容必须各自创建独立记录，
+    # 否则会跨用户泄露审核状态、storage_url 及权限边界。
+    effective_uploader = uploaded_by or user_id
+    if effective_uploader:
+        existing = (
+            supabase.table("artifacts")
+            .select("*")
+            .eq("course_id", course_id)
+            .eq("file_hash", file_hash)
+            .eq("uploaded_by", effective_uploader)
+            .limit(1)
+            .execute()
+        )
+        if existing.data:
+            return existing.data[0]
 
     try:
         resp = supabase.table("artifacts").insert(payload).execute()
@@ -346,7 +349,7 @@ def ensure_default_scope_set(
                 "created_at": now,
                 "updated_at": now,
             },
-            on_conflict="course_id,name",
+            on_conflict="course_id,user_id,name",
         )
         .execute()
     )
