@@ -534,6 +534,132 @@ function HtmlContent({ content, contentRef }: { content: string; contentRef: Rea
 }
 
 /** JSON 内容渲染 */
+// ── Weekly bilingual summary renderer ────────────────────────────────────────
+
+interface WeeklyModule {
+  module: string
+  title_zh: string
+  title_en: string
+  key_points_zh: string[]
+  key_points_en: string[]
+}
+
+interface RevisionFocus {
+  must_know_zh?: string[]
+  must_know_en?: string[]
+  common_mistakes_zh?: string[]
+  common_mistakes_en?: string[]
+}
+
+interface WeekData {
+  week: number
+  week_overview: { title_zh: string; title_en: string; summary_zh?: string; summary_en?: string }
+  knowledge_modules: WeeklyModule[]
+  revision_focus?: RevisionFocus
+}
+
+function WeeklyBilingualContent({ weeks }: { weeks: WeekData[] }) {
+  const [lang, setLang] = useState<'zh' | 'en'>('zh')
+  const [openWeeks, setOpenWeeks] = useState<Set<number>>(new Set([weeks[0]?.week]))
+
+  function toggle(w: number) {
+    setOpenWeeks(prev => {
+      const next = new Set(prev)
+      next.has(w) ? next.delete(w) : next.add(w)
+      return next
+    })
+  }
+
+  return (
+    <div className="flex-1 min-w-0 space-y-3">
+      {/* Language toggle */}
+      <div className="flex items-center gap-2 mb-2">
+        <button onClick={() => setLang('zh')}
+          className="px-3 py-1 rounded text-xs font-medium"
+          style={{ background: lang === 'zh' ? 'rgba(255,215,0,0.15)' : 'transparent', color: lang === 'zh' ? '#FFD700' : '#666', border: `1px solid ${lang === 'zh' ? 'rgba(255,215,0,0.3)' : 'rgba(255,255,255,0.08)'}` }}>
+          中文
+        </button>
+        <button onClick={() => setLang('en')}
+          className="px-3 py-1 rounded text-xs font-medium"
+          style={{ background: lang === 'en' ? 'rgba(255,215,0,0.15)' : 'transparent', color: lang === 'en' ? '#FFD700' : '#666', border: `1px solid ${lang === 'en' ? 'rgba(255,215,0,0.3)' : 'rgba(255,255,255,0.08)'}` }}>
+          English
+        </button>
+      </div>
+
+      {weeks.map(week => {
+        const open = openWeeks.has(week.week)
+        const title = lang === 'zh' ? week.week_overview.title_zh : week.week_overview.title_en
+        const summary = lang === 'zh' ? week.week_overview.summary_zh : week.week_overview.summary_en
+        return (
+          <div key={week.week} className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,215,0,0.12)' }}>
+            {/* Week header */}
+            <button onClick={() => toggle(week.week)} className="w-full text-left px-5 py-3 flex items-center gap-3"
+              style={{ background: open ? 'rgba(255,215,0,0.06)' : 'rgba(0,0,0,0.2)' }}>
+              <span className="text-xs font-mono px-2 py-0.5 rounded" style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700' }}>
+                W{week.week}
+              </span>
+              <span className="font-semibold text-sm flex-1 text-white">{title}</span>
+              <span style={{ color: '#555', fontSize: 18 }}>{open ? '−' : '+'}</span>
+            </button>
+
+            {open && (
+              <div className="px-5 pb-5 space-y-4" style={{ background: 'rgba(0,0,0,0.15)' }}>
+                {/* Week summary */}
+                {summary && (
+                  <p className="text-sm leading-relaxed mt-3" style={{ color: '#AAA' }}>{summary}</p>
+                )}
+
+                {/* Knowledge modules */}
+                {week.knowledge_modules.map((mod, mi) => (
+                  <div key={mi} className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <p className="text-sm font-semibold mb-2" style={{ color: '#63B3ED' }}>
+                      {lang === 'zh' ? mod.title_zh : mod.title_en}
+                    </p>
+                    <ul className="space-y-1">
+                      {(lang === 'zh' ? mod.key_points_zh : mod.key_points_en).map((pt, pi) => (
+                        <li key={pi} className="text-xs flex items-start gap-2" style={{ color: '#CCC' }}>
+                          <span style={{ color: '#FFD700', marginTop: 2 }}>•</span>
+                          <span className="leading-relaxed">{pt}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+
+                {/* Revision focus */}
+                {week.revision_focus && (
+                  <div className="rounded-lg p-3 space-y-2" style={{ background: 'rgba(255,107,107,0.06)', border: '1px solid rgba(255,107,107,0.15)' }}>
+                    <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#FF6B6B' }}>
+                      {lang === 'zh' ? '备考重点' : 'Revision Focus'}
+                    </p>
+                    {(lang === 'zh' ? week.revision_focus.must_know_zh : week.revision_focus.must_know_en)?.map((pt, pi) => (
+                      <p key={pi} className="text-xs flex items-start gap-2" style={{ color: '#CCC' }}>
+                        <span style={{ color: '#FF6B6B' }}>✓</span>{pt}
+                      </p>
+                    ))}
+                    {(lang === 'zh' ? week.revision_focus.common_mistakes_zh : week.revision_focus.common_mistakes_en)?.length ? (
+                      <>
+                        <p className="text-xs font-semibold mt-2" style={{ color: '#FFD700' }}>
+                          {lang === 'zh' ? '常见误区' : 'Common Mistakes'}
+                        </p>
+                        {(lang === 'zh' ? week.revision_focus.common_mistakes_zh : week.revision_focus.common_mistakes_en)!.map((pt, pi) => (
+                          <p key={pi} className="text-xs flex items-start gap-2" style={{ color: '#CCC' }}>
+                            <span style={{ color: '#FFD700' }}>✗</span>{pt}
+                          </p>
+                        ))}
+                      </>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function JsonContent({ content }: { content: string }) {
   let parsed: unknown
   try { parsed = JSON.parse(content) } catch { parsed = null }
@@ -541,6 +667,12 @@ function JsonContent({ content }: { content: string }) {
   // 尝试渲染已知结构
   if (parsed && typeof parsed === 'object') {
     const obj = parsed as Record<string, unknown>
+
+    // weekly_structured_summary_bilingual
+    if (Array.isArray(obj.weeks)) {
+      return <WeeklyBilingualContent weeks={obj.weeks as WeekData[]} />
+    }
+
     // { sections: [{title, content}] }
     if (Array.isArray(obj.sections)) {
       return (
