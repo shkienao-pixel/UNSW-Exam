@@ -191,30 +191,34 @@ def update_feedback_status(
 
     When status is set to 'adopted', the submitter earns +1 credit.
     """
-    (
+    # 先读旧状态，幂等：只有首次 → adopted 才奖励积分
+    old_rows = (
         supabase.table("user_feedback")
-        .update({"status": body.status})
+        .select("*")
         .eq("id", feedback_id)
         .execute()
-    )
+    ).data or []
+    if not old_rows:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+    old_status = old_rows[0].get("status")
+
+    supabase.table("user_feedback").update({"status": body.status}).eq("id", feedback_id).execute()
     rows = (
         supabase.table("user_feedback")
         .select("*")
         .eq("id", feedback_id)
         .execute()
     ).data or []
-    if not rows:
-        raise HTTPException(status_code=404, detail="Feedback not found")
 
-    # 反馈被采纳 → 奖励提交者 +1 积分
-    if body.status == "adopted":
-        submitter_id = rows[0].get("user_id")
+    # 只有状态首次变为 adopted 才奖励
+    if body.status == "adopted" and old_status != "adopted":
+        submitter_id = old_rows[0].get("user_id")
         if submitter_id:
             try:
                 from app.services import credit_service
                 credit_service.earn(supabase, submitter_id, 1, "feedback_adopted",
                                     ref_id=feedback_id, note="反馈被采纳")
             except Exception:
-                pass  # 积分奖励失败不影响状态更新
+                pass
 
     return {"ok": True, **rows[0]}

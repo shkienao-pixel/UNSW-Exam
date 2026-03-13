@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     # Same value as SUPABASE_JWT_SECRET in your Supabase project settings
     jwt_secret: str = ""
 
+    # Guest account (server-side only — must NOT be NEXT_PUBLIC_*)
+    guest_email: str = ""
+    guest_password: str = ""
+
     # App
     app_env: str = "development"
     cors_origins: str = "http://localhost:3000,http://localhost:8501"

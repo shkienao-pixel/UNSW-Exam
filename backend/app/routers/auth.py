@@ -11,8 +11,10 @@ from supabase import Client
 
 import httpx
 
+from fastapi.security import HTTPAuthorizationCredentials
+
 from app.core.config import get_settings
-from app.core.dependencies import get_current_user, get_db
+from app.core.dependencies import get_current_user, get_db, _bearer
 from app.core.exceptions import AuthError
 from app.models.auth import (
     LoginRequest,
@@ -198,6 +200,26 @@ def resend_signup_otp(
     return ResendOtpResponse(ok=True)
 
 
+@router.post("/guest-token", response_model=TokenResponse)
+def guest_token(supabase: Client = Depends(get_db)) -> TokenResponse:
+    """返回游客账号的 JWT，无需传入凭证（凭证仅在服务端保存）。
+
+    前端应调此接口而非把 NEXT_PUBLIC_GUEST_* 暴露在客户端包里。
+    """
+    cfg = get_settings()
+    if not cfg.guest_email or not cfg.guest_password:
+        raise AuthError("Guest login is not configured on this server.")
+    try:
+        resp = supabase.auth.sign_in_with_password(
+            {"email": cfg.guest_email, "password": cfg.guest_password}
+        )
+    except Exception as exc:
+        raise AuthError("Guest login failed.") from exc
+    if resp.session is None:
+        raise AuthError("Guest login failed.")
+    return _build_token_response(resp.session)
+
+
 @router.post("/login", response_model=TokenResponse)
 def login(body: LoginRequest, supabase: Client = Depends(get_db)) -> TokenResponse:
     """Authenticate with email + password and return JWT tokens."""
@@ -295,14 +317,27 @@ def reset_password(body: ResetPasswordRequest) -> MessageResponse:
 
 @router.post("/logout", status_code=204, response_class=Response)
 def logout(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     current_user: dict[str, Any] = Depends(get_current_user),
-    supabase: Client = Depends(get_db),
 ) -> Response:
-    """Invalidate current session (best effort)."""
-    try:
-        supabase.auth.sign_out()
-    except Exception:
-        pass
+    """Invalidate current session via Supabase /auth/v1/logout (scope=global).
+
+    Uses the user's own Bearer token so Supabase can revoke the exact session,
+    rather than calling sign_out() on the shared service-role client (which was a no-op).
+    """
+    if credentials:
+        cfg = get_settings()
+        try:
+            httpx.post(
+                f"{cfg.supabase_url}/auth/v1/logout?scope=global",
+                headers={
+                    "apikey": cfg.supabase_anon_key,
+                    "Authorization": f"Bearer {credentials.credentials}",
+                },
+                timeout=5.0,
+            )
+        except Exception:
+            pass  # best-effort — client-side token clear proceeds regardless
     return Response(status_code=204)
 
 

@@ -140,6 +140,8 @@ export const api = {
       req<{ message: string }>('/auth/reset-password', { method: 'POST', body: JSON.stringify({ access_token, new_password }) }, false),
     login: (email: string, password: string) =>
       req<TokenResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }, false),
+    guestToken: () =>
+      req<TokenResponse>('/auth/guest-token', { method: 'POST' }, false),
     refresh: (refresh_token: string) =>
       req<TokenResponse>('/auth/refresh', { method: 'POST', body: JSON.stringify({ refresh_token }) }, false),
     logout: () =>

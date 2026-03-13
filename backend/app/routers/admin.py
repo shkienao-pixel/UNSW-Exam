@@ -95,16 +95,20 @@ def approve_artifact(
     supabase: Client = Depends(get_db),
 ) -> dict[str, Any]:
     """Approve a user-uploaded file — triggers background RAG indexing."""
+    # 读取旧状态，幂等：只有首次 pending→approved 才奖励积分
+    old_rows = supabase.table("artifacts").select("status, user_id").eq("id", artifact_id).execute().data or []
+    old_status = old_rows[0]["status"] if old_rows else None
+
     art = update_artifact_status(supabase, artifact_id, status="approved")
     background_tasks.add_task(_bg_process, supabase, art)
-    # 给上传者奖励 +1 积分（admin 上传的 user_id 为 None，跳过）
+
     uploader_id = art.get("user_id")
-    if uploader_id:
+    if uploader_id and old_status != "approved":
         try:
             credit_service.earn(supabase, uploader_id, 1, "artifact_approved",
                                 ref_id=str(artifact_id), note="文件审核通过")
         except Exception:
-            pass  # 积分奖励失败不影响审核流程
+            pass
     return art
 
 

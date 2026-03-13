@@ -66,9 +66,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const guestLogin = useCallback(async () => {
-    const email = process.env.NEXT_PUBLIC_GUEST_EMAIL!
-    const password = process.env.NEXT_PUBLIC_GUEST_PASSWORD!
-    const resp = await api.auth.login(email, password)
+    // 凭证保存在后端服务端，前端只调接口拿 token，不再需要 NEXT_PUBLIC_GUEST_*
+    const resp = await api.auth.guestToken()
     localStorage.setItem('access_token', resp.access_token)
     localStorage.setItem('refresh_token', resp.refresh_token)
     localStorage.setItem('user_role', 'guest')
