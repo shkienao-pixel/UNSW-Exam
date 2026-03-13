@@ -197,6 +197,8 @@ def ask_question(
         art_ids = ids if ids else None
     elif body.context_mode == "revision":
         revision_ids = get_artifact_ids_by_doc_type(supabase, course_id, ["revision"])
+        if not revision_ids:
+            logger.info("context_mode=revision but no revision files found for course %s, falling back to all content", course_id)
         art_ids = revision_ids if revision_ids else None
 
     from app.services.llm_key_service import get_api_key
@@ -314,6 +316,8 @@ def ask_question_stream(
         art_ids = ids if ids else None
     elif body.context_mode == "revision":
         revision_ids = get_artifact_ids_by_doc_type(supabase, course_id, ["revision"])
+        if not revision_ids:
+            logger.info("stream context_mode=revision but no revision files found for course %s, falling back to all content", course_id)
         art_ids = revision_ids if revision_ids else None
 
     from app.services.llm_key_service import get_api_key
@@ -347,6 +351,17 @@ def ask_question_stream(
         return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
     def event_stream():
+        # 先扣积分，失败直接返回错误（不能在已发送 SSE 数据后再返回 402）
+        cost = COSTS.get("gen_ask", 3)
+        try:
+            spend(supabase, current_user["id"], cost, "gen_ask")
+        except InsufficientCreditsError as e:
+            yield _sse({"type": "error", "message": str(e), "code": "INSUFFICIENT_CREDITS"})
+            return
+        except Exception as e:
+            yield _sse({"type": "error", "message": str(e)})
+            return
+
         # Stage 1: GPT filter
         yield _sse({"type": "status", "phase": "filtering"})
 
@@ -357,6 +372,11 @@ def ask_question_stream(
                 supabase, current_user["id"], course_id, art_ids, max_chars=60_000
             )
             if not ctx.strip():
+                # 无内容 → 退款
+                try:
+                    earn(supabase, current_user["id"], cost, "refund", note="gen_ask 退款 - 无课程资料")
+                except Exception:
+                    pass
                 yield _sse({
                     "type": "done",
                     "answer": "No course material is available yet. Please wait for file approval/indexing.",
@@ -366,17 +386,6 @@ def ask_question_stream(
                 })
                 return
             filtered_context = ctx
-
-        # 扣积分
-        cost = COSTS.get("gen_ask", 3)
-        try:
-            spend(supabase, current_user["id"], cost, "gen_ask")
-        except InsufficientCreditsError as e:
-            yield _sse({"type": "error", "message": str(e), "code": "INSUFFICIENT_CREDITS"})
-            return
-        except Exception as e:
-            yield _sse({"type": "error", "message": str(e)})
-            return
 
         yield _sse({"type": "status", "phase": "generating"})
 

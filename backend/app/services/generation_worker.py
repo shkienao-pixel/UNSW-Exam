@@ -61,19 +61,38 @@ async def _run_job(db: Client, job: dict[str, Any], worker_id: str) -> None:
         body = _payload_to_body(payload if isinstance(payload, dict) else {})
 
         # 在实际生成时才扣积分（不是入队时）
+        # 先检查是否已扣（job 被 reclaim 重试时避免二次扣费）
         if credit_type:
             cost = credit_service.COSTS.get(credit_type, 1)
+            already_charged = False
             try:
-                await asyncio.to_thread(
-                    credit_service.spend, db, user_id, cost, credit_type, job_id
+                txn_check = await asyncio.to_thread(
+                    lambda: db.table("credit_transactions")
+                               .select("id")
+                               .eq("ref_id", job_id)
+                               .eq("type", credit_type)
+                               .limit(1)
+                               .execute()
                 )
+                already_charged = bool(txn_check.data)
+            except Exception as chk_err:
+                logger.warning("credit pre-check failed job=%s: %s", job_id, chk_err)
+
+            if already_charged:
                 credit_spent = True
-            except InsufficientCreditsError as e:
-                await asyncio.to_thread(
-                    job_service.fail_job, db, job_id,
-                    f"积分不足：当前 {e.balance} 积分，需要 {e.required} 积分"
-                )
-                return
+                logger.info("job %s: credits already charged (reclaim retry), skipping spend", job_id)
+            else:
+                try:
+                    await asyncio.to_thread(
+                        credit_service.spend, db, user_id, cost, credit_type, job_id
+                    )
+                    credit_spent = True
+                except InsufficientCreditsError as e:
+                    await asyncio.to_thread(
+                        job_service.fail_job, db, job_id,
+                        f"积分不足：当前 {e.balance} 积分，需要 {e.required} 积分"
+                    )
+                    return
 
         output = await asyncio.to_thread(_GEN_FN[job_type], db, user_id, course_id, body)
         await asyncio.to_thread(job_service.finish_job, db, job_id, output["id"])

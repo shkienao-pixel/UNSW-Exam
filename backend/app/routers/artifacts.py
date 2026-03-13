@@ -224,15 +224,38 @@ def unlock_all_artifacts(
         note=f"一键深度解析课程 {course_id[:8]} 共 {len(to_unlock)} 份文件",
     )
 
+    actually_unlocked = 0
     for a in to_unlock:
         try:
             supabase.table("user_unlocked_files").insert(
                 {"user_id": user_id, "artifact_id": a["id"]}
             ).execute()
-        except Exception:
-            pass  # 唯一约束冲突忽略
+            actually_unlocked += 1
+        except Exception as exc:
+            err_str = str(exc).lower()
+            if not any(k in err_str for k in ("duplicate", "unique", "23505")):
+                raise  # 非唯一约束冲突，向上抛出
+            # 唯一约束 = 并发已解锁，记录冲突
 
-    return {"ok": True, "locked_count": locked_total, "unlocked_count": len(to_unlock), "credits_spent": cost}
+    # 退款因并发导致的多扣积分
+    concurrent_conflicts = len(to_unlock) - actually_unlocked
+    if concurrent_conflicts > 0:
+        refund_amount = concurrent_conflicts * unlock_cost
+        try:
+            credit_service.earn(
+                supabase, user_id, refund_amount, "refund",
+                note=f"并发解锁退款 {concurrent_conflicts} 份文件",
+            )
+            logger.warning("unlock_all: %s concurrent conflicts, refunded %s credits", concurrent_conflicts, refund_amount)
+        except Exception as refund_err:
+            logger.error("unlock_all refund failed: %s", refund_err)
+
+    return {
+        "ok": True,
+        "locked_count": locked_total,
+        "unlocked_count": actually_unlocked,
+        "credits_spent": actually_unlocked * unlock_cost,
+    }
 
 
 @router.patch("/{course_id}/artifacts/{artifact_id}/doc-type", response_model=ArtifactOut)
