@@ -229,6 +229,27 @@ def remove_artifact(
     delete_artifact(supabase, user_id, course_id, artifact_id)
 
 
+def get_all_accessible_artifact_ids(
+    supabase: Client,
+    user_id: str,
+    course_id: str,
+) -> list[int]:
+    """返回该课程内当前用户可访问的全部 artifact id（自己上传 + 已解锁）。
+
+    用于 ask/generate context_mode=all 时限制 RAG 搜索范围。
+    """
+    rows = (
+        supabase.table("artifacts")
+        .select("id, user_id")
+        .eq("course_id", course_id)
+        .eq("status", "approved")
+        .execute()
+        .data
+    ) or []
+    all_ids = [r["id"] for r in rows]
+    return filter_accessible_artifact_ids(supabase, user_id, all_ids)
+
+
 def filter_accessible_artifact_ids(
     supabase: Client,
     user_id: str,

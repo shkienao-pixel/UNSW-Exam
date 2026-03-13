@@ -58,11 +58,13 @@ def _resolve_artifact_ids(
     if priority_doc_types:
         ids = get_artifact_ids_by_doc_type(supabase, course_id, priority_doc_types)
         if ids:
-            return ids
+            accessible = filter_accessible_artifact_ids(supabase, user_id, ids)
+            return accessible if accessible else None
         if fallback_doc_types:
             ids = get_artifact_ids_by_doc_type(supabase, course_id, fallback_doc_types)
             if ids:
-                return ids
+                accessible = filter_accessible_artifact_ids(supabase, user_id, ids)
+                return accessible if accessible else None
     return None
 
 

@@ -39,6 +39,7 @@ from app.services.course_service import (
     get_course,
     get_scope_set,
 )
+from app.services.artifact_service import filter_accessible_artifact_ids, get_all_accessible_artifact_ids
 from app.services.rag_service import get_artifact_ids_by_doc_type, get_course_chunks_sampled
 from app.services import job_service, generate_service
 from app.services.credit_service import credit_guard
@@ -74,6 +75,12 @@ def _serialize_generate_payload(body: GenerateRequest) -> dict[str, Any]:
         "num_questions": body.num_questions,
         "exclude_topics": body.exclude_topics,
     }
+
+
+def _deny_guest(current_user: dict) -> None:
+    """guest 账号不允许调用生成接口。"""
+    if current_user.get("is_guest"):
+        raise HTTPException(status_code=403, detail="演示账号不支持该功能，请注册正式账号")
 
 
 def _enqueue_generation_job(
@@ -126,6 +133,7 @@ async def gen_summary(
     supabase: Client  = Depends(get_db),
 ) -> dict[str, Any]:
     """Kick off async summary generation. Returns {job_id} immediately."""
+    _deny_guest(current_user)
     get_course(supabase, course_id)
     job_id = _enqueue_generation_job(supabase, current_user["id"], course_id, "summary", body)
     return {"job_id": job_id}
@@ -139,6 +147,7 @@ async def gen_quiz(
     supabase: Client  = Depends(get_db),
 ) -> dict[str, Any]:
     """Kick off async quiz generation. Returns {job_id} immediately."""
+    _deny_guest(current_user)
     get_course(supabase, course_id)
     job_id = _enqueue_generation_job(supabase, current_user["id"], course_id, "quiz", body)
     return {"job_id": job_id}
@@ -152,6 +161,7 @@ async def gen_outline(
     supabase: Client  = Depends(get_db),
 ) -> dict[str, Any]:
     """Kick off async outline generation. Returns {job_id} immediately."""
+    _deny_guest(current_user)
     get_course(supabase, course_id)
     job_id = _enqueue_generation_job(supabase, current_user["id"], course_id, "outline", body)
     return {"job_id": job_id}
@@ -165,6 +175,7 @@ async def gen_flashcards(
     supabase: Client  = Depends(get_db),
 ) -> dict[str, Any]:
     """Kick off async flashcards generation. Returns {job_id} immediately."""
+    _deny_guest(current_user)
     get_course(supabase, course_id)
     job_id = _enqueue_generation_job(supabase, current_user["id"], course_id, "flashcards", body)
     return {"job_id": job_id}
@@ -188,18 +199,24 @@ def ask_question(
                  鈹斺啋 GPT-4o fallback if Gemini key missing or call fails
       Stage 4 鈥?Imagen 3 (optional)          : diagram for complex/abstract topics
     """
+    _deny_guest(current_user)
     get_course(supabase, course_id)
 
+    uid = current_user["id"]
     art_ids: list[int] | None = None
     if body.scope_set_id:
-        scope = get_scope_set(supabase, current_user["id"], body.scope_set_id)
+        scope = get_scope_set(supabase, uid, body.scope_set_id)
         ids = scope.get("artifact_ids") or []
-        art_ids = ids if ids else None
+        art_ids = filter_accessible_artifact_ids(supabase, uid, ids) if ids else None
     elif body.context_mode == "revision":
         revision_ids = get_artifact_ids_by_doc_type(supabase, course_id, ["revision"])
         if not revision_ids:
             logger.info("context_mode=revision but no revision files found for course %s, falling back to all content", course_id)
-        art_ids = revision_ids if revision_ids else None
+        art_ids = filter_accessible_artifact_ids(supabase, uid, revision_ids) if revision_ids else None
+    else:
+        # context_mode=all：限制为当前用户可访问的文件
+        accessible = get_all_accessible_artifact_ids(supabase, uid, course_id)
+        art_ids = accessible if accessible else None
 
     from app.services.llm_key_service import get_api_key
     openai_key: str  = get_api_key("openai", supabase) or get_settings().openai_api_key
@@ -307,18 +324,23 @@ def ask_question_stream(
       {"type": "done",    "answer": "...", "sources": [...], "image_url": null, "model_used": "..."}
       {"type": "error",   "message": "...", "code": "INSUFFICIENT_CREDITS"|null}
     """
+    _deny_guest(current_user)
     get_course(supabase, course_id)
 
+    uid = current_user["id"]
     art_ids: list[int] | None = None
     if body.scope_set_id:
-        scope = get_scope_set(supabase, current_user["id"], body.scope_set_id)
+        scope = get_scope_set(supabase, uid, body.scope_set_id)
         ids = scope.get("artifact_ids") or []
-        art_ids = ids if ids else None
+        art_ids = filter_accessible_artifact_ids(supabase, uid, ids) if ids else None
     elif body.context_mode == "revision":
         revision_ids = get_artifact_ids_by_doc_type(supabase, course_id, ["revision"])
         if not revision_ids:
             logger.info("stream context_mode=revision but no revision files found for course %s, falling back to all content", course_id)
-        art_ids = revision_ids if revision_ids else None
+        art_ids = filter_accessible_artifact_ids(supabase, uid, revision_ids) if revision_ids else None
+    else:
+        accessible = get_all_accessible_artifact_ids(supabase, uid, course_id)
+        art_ids = accessible if accessible else None
 
     from app.services.llm_key_service import get_api_key
     openai_key: str  = get_api_key("openai", supabase) or get_settings().openai_api_key

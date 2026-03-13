@@ -168,6 +168,7 @@ def verify_otp(body: VerifyOtpRequest, supabase: Client = Depends(get_db)) -> To
     metadata = resp.session.user.user_metadata or {}
     invite_id = metadata.get("invite_id")
     if invite_id:
+        invite_ok = False
         try:
             invite_row = (
                 supabase.table("invites")
@@ -176,17 +177,19 @@ def verify_otp(body: VerifyOtpRequest, supabase: Client = Depends(get_db)) -> To
                 .limit(1)
                 .execute()
             )
-            if not invite_row.data:
-                raise AuthError("Invite code no longer valid. Please contact admin.")
-            consumed = _consume_invite(supabase, invite_row.data[0])
-            if not consumed:
-                # 乐观锁失败 = 另一请求已把额度用完
-                raise AuthError("Invite code quota exhausted. Please contact admin for a new code.")
-        except AuthError:
-            raise
+            if invite_row.data:
+                invite_ok = _consume_invite(supabase, invite_row.data[0])
         except Exception as exc:
             logger.error("Failed to consume invite for user %s: %s", user_id, exc)
-            raise AuthError("Registration failed: could not validate invite code.") from exc
+
+        if not invite_ok:
+            # 消费失败（额度超发/无效邀请码）→ 删除刚激活的账号，彻底阻断注册
+            try:
+                supabase.auth.admin.delete_user(str(user_id))
+                logger.warning("Deleted Supabase user %s: invite consume failed", user_id)
+            except Exception as del_exc:
+                logger.error("Failed to cleanup user %s after invite consume failure: %s", user_id, del_exc)
+            raise AuthError("Invite code quota exhausted or invalid. Please contact admin for a new code.")
 
     # Award welcome credits — 幂等：检查是否已发过
     try:

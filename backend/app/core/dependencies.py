@@ -96,9 +96,14 @@ def get_current_user(
         user = getattr(resp, "user", None)
         if user is None:
             raise AuthError("Invalid or expired token")
+        from app.core.config import get_settings as _gs
+        _cfg = _gs()
+        email = str(user.email or "")
+        is_guest = bool(_cfg.guest_email and email == _cfg.guest_email)
         return {
-            "id":    str(user.id),
-            "email": str(user.email or ""),
+            "id":       str(user.id),
+            "email":    email,
+            "is_guest": is_guest,
         }
     except AuthError:
         raise
@@ -125,7 +130,7 @@ def get_current_user(
                     "Auth fallback: local JWT decode accepted for user=%s (Supabase unreachable)",
                     user_id,
                 )
-                return {"id": user_id, "email": email}
+                return {"id": user_id, "email": email, "is_guest": False}
             except AuthError:
                 raise
             except Exception as local_exc:

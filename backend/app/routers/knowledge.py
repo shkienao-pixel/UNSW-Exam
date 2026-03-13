@@ -25,6 +25,7 @@ from supabase import Client
 from app.core.config import get_settings
 from app.core.dependencies import get_current_user, get_db
 from app.core.exceptions import AppError
+from app.services.artifact_service import filter_accessible_artifact_ids
 from app.services.course_service import (
     create_output,
     get_course,
@@ -409,11 +410,11 @@ def build_knowledge(
     doc_type_hint: str | None = None   # for user-facing warning
 
     if body.artifact_ids:
-        # Caller supplied explicit IDs — use them directly
-        artifact_ids = body.artifact_ids
+        artifact_ids = filter_accessible_artifact_ids(supabase, current_user["id"], body.artifact_ids)
     elif body.scope_set_id:
-        scope        = get_scope_set(supabase, current_user["id"], body.scope_set_id)
-        artifact_ids = scope.get("artifact_ids") or None
+        scope = get_scope_set(supabase, current_user["id"], body.scope_set_id)
+        raw_ids = scope.get("artifact_ids") or []
+        artifact_ids = filter_accessible_artifact_ids(supabase, current_user["id"], raw_ids) if raw_ids else None
     else:
         # Data-centric routing: revision STRICT (知识大纲/图谱只用复习资料，无降级)
         revision_ids = get_artifact_ids_by_doc_type(supabase, body.course_id, ["revision"])

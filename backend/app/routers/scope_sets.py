@@ -9,6 +9,7 @@ from supabase import Client
 
 from app.core.dependencies import get_current_user, get_db
 from app.models.course import ScopeSetCreate, ScopeSetItemsUpdate, ScopeSetOut
+from app.services.artifact_service import filter_accessible_artifact_ids
 from app.services.course_service import (
     create_scope_set,
     delete_scope_set,
@@ -112,6 +113,14 @@ def put_scope_set_items(
             raise HTTPException(
                 status_code=422,
                 detail=f"以下 artifact 不属于本课程，无法加入范围集：{sorted(invalid_ids)}",
+            )
+        # 防止把未解锁文件塞进 scope set 再走 ask/knowledge 免费使用
+        accessible_ids = filter_accessible_artifact_ids(supabase, current_user["id"], body.artifact_ids)
+        locked_ids = set(body.artifact_ids) - set(accessible_ids)
+        if locked_ids:
+            raise HTTPException(
+                status_code=422,
+                detail=f"以下文件尚未解锁，无法加入范围集：{sorted(locked_ids)}",
             )
 
     replace_scope_set_items(supabase, scope_set_id, body.artifact_ids)
