@@ -18,6 +18,7 @@ from typing import Optional
 from supabase import Client
 
 from app.core.config import get_settings
+from app.services.artifact_service import filter_accessible_artifact_ids
 from app.services.course_service import (
     create_output,
     get_scope_set,
@@ -44,11 +45,16 @@ def _resolve_artifact_ids(
     fallback_doc_types: list[str] | None = None,
 ) -> list[int] | None:
     if artifact_ids:
-        return artifact_ids
+        # 过滤未解锁的文件，防止绕过付费机制
+        accessible = filter_accessible_artifact_ids(supabase, user_id, artifact_ids)
+        return accessible if accessible else None
     if scope_set_id:
         scope = get_scope_set(supabase, user_id, scope_set_id)
         ids = scope.get("artifact_ids") or []
-        return ids if ids else None
+        if ids:
+            accessible = filter_accessible_artifact_ids(supabase, user_id, ids)
+            return accessible if accessible else None
+        return None
     if priority_doc_types:
         ids = get_artifact_ids_by_doc_type(supabase, course_id, priority_doc_types)
         if ids:

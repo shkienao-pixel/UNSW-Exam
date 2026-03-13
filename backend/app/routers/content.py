@@ -14,7 +14,7 @@ from supabase import Client
 
 from app.core.dependencies import get_current_user, get_db
 from app.core.exceptions import AppError
-from app.services.artifact_service import download_artifact_bytes
+from app.services.artifact_service import download_artifact_bytes, filter_accessible_artifact_ids
 from app.services.course_service import (
     get_course,
     get_scope_set,
@@ -44,11 +44,15 @@ def get_course_content(
     # Resolve which artifacts to use
     if artifact_ids:
         ids = [int(x) for x in artifact_ids.split(",") if x.strip().isdigit()]
+        # 仅保留当前用户可访问的（自己上传 或 已解锁），防止绕过付费机制
+        ids = filter_accessible_artifact_ids(supabase, current_user["id"], ids)
         artifacts = list_artifacts_by_ids(supabase, current_user["id"], course_id, ids)
     elif scope_set_id:
         scope = get_scope_set(supabase, current_user["id"], scope_set_id)
         item_ids = scope.get("artifact_ids") or []
         if item_ids:
+            # scope set 内也可能含未解锁文件，过滤后再取内容
+            item_ids = filter_accessible_artifact_ids(supabase, current_user["id"], item_ids)
             artifacts = list_artifacts_by_ids(supabase, current_user["id"], course_id, item_ids)
         else:
             artifacts = list_artifacts(supabase, current_user["id"], course_id, status="approved")

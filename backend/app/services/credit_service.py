@@ -68,7 +68,23 @@ def earn(
     ref_id: str | None = None,
     note: str | None = None,
 ) -> dict[str, Any]:
-    """增加积分，返回流水记录。"""
+    """增加积分，返回流水记录。
+
+    使用乐观锁（WHERE balance = current）避免并发 lost-update：
+    - 若并发写导致 UPDATE 影响 0 行，重试至多 3 次。
+    - 三次均失败则强制写入（earn 不能丢失）。
+    """
+    for attempt in range(3):
+        current = _ensure_row(db, user_id)
+        new_balance = current + amount
+        result = db.table("user_credits").update(
+            {"balance": new_balance, "updated_at": "now()"}
+        ).eq("user_id", user_id).eq("balance", current).execute()
+        if result.data:
+            return _append_txn(db, user_id, amount, type_, ref_id, note)
+        logger.warning("credit earn optimistic lock miss (attempt %d/3) user=%s", attempt + 1, user_id)
+    # 重试耗尽：强制写入，earn 必须成功
+    logger.error("credit earn: optimistic lock exhausted, forcing write for user=%s", user_id)
     current = _ensure_row(db, user_id)
     new_balance = current + amount
     db.table("user_credits").update(

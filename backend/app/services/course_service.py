@@ -274,11 +274,11 @@ def delete_artifact(
 def list_scope_sets(
     supabase: Client, user_id: str, course_id: str
 ) -> list[dict[str, Any]]:
-    # Courses are shared/admin-managed, so scope sets are visible to all users
     resp = (
         supabase.table("scope_sets")
         .select("id, course_id, name, is_default, created_at, updated_at")
         .eq("course_id", course_id)
+        .eq("user_id", user_id)
         .order("is_default", desc=True)
         .order("created_at")
         .execute()
@@ -296,12 +296,13 @@ def get_scope_set(
         supabase.table("scope_sets")
         .select("id, course_id, name, is_default, created_at, updated_at")
         .eq("id", scope_set_id)
-        .single()
+        .eq("user_id", user_id)
+        .limit(1)
         .execute()
     )
     if not resp.data:
         raise NotFoundError("ScopeSet")
-    row = dict(resp.data)
+    row = dict(resp.data[0])
     row["artifact_ids"] = _get_scope_set_artifact_ids(supabase, scope_set_id)
     return row
 
@@ -319,11 +320,11 @@ def _get_scope_set_artifact_ids(supabase: Client, scope_set_id: int) -> list[int
 def ensure_default_scope_set(
     supabase: Client, user_id: str, course_id: str
 ) -> dict[str, Any]:
-    # Query without user_id filter to find any existing default scope set for this course
     resp = (
         supabase.table("scope_sets")
         .select("*")
         .eq("course_id", course_id)
+        .eq("user_id", user_id)
         .eq("is_default", True)
         .limit(1)
         .execute()

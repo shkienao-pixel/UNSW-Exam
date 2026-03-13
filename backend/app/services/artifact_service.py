@@ -229,6 +229,43 @@ def remove_artifact(
     delete_artifact(supabase, user_id, course_id, artifact_id)
 
 
+def filter_accessible_artifact_ids(
+    supabase: Client,
+    user_id: str,
+    artifact_ids: list[int],
+) -> list[int]:
+    """从给定 artifact_ids 中过滤出当前用户可访问的（自己上传 或 已解锁）。
+
+    用于内容提取和生成接口，防止用户绕过付费解锁直接访问他人资料。
+    """
+    if not artifact_ids:
+        return []
+    # 查出这些 artifact 的上传者
+    rows = (
+        supabase.table("artifacts")
+        .select("id, user_id")
+        .in_("id", artifact_ids)
+        .execute()
+        .data
+    ) or []
+    owned = {r["id"] for r in rows if r["user_id"] == user_id}
+    # 查已解锁
+    try:
+        unlocked_rows = (
+            supabase.table("user_unlocked_files")
+            .select("artifact_id")
+            .eq("user_id", user_id)
+            .in_("artifact_id", artifact_ids)
+            .execute()
+            .data
+        ) or []
+        unlocked = {r["artifact_id"] for r in unlocked_rows}
+    except Exception:
+        unlocked = set()
+    accessible = owned | unlocked
+    return [aid for aid in artifact_ids if aid in accessible]
+
+
 def download_artifact_bytes(supabase: Client, storage_path: str) -> bytes:
     """Download raw bytes from Supabase Storage."""
     cfg = get_settings()
