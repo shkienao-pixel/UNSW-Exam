@@ -59,6 +59,12 @@ class Settings(BaseSettings):
     guest_email: str = ""
     guest_password: str = ""
 
+    # Term enrollment config
+    current_term: str = "T1"     # T1 | T2 | T3
+    current_year: int = 2026
+    enrollment_cost: int = 100   # credits to enroll in one course
+    enrollment_max_per_term: int = 4
+
     # App
     app_env: str = "development"
     cors_origins: str = "http://localhost:3000,http://localhost:8501"

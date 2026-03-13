@@ -384,6 +384,16 @@ export const api = {
       }),
   },
 
+  enrollments: {
+    status: () => req<import('./types').EnrollmentStatus>('/enrollments/status'),
+    list: () => req<{ id: number; course_id: string; term: string; year: number; created_at: string }[]>('/enrollments'),
+    enroll: (course_id: string) => req<{ ok: boolean; enrollment: object; term: string; year: number }>('/enrollments', {
+      method: 'POST',
+      body: JSON.stringify({ course_id }),
+    }),
+    check: (course_id: string) => req<{ enrolled: boolean; term: string; year: number }>(`/enrollments/check/${course_id}`),
+  },
+
   planner: {
     getPlan: (courseId: string) =>
       req<import('./types').PlannerPlan>(`/courses/${courseId}/planner`),

@@ -259,6 +259,20 @@ export interface SummarySchemaV1 {
   likely_exam_questions: string[]
 }
 
+// ── Enrollment ────────────────────────────────────────────────────────────────
+
+export type Term = 'T1' | 'T2' | 'T3'
+
+export interface EnrollmentStatus {
+  current_term: Term
+  current_year: number
+  enrollment_cost: number
+  max_per_term: number
+  enrolled_course_ids: string[]
+  slots_used: number
+  slots_remaining: number
+}
+
 // ── Planner ───────────────────────────────────────────────────────────────────
 
 export interface PlannerKP {

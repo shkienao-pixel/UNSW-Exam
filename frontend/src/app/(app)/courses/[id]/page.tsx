@@ -26,6 +26,7 @@ import ResourceHubTab from '@/components/ResourceHubTab'
 
 import KnowledgeSummaryRenderer from '@/components/KnowledgeSummaryRenderer'
 import ExamPlannerTab from '@/components/ExamPlannerTab'
+import CourseLockedScreen from '@/components/CourseLockedScreen'
 
 // ── View routing ──────────────────────────────────────────────────────────────
 
@@ -39,6 +40,9 @@ function CoursePageInner() {
   const [scopeSets, setScopeSets] = useState<ScopeSet[]>([])
   const [outputs, setOutputs] = useState<Output[]>([])
   const [loading, setLoading] = useState(true)
+  const [isEnrolled, setIsEnrolled] = useState<boolean | null>(null)
+  const [enrollTerm, setEnrollTerm] = useState<string>('T1')
+  const [enrollCost, setEnrollCost] = useState<number>(100)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { t } = useLang()
   const { role, user } = useAuth()
@@ -48,15 +52,22 @@ function CoursePageInner() {
     try {
       const c = await api.courses.get(courseId)
       setCourse(c)
-      // Load artifacts, scope-sets, credits independently — individual failures don't crash page
-      const [arts, scopes, bal] = await Promise.allSettled([
+      // Load artifacts, scope-sets, credits, enrollment independently
+      const [arts, scopes, bal, enrollCheck, enrollStatus] = await Promise.allSettled([
         api.artifacts.list(courseId),
         api.scopeSets.list(courseId),
         api.credits.balance(),
+        api.enrollments.check(courseId),
+        api.enrollments.status(),
       ])
       if (arts.status === 'fulfilled') setArtifacts(arts.value)
       if (scopes.status === 'fulfilled') setScopeSets(scopes.value)
       if (bal.status === 'fulfilled') setCreditBalance(bal.value.balance)
+      if (enrollCheck.status === 'fulfilled') setIsEnrolled(enrollCheck.value.enrolled)
+      if (enrollStatus.status === 'fulfilled') {
+        setEnrollTerm(enrollStatus.value.current_term)
+        setEnrollCost(enrollStatus.value.enrollment_cost)
+      }
     } catch (e) {
       console.warn('[load] failed to load course data:', e)
     } finally {
@@ -72,6 +83,20 @@ function CoursePageInner() {
     </div>
   )
   if (!course) return <div className="p-8 text-red-400">{t('course_404')}</div>
+
+  // 未选课 → 锁屏（guest 跳过，管理员跳过）
+  if (role !== 'guest' && isEnrolled === false) {
+    return (
+      <CourseLockedScreen
+        courseId={courseId}
+        courseName={course.name}
+        courseCode={course.code}
+        term={enrollTerm}
+        cost={enrollCost}
+        onEnrolled={load}
+      />
+    )
+  }
 
   // Ask 视图独占全屏（ChatGPT 风格），其他视图正常滚动
   if (view === 'ask') {

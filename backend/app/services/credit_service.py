@@ -27,6 +27,7 @@ COSTS: dict[str, int] = {
     "gen_ask":         3,
     # 单文件深度解析（解锁 + 考点提取）
     "unlock_upload":   50,
+    "enroll_course":   100,
 }
 
 
