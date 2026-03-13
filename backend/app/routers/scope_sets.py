@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from supabase import Client
 
 from app.core.dependencies import get_current_user, get_db
@@ -92,5 +92,24 @@ def put_scope_set_items(
     get_course(supabase, course_id)
     # Verify ownership BEFORE writing (fixes #6: write-before-check privilege escalation)
     get_scope_set(supabase, current_user["id"], scope_set_id)
+
+    # 防止跨课程 IDOR：验证所有 artifact_id 必须属于该课程
+    if body.artifact_ids:
+        rows = (
+            supabase.table("artifacts")
+            .select("id")
+            .eq("course_id", course_id)
+            .in_("id", body.artifact_ids)
+            .execute()
+            .data
+        ) or []
+        valid_ids = {r["id"] for r in rows}
+        invalid_ids = set(body.artifact_ids) - valid_ids
+        if invalid_ids:
+            raise HTTPException(
+                status_code=422,
+                detail=f"以下 artifact 不属于本课程，无法加入范围集：{sorted(invalid_ids)}",
+            )
+
     replace_scope_set_items(supabase, scope_set_id, body.artifact_ids)
     return get_scope_set(supabase, current_user["id"], scope_set_id)

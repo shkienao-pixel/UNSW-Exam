@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -14,6 +16,7 @@ from app.routers import auth, courses, artifacts, scope_sets, outputs, admin, co
 from app.routers import course_content
 
 settings = get_settings()
+_logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="UNSW Exam Master API",
@@ -47,6 +50,23 @@ app.include_router(feedback.router,   prefix="",         tags=["feedback"])
 app.include_router(credits.router,    prefix="/credits", tags=["credits"])
 app.include_router(credits.admin_router, prefix="/admin", tags=["admin"])
 app.include_router(course_content.router, prefix="/courses", tags=["course-content"])
+
+
+@app.on_event("startup")
+async def _startup_security_check() -> None:
+    """启动时检测危险安全配置，将问题记录为 ERROR 级日志。"""
+    cfg = get_settings()
+    if cfg.admin_secret == "change-me-in-production":
+        _logger.error(
+            "SECURITY: ADMIN_SECRET is using the default value 'change-me-in-production'. "
+            "All admin endpoints are publicly accessible! Set ADMIN_SECRET in your .env file immediately."
+        )
+    if not cfg.jwt_secret:
+        _logger.warning(
+            "SECURITY: JWT_SECRET is not configured. "
+            "If Supabase Auth becomes unreachable, the fallback will accept UNVERIFIED JWT tokens. "
+            "Set JWT_SECRET (= SUPABASE_JWT_SECRET from your Supabase project settings) in .env."
+        )
 
 
 @app.on_event("startup")

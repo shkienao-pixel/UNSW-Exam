@@ -52,8 +52,15 @@ def _decode_jwt_payload(token: str) -> dict:
             raise ValueError(f"JWT signature verification failed: {exc}") from exc
 
     # Unsigned fallback — only reached when jwt_secret is not configured
+    # 在生产环境拒绝无签名解码，避免攻击者伪造 JWT
+    cfg_env = get_settings().app_env
+    if cfg_env == "production":
+        raise ValueError(
+            "JWT_SECRET not configured in production — refusing to decode unverified token. "
+            "Set JWT_SECRET (SUPABASE_JWT_SECRET) in .env to fix this."
+        )
     logger.warning(
-        "JWT_SECRET not configured — falling back to UNVERIFIED payload decode. "
+        "JWT_SECRET not configured — falling back to UNVERIFIED payload decode (dev mode only). "
         "Set JWT_SECRET in environment to enable signature verification."
     )
     parts = token.split(".")
