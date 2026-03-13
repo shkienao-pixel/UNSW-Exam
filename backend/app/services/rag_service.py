@@ -35,13 +35,15 @@ from app.services.text_extractor import extract_text as _extract_raw_text
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-_CHUNK_TARGET   = 800   # target chars per chunk
-_CHUNK_MAX      = 1200  # hard max before forced split
-_CHUNK_MIN      = 80    # discard chunks shorter than this
-_CHUNK_OVERLAP  = 100   # overlap chars when hard-splitting oversized paragraphs
-_TOP_K          = 6     # default retrieval count
+_CHUNK_TARGET_TOKENS  = 400   # target tokens per chunk
+_CHUNK_MAX_TOKENS     = 700   # hard max tokens (force-split above this)
+_CHUNK_MIN_CHARS      = 80    # discard chunks shorter than this (chars)
+_CHUNK_OVERLAP_SENTS  = 2     # sentences to carry over as overlap
+_TINY_SLIDE_TOKENS    = 80    # slide smaller than this merges with the next one
+_TOP_K                = 6     # default retrieval count
 
 _CHINESE_RE = re.compile(r'[\u4e00-\u9fff]')
+_SENT_SPLIT_RE = re.compile(r'(?<=[.!?。！？…;；])\s*')
 
 
 def _extract_raw(file_type: str, data: bytes) -> str:
@@ -89,65 +91,122 @@ def _clean(text: str) -> str:
 
 # ── Chunking ──────────────────────────────────────────────────────────────────
 
-def _split_oversized_paragraph(para: str, max_len: int, overlap: int) -> list[str]:
-    """Hard split a very long paragraph into bounded windows."""
-    if len(para) <= max_len:
-        return [para]
-
-    step = max(1, max_len - overlap)
-    out: list[str] = []
-    start = 0
-    while start < len(para):
-        end = min(len(para), start + max_len)
-        part = para[start:end].strip()
-        if part:
-            out.append(part)
-        if end >= len(para):
-            break
-        start += step
-    return out
+def _approx_tokens(text: str) -> int:
+    """Approximate token count without tiktoken.
+    CJK chars ≈ 2 tokens each; all other chars ≈ 0.3 tokens each.
+    Accurate to within ~20% for mixed Chinese/English lecture content.
+    """
+    cjk = len(re.findall(r'[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]', text))
+    return int(cjk * 2 + (len(text) - cjk) * 0.3)
 
 
-def _chunk(text: str) -> list[str]:
-    """Paragraph-aware chunking with overlap and hard bounds."""
-    raw_paras = [p.strip() for p in re.split(r'\n\n+', text) if p.strip()]
-    paras: list[str] = []
-    for para in raw_paras:
-        paras.extend(_split_oversized_paragraph(para, _CHUNK_MAX, _CHUNK_OVERLAP))
+def _split_sentences(text: str) -> list[str]:
+    """Split text into sentences at punctuation boundaries."""
+    parts = _SENT_SPLIT_RE.split(text)
+    return [s.strip() for s in parts if s.strip()]
 
+
+def _parse_pages(text: str) -> list[tuple[int, str]]:
+    """Split text into (page_num, content) pairs using [Page N] markers.
+    Returns [(0, full_text)] when no markers are present (e.g. Word / plain text).
+    """
+    parts = re.split(r'\[Page (\d+)\]\n?', text)
+    pages: list[tuple[int, str]] = []
+    for i in range(1, len(parts) - 1, 2):
+        content = parts[i + 1].strip() if i + 1 < len(parts) else ''
+        if content:
+            pages.append((int(parts[i]), content))
+    if not pages and parts[0].strip():
+        pages.append((0, parts[0].strip()))
+    return pages
+
+
+def _sentences_to_chunks(
+    sentences: list[str],
+    target_tok: int,
+    max_tok: int,
+    overlap: int,
+) -> list[str]:
+    """Pack sentences into token-budgeted chunks with sentence-level overlap."""
+    if not sentences:
+        return []
     chunks: list[str] = []
-    current: list[str] = []
-    current_len = 0
+    buf: list[str] = []
+    buf_tok = 0
+    for sent in sentences:
+        t = _approx_tokens(sent)
+        if buf and buf_tok + t > target_tok:
+            chunks.append(' '.join(buf))
+            # Carry last N sentences as overlap into the next chunk
+            buf = buf[-overlap:] if len(buf) >= overlap else buf[:]
+            buf_tok = sum(_approx_tokens(s) for s in buf)
+        buf.append(sent)
+        buf_tok += t
+        # Hard-max guard: flush immediately
+        if buf_tok > max_tok:
+            chunks.append(' '.join(buf))
+            buf = buf[-overlap:] if len(buf) >= overlap else []
+            buf_tok = sum(_approx_tokens(s) for s in buf)
+    if buf:
+        chunks.append(' '.join(buf))
+    return chunks
 
-    for para in paras:
-        para_len = len(para)
 
-        # If adding this paragraph would exceed target, flush current chunk
-        if current_len + para_len > _CHUNK_TARGET and current:
-            chunks.append('\n\n'.join(current))
-            # Overlap: keep last paragraph for context continuity
-            overlap = current[-1]
-            if len(overlap) + para_len <= _CHUNK_MAX:
-                current = [overlap, para]
-                current_len = len(overlap) + para_len
-            else:
-                # If overlap would overflow hard max, drop overlap for this chunk.
-                current = [para]
-                current_len = para_len
+def _chunk(text: str) -> list[tuple[str, int]]:
+    """Slide-boundary-aware chunking with sentence-level splitting and overlap.
+
+    Returns list of (chunk_text, page_num) tuples.
+
+    Strategy:
+      1. Split by [Page N] markers — each page = one slide in a lecture PDF.
+      2. Merge consecutive *tiny* slides (< _TINY_SLIDE_TOKENS) into the next
+         slide to avoid orphan title-only chunks.
+      3. Keep each proper slide as its own chunk (no cross-slide merging).
+      4. Split large slides at sentence boundaries with sentence-level overlap.
+      5. Prepend [Slide N] prefix so the LLM has positional context.
+    """
+    pages = _parse_pages(text)
+    if not pages:
+        return []
+
+    # ── Step 1: merge tiny leading slides into the next one ──────────────────
+    groups: list[tuple[int, str]] = []
+    cur_page, cur_text = pages[0]
+    cur_tok = _approx_tokens(cur_text)
+
+    for page_num, page_text in pages[1:]:
+        page_tok = _approx_tokens(page_text)
+        if cur_tok <= _TINY_SLIDE_TOKENS:
+            # Current group is just a title slide — absorb it into the next
+            cur_text = cur_text + '\n\n' + page_text
+            cur_tok += page_tok
         else:
-            current.append(para)
-            current_len += para_len
+            groups.append((cur_page, cur_text))
+            cur_page, cur_text, cur_tok = page_num, page_text, page_tok
+    groups.append((cur_page, cur_text))
 
-        # Fallback guard: if a chunk still exceeds hard max, flush it.
-        if current_len > _CHUNK_MAX:
-            chunks.append('\n\n'.join(current))
-            current = []
-            current_len = 0
+    # ── Step 2: chunk each group ──────────────────────────────────────────────
+    result: list[tuple[str, int]] = []
+    for page_num, group_text in groups:
+        prefix = f'[Slide {page_num}]\n' if page_num > 0 else ''
+        group_tok = _approx_tokens(group_text)
 
-    if current:
-        chunks.append('\n\n'.join(current))
+        if group_tok <= _CHUNK_MAX_TOKENS:
+            chunk = (prefix + group_text).strip()
+            if len(chunk) >= _CHUNK_MIN_CHARS:
+                result.append((chunk, page_num))
+        else:
+            # Large slide: split at sentence boundaries with overlap
+            sents = _split_sentences(group_text)
+            sub_chunks = _sentences_to_chunks(
+                sents, _CHUNK_TARGET_TOKENS, _CHUNK_MAX_TOKENS, _CHUNK_OVERLAP_SENTS,
+            )
+            for sub in sub_chunks:
+                chunk = (prefix + sub).strip()
+                if len(chunk) >= _CHUNK_MIN_CHARS:
+                    result.append((chunk, page_num))
 
-    return [c for c in chunks if len(c.strip()) >= _CHUNK_MIN]
+    return result
 
 
 # ── Embedding ─────────────────────────────────────────────────────────────────
@@ -197,9 +256,12 @@ def process_artifact(
     if len(clean) < 100:
         return 0
 
-    chunks = _chunk(clean)
-    if not chunks:
+    chunk_tuples = _chunk(clean)   # list of (text, page_num)
+    if not chunk_tuples:
         return 0
+
+    chunk_texts = [t for t, _ in chunk_tuples]
+    chunk_pages = [p for _, p in chunk_tuples]
 
     # Delete existing chunks for this artifact (idempotent)
     supabase.table("artifact_chunks").delete().eq("artifact_id", artifact_id).execute()
@@ -211,22 +273,21 @@ def process_artifact(
             "artifact_id": artifact_id,
             "course_id":   course_id,
             "chunk_index": i,
-            "content":     chunk,
-            "char_count":  len(chunk),
+            "content":     text,
+            "char_count":  len(text),
             "created_at":  now,
         }
-        for i, chunk in enumerate(chunks)
+        for i, text in enumerate(chunk_texts)
     ]
     resp = supabase.table("artifact_chunks").insert(rows).execute()
     chunk_ids = [r["id"] for r in (resp.data or [])]
     if not chunk_ids:
         return 0
 
-    # Embed + store in ChromaDB
+    # Embed + store in ChromaDB (page_num stored as metadata)
     try:
-        embeddings = _embed(chunks)
+        embeddings = _embed(chunk_texts)
         col = _chroma_collection(course_id)
-        # Remove stale docs for this artifact
         try:
             col.delete(where={"artifact_id": str(artifact_id)})
         except Exception as exc:
@@ -234,15 +295,16 @@ def process_artifact(
         col.add(
             ids        = [str(cid) for cid in chunk_ids],
             embeddings = embeddings,
-            documents  = chunks,
+            documents  = chunk_texts,
             metadatas  = [
                 {
                     "artifact_id": str(artifact_id),
                     "course_id":   course_id,
                     "file_name":   file_name,
                     "chunk_index": i,
+                    "page_num":    chunk_pages[i],
                 }
-                for i in range(len(chunks))
+                for i in range(len(chunk_texts))
             ],
         )
     except Exception:
