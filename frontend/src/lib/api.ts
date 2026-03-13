@@ -340,19 +340,6 @@ export const api = {
       }),
   },
 
-  knowledge: {
-    build: (courseId: string, allowAiFill: boolean, scopeSetId?: number) =>
-      nextReq<KnowledgeResult>('/api/knowledge/build', {
-        method: 'POST',
-        body: JSON.stringify({ course_id: courseId, allow_ai_fill: allowAiFill, scope_set_id: scopeSetId }),
-      }),
-    getOutline: (courseId: string) =>
-      nextReq<KnowledgeOutline>(`/api/knowledge/outline?courseId=${courseId}`),
-    getGraph: (courseId: string) =>
-      nextReq<KnowledgeGraph>(`/api/knowledge/graph?courseId=${courseId}`),
-    getNode: (courseId: string, nodeId: string) =>
-      nextReq<KnowledgeOutlineNode>(`/api/knowledge/node?courseId=${courseId}&nodeId=${nodeId}`),
-  },
 
   flashcards: {
     list: (deckId: string) => req<Flashcard[]>(`/flashcards?deck_id=${deckId}`),

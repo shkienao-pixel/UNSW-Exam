@@ -187,67 +187,6 @@ export interface TodayPlanResult {
   total_undone: number
 }
 
-// ── Knowledge Graph ────────────────────────────────────────────────────────────
-
-export interface KnowledgeEvidence {
-  doc: string
-  page: number | null
-  chunk_id: string | null
-  quote: string | null
-}
-
-export type KnowledgeConfidence = 'low' | 'medium' | 'high'
-
-export interface KnowledgeOutlineNode {
-  id: string
-  title: string
-  level: number
-  parent_id: string | null
-  summary: string
-  key_points: string[]
-  exam_focus: string[]
-  evidence: KnowledgeEvidence[]
-  is_ai_generated: boolean
-  reason: string | null
-  confidence: KnowledgeConfidence | null
-  related_node_ids: string[]
-}
-
-export interface KnowledgeOutline {
-  course_id: string
-  generated_at: string
-  allow_ai_fill: boolean
-  nodes: KnowledgeOutlineNode[]
-}
-
-export interface KnowledgeGraphNode {
-  id: string
-  label: string
-  type: string
-  is_ai_generated: boolean
-  summary?: string
-  evidence?: KnowledgeEvidence[]
-}
-
-export interface KnowledgeGraphEdge {
-  id: string
-  source: string
-  target: string
-  relation: string
-  is_ai_generated: boolean
-  evidence?: KnowledgeEvidence[]
-  confidence?: KnowledgeConfidence
-}
-
-export interface KnowledgeGraph {
-  nodes: KnowledgeGraphNode[]
-  edges: KnowledgeGraphEdge[]
-}
-
-export interface KnowledgeResult {
-  outline: KnowledgeOutline
-  graph: KnowledgeGraph
-}
 
 // ── User Feedback ──────────────────────────────────────────────────────────────
 

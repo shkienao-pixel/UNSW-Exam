@@ -12,7 +12,7 @@ from app.core.config import get_settings
 from app.core.exceptions import InsufficientCreditsError
 from app.core.supabase_client import get_supabase
 from app.services.generation_worker import start_generation_worker, stop_generation_workers
-from app.routers import auth, courses, artifacts, scope_sets, outputs, admin, content, generate, review, knowledge, feedback, credits
+from app.routers import auth, courses, artifacts, scope_sets, outputs, admin, content, generate, review, feedback, credits
 from app.routers import course_content
 
 settings = get_settings()
@@ -45,7 +45,7 @@ app.include_router(content.router,    prefix="/courses", tags=["content"])
 app.include_router(generate.router,   prefix="/courses", tags=["generate"])
 app.include_router(admin.router,      prefix="/admin",   tags=["admin"])
 app.include_router(review.router,     prefix="",         tags=["review"])
-app.include_router(knowledge.router,  prefix="",         tags=["knowledge"])
+
 app.include_router(feedback.router,   prefix="",         tags=["feedback"])
 app.include_router(credits.router,    prefix="/credits", tags=["credits"])
 app.include_router(credits.admin_router, prefix="/admin", tags=["admin"])
