@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -162,10 +164,11 @@ def verify_otp(body: VerifyOtpRequest, supabase: Client = Depends(get_db)) -> To
     user_id = resp.session.user.id
 
     # Consume the invite code that was stored in user metadata at registration time.
-    try:
-        metadata = resp.session.user.user_metadata or {}
-        invite_id = metadata.get("invite_id")
-        if invite_id:
+    # 若消费失败（额度已被并发用完），必须拒绝颁发 token，防止邀请码超发。
+    metadata = resp.session.user.user_metadata or {}
+    invite_id = metadata.get("invite_id")
+    if invite_id:
+        try:
             invite_row = (
                 supabase.table("invites")
                 .select("*")
@@ -173,14 +176,31 @@ def verify_otp(body: VerifyOtpRequest, supabase: Client = Depends(get_db)) -> To
                 .limit(1)
                 .execute()
             )
-            if invite_row.data:
-                _consume_invite(supabase, invite_row.data[0])
-    except Exception:
-        logger.warning("Failed to consume invite after OTP verification for user %s", user_id)
+            if not invite_row.data:
+                raise AuthError("Invite code no longer valid. Please contact admin.")
+            consumed = _consume_invite(supabase, invite_row.data[0])
+            if not consumed:
+                # 乐观锁失败 = 另一请求已把额度用完
+                raise AuthError("Invite code quota exhausted. Please contact admin for a new code.")
+        except AuthError:
+            raise
+        except Exception as exc:
+            logger.error("Failed to consume invite for user %s: %s", user_id, exc)
+            raise AuthError("Registration failed: could not validate invite code.") from exc
 
-    # Award welcome credits (only on first successful verification).
+    # Award welcome credits — 幂等：检查是否已发过
     try:
-        credit_service.earn(supabase, user_id, 5, "welcome_bonus", note="welcome credits")
+        existing_bonus = (
+            supabase.table("credit_transactions")
+            .select("id")
+            .eq("user_id", str(user_id))
+            .eq("type", "welcome_bonus")
+            .limit(1)
+            .execute()
+            .data or []
+        )
+        if not existing_bonus:
+            credit_service.earn(supabase, str(user_id), 5, "welcome_bonus", note="welcome credits")
     except Exception:
         pass
 
@@ -270,9 +290,33 @@ def request_reset(body: RequestResetRequest) -> MessageResponse:
     return MessageResponse(message="If this email is registered, a reset link has been sent.")
 
 
+def _is_recovery_token(token: str) -> bool:
+    """检查 JWT payload 中 amr 字段是否包含 recovery 方法。
+
+    Supabase 发出的密码重置 token 的 amr 列表里会包含 {"method": "recovery"}。
+    普通登录 token 不含此字段，直接拒绝，防止任意有效 token 改密码。
+    """
+    try:
+        parts = token.split(".")
+        if len(parts) != 3:
+            return False
+        padded = parts[1] + "=" * (-len(parts[1]) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded))
+        amr = payload.get("amr", [])
+        return any(
+            isinstance(entry, dict) and entry.get("method") == "recovery"
+            for entry in amr
+        )
+    except Exception:
+        return False
+
+
 @router.post("/reset-password", response_model=MessageResponse)
 def reset_password(body: ResetPasswordRequest) -> MessageResponse:
-    """Update user password using the access token from the reset email link."""
+    """Update user password using the recovery access token from the reset email link."""
+    # 必须是 recovery token，拒绝普通登录 token 直接改密
+    if not _is_recovery_token(body.access_token):
+        raise AuthError("Reset link is invalid or expired. Please request a new one.")
     cfg = get_settings()
     admin_headers = {
         "apikey": cfg.supabase_service_role_key,
