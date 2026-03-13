@@ -91,7 +91,10 @@ def put_scope_set_items(
 ) -> dict[str, Any]:
     get_course(supabase, course_id)
     # Verify ownership BEFORE writing (fixes #6: write-before-check privilege escalation)
-    get_scope_set(supabase, current_user["id"], scope_set_id)
+    scope = get_scope_set(supabase, current_user["id"], scope_set_id)
+    # 防止跨课程 IDOR：URL 中的 course_id 必须与 scope_set 归属一致
+    if scope.get("course_id") != course_id:
+        raise HTTPException(status_code=403, detail="Scope set 不属于该课程")
 
     # 防止跨课程 IDOR：验证所有 artifact_id 必须属于该课程
     if body.artifact_ids:

@@ -549,8 +549,10 @@ def admin_delete_artifact(
 ) -> dict[str, Any]:
     rows = list_all_artifacts_admin(supabase, course_id=course_id)
     row = next((r for r in rows if r["id"] == artifact_id), None)
-    storage_path = row.get("storage_path") if row else None
-    user_id = row.get("user_id") if row else None
+    if not row:
+        raise HTTPException(status_code=404, detail="Artifact not found in this course")
+    storage_path = row.get("storage_path")
+    user_id = row.get("user_id")
     remove_artifact(supabase, user_id, course_id, artifact_id, storage_path)
     return {"ok": True, "id": artifact_id}
 

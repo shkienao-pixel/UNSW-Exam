@@ -54,19 +54,28 @@ app.include_router(course_content.router, prefix="/courses", tags=["course-conte
 
 @app.on_event("startup")
 async def _startup_security_check() -> None:
-    """启动时检测危险安全配置，将问题记录为 ERROR 级日志。"""
+    """启动时检测危险安全配置；生产环境配置错误直接阻止启动。"""
     cfg = get_settings()
+    is_prod = cfg.app_env == "production"
+
     if cfg.admin_secret == "change-me-in-production":
-        _logger.error(
+        msg = (
             "SECURITY: ADMIN_SECRET is using the default value 'change-me-in-production'. "
             "All admin endpoints are publicly accessible! Set ADMIN_SECRET in your .env file immediately."
         )
+        if is_prod:
+            raise RuntimeError(msg)
+        _logger.error(msg)
+
     if not cfg.jwt_secret:
-        _logger.warning(
+        msg = (
             "SECURITY: JWT_SECRET is not configured. "
             "If Supabase Auth becomes unreachable, the fallback will accept UNVERIFIED JWT tokens. "
             "Set JWT_SECRET (= SUPABASE_JWT_SECRET from your Supabase project settings) in .env."
         )
+        if is_prod:
+            raise RuntimeError(msg)
+        _logger.warning(msg)
 
 
 @app.on_event("startup")

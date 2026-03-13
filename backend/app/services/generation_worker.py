@@ -110,7 +110,9 @@ async def _run_job(db: Client, job: dict[str, Any], worker_id: str) -> None:
                 )
             except Exception as refund_err:
                 logger.error("credit refund failed job=%s: %s", job_id, refund_err)
-        await asyncio.to_thread(job_service.fail_job, db, job_id, str(exc))
+        # 不将原始异常（可能含 API key 片段）直接存入 DB，仅记录类型
+        safe_msg = f"{type(exc).__name__}: 生成失败，请重试或联系管理员"
+        await asyncio.to_thread(job_service.fail_job, db, job_id, safe_msg)
 
 
 async def _dispatch_loop(worker_id: str) -> None:

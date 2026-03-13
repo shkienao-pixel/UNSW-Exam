@@ -150,10 +150,11 @@ def admin_grant(db: Client, user_id: str, amount: int, note: str | None = None) 
     """管理员手动赠送积分（amount 可为负数）。"""
     if amount >= 0:
         return earn(db, user_id, amount, "admin_grant", note=note)
-    # 扣减：忽略余额下限检查（admin 特权）
+    # 扣减：忽略余额下限检查（admin 特权），但 txn 记录实际扣减量保持一致
     current = _ensure_row(db, user_id)
     new_balance = max(0, current + amount)
+    actual_deducted = new_balance - current  # 负数，例如 -50（即使 amount=-100 但余额只有 50）
     db.table("user_credits").update(
         {"balance": new_balance, "updated_at": "now()"}
     ).eq("user_id", user_id).execute()
-    return _append_txn(db, user_id, amount, "admin_grant", None, note)
+    return _append_txn(db, user_id, actual_deducted, "admin_grant", None, note)
