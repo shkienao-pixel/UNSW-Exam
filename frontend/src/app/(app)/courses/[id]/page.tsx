@@ -24,6 +24,7 @@ import type { SummarySchemaV1 } from '@/lib/types'
 import ReviewOutlineTab from '@/components/ReviewOutlineTab'
 import ResourceHubTab from '@/components/ResourceHubTab'
 import KnowledgeTab from '@/components/KnowledgeTab'
+import KnowledgeSummaryRenderer from '@/components/KnowledgeSummaryRenderer'
 
 // ── View routing ──────────────────────────────────────────────────────────────
 
@@ -434,29 +435,38 @@ function extractTocFromHtml(html: string): { id: string; title: string; level: n
 
 type ContentFormat = 'markdown' | 'html' | 'json' | 'summary_v1'
 
-/** 解析 content_json，返回统一的 { format, content, schema } */
+/** 解析 content_json，返回统一的 { format, content, schema, rawJson } */
 function parseContentJson(json: Record<string, unknown>): {
   format: ContentFormat
   content: string
   schema: SummarySchemaV1 | null
+  rawJson: unknown
 } {
   // 结构化 Schema V1
   if (json.format === 'summary_v1') {
-    return { format: 'summary_v1', content: '', schema: json as unknown as SummarySchemaV1 }
+    return { format: 'summary_v1', content: '', schema: json as unknown as SummarySchemaV1, rawJson: null }
   }
-  // 通用 format+content 结构
+  // 通用 format+content 结构（管理员通过后台上传的 JSON 会包在这里）
   if (json.format && json.content) {
-    return { format: json.format as ContentFormat, content: json.content as string, schema: null }
+    const fmt = json.format as ContentFormat
+    // JSON 格式：content 是字符串化的 JSON，解出来交给 KnowledgeSummaryRenderer
+    if (fmt === 'json') {
+      let parsed: unknown = null
+      try { parsed = JSON.parse(json.content as string) } catch {}
+      // 如果内层 JSON 本身就带 weeks / sections 等结构，直接用内层
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return { format: 'json', content: json.content as string, schema: null, rawJson: parsed }
+      }
+    }
+    return { format: fmt, content: json.content as string, schema: null, rawJson: null }
   }
   // 旧版 { markdown }
-  if (json.markdown) return { format: 'markdown', content: json.markdown as string, schema: null }
-  // 旧版 weeks 格式
-  if (json.weeks && Array.isArray(json.weeks)) {
-    const blocks = (json.weeks as { week: number; title: string; content: string }[])
-      .map(w => `## ${w.title}\n\n${w.content}`)
-    return { format: 'markdown', content: '# 课程摘要\n\n' + blocks.join('\n\n---\n\n'), schema: null }
+  if (json.markdown) return { format: 'markdown', content: json.markdown as string, schema: null, rawJson: null }
+  // 顶层直接是 JSON 结构（没有 format 包装）→ 交给 KnowledgeSummaryRenderer
+  if (json.weeks || json.sections || json.chapters || json.modules || json.topics) {
+    return { format: 'json', content: '', schema: null, rawJson: json }
   }
-  return { format: 'markdown', content: '', schema: null }
+  return { format: 'markdown', content: '', schema: null, rawJson: null }
 }
 
 /** Markdown 渲染（带 TOC anchor） */
@@ -542,179 +552,12 @@ function HtmlContent({ content, contentRef }: { content: string; contentRef: Rea
   )
 }
 
-/** JSON 内容渲染 */
-// ── Weekly bilingual summary renderer ────────────────────────────────────────
-
-interface WeeklyModule {
-  module: string
-  title_zh: string
-  title_en: string
-  key_points_zh: string[]
-  key_points_en: string[]
-}
-
-interface RevisionFocus {
-  must_know_zh?: string[]
-  must_know_en?: string[]
-  common_mistakes_zh?: string[]
-  common_mistakes_en?: string[]
-}
-
-interface WeekData {
-  week: number
-  week_overview: { title_zh: string; title_en: string; summary_zh?: string; summary_en?: string }
-  knowledge_modules: WeeklyModule[]
-  revision_focus?: RevisionFocus
-}
-
-function WeeklyBilingualContent({ weeks }: { weeks: WeekData[] }) {
-  const [lang, setLang] = useState<'zh' | 'en'>('zh')
-  const [openWeeks, setOpenWeeks] = useState<Set<number>>(new Set([weeks[0]?.week]))
-
-  function toggle(w: number) {
-    setOpenWeeks(prev => {
-      const next = new Set(prev)
-      next.has(w) ? next.delete(w) : next.add(w)
-      return next
-    })
-  }
-
-  return (
-    <div className="flex-1 min-w-0 space-y-3">
-      {/* Language toggle */}
-      <div className="flex items-center gap-2 mb-2">
-        <button onClick={() => setLang('zh')}
-          className="px-3 py-1 rounded text-xs font-medium"
-          style={{ background: lang === 'zh' ? 'rgba(255,215,0,0.15)' : 'transparent', color: lang === 'zh' ? '#FFD700' : '#666', border: `1px solid ${lang === 'zh' ? 'rgba(255,215,0,0.3)' : 'rgba(255,255,255,0.08)'}` }}>
-          中文
-        </button>
-        <button onClick={() => setLang('en')}
-          className="px-3 py-1 rounded text-xs font-medium"
-          style={{ background: lang === 'en' ? 'rgba(255,215,0,0.15)' : 'transparent', color: lang === 'en' ? '#FFD700' : '#666', border: `1px solid ${lang === 'en' ? 'rgba(255,215,0,0.3)' : 'rgba(255,255,255,0.08)'}` }}>
-          English
-        </button>
-      </div>
-
-      {weeks.map(week => {
-        const open = openWeeks.has(week.week)
-        const title = lang === 'zh' ? week.week_overview.title_zh : week.week_overview.title_en
-        const summary = lang === 'zh' ? week.week_overview.summary_zh : week.week_overview.summary_en
-        return (
-          <div key={week.week} className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,215,0,0.12)' }}>
-            {/* Week header */}
-            <button onClick={() => toggle(week.week)} className="w-full text-left px-5 py-3 flex items-center gap-3"
-              style={{ background: open ? 'rgba(255,215,0,0.06)' : 'rgba(0,0,0,0.2)' }}>
-              <span className="text-xs font-mono px-2 py-0.5 rounded" style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700' }}>
-                W{week.week}
-              </span>
-              <span className="font-semibold text-sm flex-1 text-white">{title}</span>
-              <span style={{ color: '#555', fontSize: 18 }}>{open ? '−' : '+'}</span>
-            </button>
-
-            {open && (
-              <div className="px-5 pb-5 space-y-4" style={{ background: 'rgba(0,0,0,0.15)' }}>
-                {/* Week summary */}
-                {summary && (
-                  <p className="text-sm leading-relaxed mt-3" style={{ color: '#AAA' }}>{summary}</p>
-                )}
-
-                {/* Knowledge modules */}
-                {week.knowledge_modules.map((mod, mi) => (
-                  <div key={mi} className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <p className="text-sm font-semibold mb-2" style={{ color: '#63B3ED' }}>
-                      {lang === 'zh' ? mod.title_zh : mod.title_en}
-                    </p>
-                    <ul className="space-y-1">
-                      {(lang === 'zh' ? mod.key_points_zh : mod.key_points_en).map((pt, pi) => (
-                        <li key={pi} className="text-xs flex items-start gap-2" style={{ color: '#CCC' }}>
-                          <span style={{ color: '#FFD700', marginTop: 2 }}>•</span>
-                          <span className="leading-relaxed">{pt}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-
-                {/* Revision focus */}
-                {week.revision_focus && (
-                  <div className="rounded-lg p-3 space-y-2" style={{ background: 'rgba(255,107,107,0.06)', border: '1px solid rgba(255,107,107,0.15)' }}>
-                    <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#FF6B6B' }}>
-                      {lang === 'zh' ? '备考重点' : 'Revision Focus'}
-                    </p>
-                    {(lang === 'zh' ? week.revision_focus.must_know_zh : week.revision_focus.must_know_en)?.map((pt, pi) => (
-                      <p key={pi} className="text-xs flex items-start gap-2" style={{ color: '#CCC' }}>
-                        <span style={{ color: '#FF6B6B' }}>✓</span>{pt}
-                      </p>
-                    ))}
-                    {(lang === 'zh' ? week.revision_focus.common_mistakes_zh : week.revision_focus.common_mistakes_en)?.length ? (
-                      <>
-                        <p className="text-xs font-semibold mt-2" style={{ color: '#FFD700' }}>
-                          {lang === 'zh' ? '常见误区' : 'Common Mistakes'}
-                        </p>
-                        {(lang === 'zh' ? week.revision_focus.common_mistakes_zh : week.revision_focus.common_mistakes_en)!.map((pt, pi) => (
-                          <p key={pi} className="text-xs flex items-start gap-2" style={{ color: '#CCC' }}>
-                            <span style={{ color: '#FFD700' }}>✗</span>{pt}
-                          </p>
-                        ))}
-                      </>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function JsonContent({ content }: { content: string }) {
-  let parsed: unknown
-  try { parsed = JSON.parse(content) } catch { parsed = null }
-
-  // 尝试渲染已知结构
-  if (parsed && typeof parsed === 'object') {
-    const obj = parsed as Record<string, unknown>
-
-    // weekly_structured_summary_bilingual
-    if (Array.isArray(obj.weeks)) {
-      return <WeeklyBilingualContent weeks={obj.weeks as WeekData[]} />
-    }
-
-    // { sections: [{title, content}] }
-    if (Array.isArray(obj.sections)) {
-      return (
-        <div className="flex-1 min-w-0 space-y-6">
-          {(obj.sections as { title?: string; content?: string }[]).map((s, i) => (
-            <div key={i}>
-              {s.title && <h2 className="text-lg font-semibold mb-2 pb-1" style={{ color: '#FFD700', borderBottom: '1px solid rgba(255,215,0,0.12)' }}>{s.title}</h2>}
-              {s.content && <p className="text-sm leading-relaxed" style={{ color: '#CCC' }}>{s.content}</p>}
-            </div>
-          ))}
-        </div>
-      )
-    }
-  }
-
-  // 兜底：格式化 JSON 展示
-  let pretty = content
-  try { pretty = JSON.stringify(JSON.parse(content), null, 2) } catch {}
-  return (
-    <div className="flex-1 min-w-0">
-      <pre className="rounded-xl p-4 text-xs overflow-auto"
-        style={{ background: 'rgba(0,0,0,0.3)', color: '#A78BFA', border: '1px solid rgba(167,139,250,0.15)', lineHeight: 1.6 }}>
-        {pretty}
-      </pre>
-    </div>
-  )
-}
-
 function SummaryTab({ courseId }: { courseId: string }) {
   const [status, setStatus]                   = useState<'loading' | 'not_published' | 'locked' | 'unlocked'>('loading')
   const [creditsRequired, setCreditsRequired] = useState(200)
   const [format, setFormat]                   = useState<ContentFormat>('markdown')
   const [content, setContent]                 = useState('')
+  const [rawJson, setRawJson]                 = useState<unknown>(null)
   const [schema, setSchema]                   = useState<SummarySchemaV1 | null>(null)
   const [unlocking, setUnlocking]             = useState(false)
   const [error, setError]                     = useState<string | null>(null)
@@ -737,6 +580,7 @@ function SummaryTab({ courseId }: { courseId: string }) {
       setFormat(parsed.format)
       setContent(parsed.content)
       setSchema(parsed.schema)
+      setRawJson(parsed.rawJson)
     } catch { setError('加载失败，请刷新重试') }
   }
 
@@ -861,7 +705,7 @@ function SummaryTab({ courseId }: { courseId: string }) {
       {error && <p className="text-sm mb-4" style={{ color: '#FF6666' }}>{error}</p>}
       {format === 'markdown' && <MarkdownContent content={content} contentRef={contentRef} />}
       {format === 'html'     && <HtmlContent     content={content} contentRef={contentRef} />}
-      {format === 'json'     && <JsonContent      content={content} />}
+      {format === 'json'     && <KnowledgeSummaryRenderer rawJson={rawJson} />}
     </div>
   )
 }
