@@ -102,7 +102,7 @@ function nextReq<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 /** 轮询异步生成 job，直到 done / failed / 超时。返回 Output 对象。 */
-async function _pollJob(courseId: string, jobId: string, timeoutMs = 180_000): Promise<Output> {
+async function _pollJob(courseId: string, jobId: string, timeoutMs = 300_000): Promise<Output> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     await new Promise(r => setTimeout(r, 2000))
@@ -115,7 +115,11 @@ async function _pollJob(courseId: string, jobId: string, timeoutMs = 180_000): P
       throw Object.assign(new Error(job.error_msg ?? '生成失败'), { code: 'GEN_FAILED' })
     // pending / processing → continue polling
   }
-  throw new Error('生成超时（3分钟），请稍后在历史记录中查看结果')
+  // 超时后任务仍在后台运行，不是失败，给用户明确提示
+  throw Object.assign(
+    new Error('前端等待超时（5分钟），任务仍在后台运行，请稍后刷新页面在历史记录中查看结果'),
+    { code: 'POLL_TIMEOUT', job_id: jobId }
+  )
 }
 
 export const api = {

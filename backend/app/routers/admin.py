@@ -298,9 +298,11 @@ def admin_list_users(
         r.raise_for_status()
         data = r.json()
     except httpx.HTTPStatusError as exc:
-        raise HTTPException(status_code=500, detail=f"Supabase HTTP {exc.response.status_code}: {exc.response.text[:200]}") from exc
+        logger.error("admin_list_users Supabase HTTP %s: %s", exc.response.status_code, exc.response.text[:500])
+        raise HTTPException(status_code=500, detail="获取用户列表失败，请稍后重试") from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Supabase admin API error [{type(exc).__name__}]: {exc}") from exc
+        logger.error("admin_list_users error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="获取用户列表失败，请稍后重试") from exc
 
     raw_users = data.get("users", data) if isinstance(data, dict) else data
     # Hide soft-deleted accounts
@@ -340,7 +342,8 @@ def admin_confirm_user_email(
         )
         r.raise_for_status()
     except httpx.HTTPStatusError as exc:
-        raise HTTPException(status_code=500, detail=f"确认失败: {exc.response.text[:200]}") from exc
+        logger.error("admin_confirm_email HTTP %s: %s", exc.response.status_code, exc.response.text[:500])
+        raise HTTPException(status_code=500, detail="邮箱确认失败，请稍后重试") from exc
     return {"ok": True, "id": user_id}
 
 
@@ -396,9 +399,11 @@ def admin_delete_user(
         if exc.response is not None and exc.response.status_code == 404:
             already_deleted = True
         else:
-            raise HTTPException(status_code=500, detail=f"Delete failed: {exc.response.text[:200]}") from exc
+            logger.error("admin_delete_user HTTP %s: %s", exc.response.status_code, exc.response.text[:500])
+            raise HTTPException(status_code=500, detail="删除用户失败，请稍后重试") from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Delete failed: {exc}") from exc
+        logger.error("admin_delete_user error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="删除用户失败，请稍后重试") from exc
 
     # Best-effort: remove duplicate accounts with the same email.
     if target_email:
