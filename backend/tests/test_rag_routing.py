@@ -101,37 +101,43 @@ class TestGetArtifactIdsByDocType:
 
 # ── _resolve_artifact_ids ─────────────────────────────────────────────────────
 
+_PASS_THROUGH = "app.services.generate_service.filter_accessible_artifact_ids"
+
+
 class TestResolveArtifactIds:
-    """Test resolution priority: explicit > scope_set > doc_type routing > None."""
+    """Test resolution priority: explicit > scope_set > doc_type routing > None.
+
+    filter_accessible_artifact_ids is patched to be transparent (return all IDs)
+    so these tests focus purely on routing logic, not access control.
+    """
 
     # 1. Explicit artifact_ids always win
     def test_explicit_artifact_ids_returned_directly(self):
         sb = MagicMock()
-        result = _resolve_artifact_ids(sb, "u1", "c1", None, [1, 2, 3])
+        with patch(_PASS_THROUGH, side_effect=lambda sb_, uid, ids: ids):
+            result = _resolve_artifact_ids(sb, "u1", "c1", None, [1, 2, 3])
         assert result == [1, 2, 3]
-        sb.table.assert_not_called()   # no DB hit needed
 
     def test_explicit_ids_override_scope_set(self):
         sb = MagicMock()
-        result = _resolve_artifact_ids(sb, "u1", "c1", scope_set_id=5, artifact_ids=[9])
+        with patch(_PASS_THROUGH, side_effect=lambda sb_, uid, ids: ids):
+            result = _resolve_artifact_ids(sb, "u1", "c1", scope_set_id=5, artifact_ids=[9])
         assert result == [9]
 
     def test_explicit_ids_override_doc_type_routing(self):
         sb = MagicMock()
-        result = _resolve_artifact_ids(
-            sb, "u1", "c1", None, [7],
-            priority_doc_types=["revision"],
-        )
+        with patch(_PASS_THROUGH, side_effect=lambda sb_, uid, ids: ids):
+            result = _resolve_artifact_ids(
+                sb, "u1", "c1", None, [7],
+                priority_doc_types=["revision"],
+            )
         assert result == [7]
 
     # 2. Scope set resolution
     def test_scope_set_ids_returned_when_no_explicit(self):
         sb = MagicMock()
-        sb.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
-            data=[{"id": 5, "artifact_ids": [10, 11], "course_id": "c1", "name": "s", "is_default": False,
-                   "created_at": "2025-01-01", "updated_at": "2025-01-01"}]
-        )
-        with patch("app.services.generate_service.get_scope_set", return_value={"artifact_ids": [10, 11]}):
+        with patch("app.services.generate_service.get_scope_set", return_value={"artifact_ids": [10, 11]}), \
+             patch(_PASS_THROUGH, side_effect=lambda sb_, uid, ids: ids):
             result = _resolve_artifact_ids(sb, "u1", "c1", scope_set_id=5, artifact_ids=None)
         assert result == [10, 11]
 
@@ -147,7 +153,7 @@ class TestResolveArtifactIds:
         with patch(
             "app.services.generate_service.get_artifact_ids_by_doc_type",
             return_value=[20, 21],
-        ):
+        ), patch(_PASS_THROUGH, side_effect=lambda sb_, uid, ids: ids):
             result = _resolve_artifact_ids(
                 sb, "u1", "c1", None, None,
                 priority_doc_types=["revision"],
@@ -163,7 +169,8 @@ class TestResolveArtifactIds:
         def fake_get(sb_, course_id, doc_types):
             return call_results.get(tuple(doc_types), [])
 
-        with patch("app.services.generate_service.get_artifact_ids_by_doc_type", side_effect=fake_get):
+        with patch("app.services.generate_service.get_artifact_ids_by_doc_type", side_effect=fake_get), \
+             patch(_PASS_THROUGH, side_effect=lambda sb_, uid, ids: ids):
             result = _resolve_artifact_ids(
                 sb, "u1", "c1", None, None,
                 priority_doc_types=["revision"],

@@ -149,11 +149,16 @@ class TestClean:
 
 # ── _chunk() ─────────────────────────────────────────────────────────────────
 
+def _chunk_texts(text: str) -> list[str]:
+    """Helper: extract just the text parts from _chunk() tuples."""
+    return [c for c, _ in _chunk(text)]
+
+
 class TestChunk:
     def test_short_text_returns_single_chunk(self):
         # Must be >= _CHUNK_MIN (80 chars) to survive the filter
         text = "This is a paragraph that is long enough to be kept as a single chunk by the chunker."
-        chunks = _chunk(text)
+        chunks = _chunk_texts(text)
         assert len(chunks) == 1
         assert "long enough" in chunks[0]
 
@@ -171,7 +176,7 @@ class TestChunk:
         para_a = "First paragraph " + "x" * 70   # 86 chars
         para_b = "Second paragraph " + "y" * 70  # 87 chars
         text = f"{para_a}\n\n{para_b}"
-        chunks = _chunk(text)
+        chunks = _chunk_texts(text)
         # Both fit in one chunk (combined ~173 chars < CHUNK_TARGET 800)
         assert len(chunks) == 1
         assert "First paragraph" in chunks[0]
@@ -181,68 +186,75 @@ class TestChunk:
         """Paragraphs shorter than _CHUNK_MIN (80 chars) should be discarded."""
         # 79-char dummy "paragraph" (too short to be a useful chunk)
         short = "x" * 79
-        chunks = _chunk(short)
+        chunks = _chunk_texts(short)
         assert chunks == []
 
     def test_long_text_splits_into_multiple_chunks(self):
-        """Text clearly exceeding CHUNK_TARGET should produce multiple chunks."""
-        # Each paragraph ~200 chars; 6 of them = ~1200 → should split
-        para = "A" * 200
-        text = "\n\n".join([para] * 6)
-        chunks = _chunk(text)
+        """Text clearly exceeding CHUNK_TARGET should produce multiple chunks.
+
+        Use [Page N] markers to create multiple distinct slides that each
+        appear as separate chunks (slide-boundary-aware chunking).
+        """
+        # 5 slides, each ~300 chars — each is a separate page group
+        slide = "word " * 60   # ~300 chars, ~90 tokens — fits one chunk each
+        pages = "\n".join(f"[Page {i}]\n{slide}" for i in range(1, 6))
+        chunks = _chunk_texts(pages)
         assert len(chunks) >= 2
 
     def test_overlap_carries_last_paragraph(self):
-        """After a flush, the last paragraph of the previous chunk starts the next."""
-        # Build text where first two paragraphs fill a chunk, triggering flush
-        para_a = "A" * 500
-        para_b = "B" * 400   # a+b > 800 → flush after para_a, overlap = para_a
-        para_c = "C" * 100
-        text = f"{para_a}\n\n{para_b}\n\n{para_c}"
-        chunks = _chunk(text)
+        """After a flush, overlap sentences from prev chunk start the next."""
+        # Build a single large slide that forces sentence-level splitting
+        # ~1500 tokens → must split into multiple sub-chunks
+        sentence = "This is a test sentence with enough words to count as tokens. "
+        big_slide = sentence * 80  # ~4800 chars, ~1440 tokens > 700 max
+        pages = f"[Page 1]\n{big_slide}"
+        chunks = _chunk_texts(pages)
         assert len(chunks) >= 2
-        # para_b should appear in the second chunk (it's the overlap source)
-        second = chunks[1]
-        assert "B" in second
+        # Second chunk should overlap words from first chunk's tail
+        assert "test sentence" in chunks[1]
 
     def test_no_chunk_shorter_than_min(self):
         """All returned chunks should be >= _CHUNK_MIN chars."""
         from app.services.rag_service import _CHUNK_MIN
         para = "Word " * 30  # ~150 chars
         text = "\n\n".join([para] * 10)
-        chunks = _chunk(text)
+        chunks = _chunk_texts(text)
         for c in chunks:
             assert len(c.strip()) >= _CHUNK_MIN, f"Too-short chunk found: {len(c.strip())} chars"
 
     def test_oversized_paragraph_hard_split(self):
-        """A single paragraph > CHUNK_MAX (1200) chars should produce a chunk."""
-        big_para = "Z" * 1300
-        chunks = _chunk(big_para)
+        """A single slide > CHUNK_MAX tokens should produce at least one chunk."""
+        # ~4000 chars with spaces so tokenizer sees many tokens
+        big_slide = ("Z word " * 600)  # ~4200 chars, ~1260 tokens
+        pages = f"[Page 1]\n{big_slide}"
+        chunks = _chunk_texts(pages)
         assert len(chunks) >= 1
         assert any("Z" in c for c in chunks)
 
     def test_oversized_paragraph_respects_chunk_max(self):
-        """Very long paragraph should be split so each chunk <= CHUNK_MAX."""
+        """Very long slide should be split so each chunk <= CHUNK_MAX chars."""
         from app.services.rag_service import _CHUNK_MAX
-        big_para = "A" * 3000
-        chunks = _chunk(big_para)
+        # Use real sentences (with . boundaries) so the sentence splitter can chunk them
+        sentence = "This sentence has some words and ends with a period. "
+        big_slide = sentence * 300  # ~15600 chars, ~4680 tokens — far exceeds 700 max
+        pages = f"[Page 1]\n{big_slide}"
+        chunks = _chunk_texts(pages)
         assert len(chunks) >= 2
         assert all(len(c) <= _CHUNK_MAX for c in chunks)
 
     def test_overlap_does_not_create_oversized_chunk(self):
-        """Overlap + next paragraph should not exceed hard max."""
+        """Overlap + next sentences should not exceed hard max."""
         from app.services.rag_service import _CHUNK_MAX
-        para_a = "A" * 700
-        para_b = "B" * 900
-        text = f"{para_a}\n\n{para_b}"
-        chunks = _chunk(text)
+        big_slide = ("sentence words here. " * 500)  # ~10500 chars
+        pages = f"[Page 1]\n{big_slide}"
+        chunks = _chunk_texts(pages)
         assert len(chunks) >= 1
         assert all(len(c) <= _CHUNK_MAX for c in chunks)
 
     def test_chunks_cover_all_content(self):
         """No content should be silently lost (spot-check first/last words)."""
         text = "FIRST_WORD " + ("middle " * 200) + " LAST_WORD"
-        chunks = _chunk(text)
+        chunks = _chunk_texts(text)
         combined = " ".join(chunks)
         assert "FIRST_WORD" in combined
         assert "LAST_WORD" in combined
@@ -251,7 +263,7 @@ class TestChunk:
         """Chinese paragraphs should also be chunked correctly."""
         para = "这是一段中文内容，用于测试分块功能是否正常工作。" * 5
         text = "\n\n".join([para] * 4)
-        chunks = _chunk(text)
+        chunks = _chunk_texts(text)
         assert len(chunks) >= 1
         assert all("这是" in c or len(c) >= 80 for c in chunks if c)
 

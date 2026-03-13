@@ -20,7 +20,7 @@ _logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="UNSW Exam Master API",
-    version="0.7.0",
+    version="1.0.0",
     description="Backend API for UNSW Exam Master — multi-user AI exam prep platform",
 )
 

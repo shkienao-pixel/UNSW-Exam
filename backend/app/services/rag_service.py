@@ -40,6 +40,10 @@ _CHUNK_MAX_TOKENS     = 700   # hard max tokens (force-split above this)
 _CHUNK_MIN_CHARS      = 80    # discard chunks shorter than this (chars)
 _CHUNK_OVERLAP_SENTS  = 2     # sentences to carry over as overlap
 _TINY_SLIDE_TOKENS    = 80    # slide smaller than this merges with the next one
+
+# Public aliases used by tests
+_CHUNK_MIN = _CHUNK_MIN_CHARS
+_CHUNK_MAX = _CHUNK_MAX_TOKENS * 5  # rough token→char upper bound for tests
 _TOP_K                = 6     # default retrieval count
 
 _CHINESE_RE = re.compile(r'[\u4e00-\u9fff]')

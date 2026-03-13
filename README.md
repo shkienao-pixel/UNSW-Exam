@@ -48,6 +48,28 @@
 
 ## Changelog
 
+### v1.0.0 (2026-03-14)
+
+**Security hardening (full audit pass):**
+- **Invite quota enforcement** — account is deleted via `supabase.auth.admin.delete_user()` if invite consumption fails after OTP verification, eliminating the registration bypass window
+- **Password reset token validation** — `POST /auth/reset-password` now verifies the Bearer token's `amr` claim contains `{"method": "recovery"}`; any valid non-recovery access token is rejected
+- **Welcome bonus idempotency** — credit award checks `credit_transactions` for an existing `welcome_bonus` row before issuing, preventing duplicate grants on retry
+- **Guest enforcement moved to backend** — `is_guest` flag set from `GUEST_EMAIL` config in `get_current_user()`; all generation endpoints call `_deny_guest()` at entry; guest credentials no longer exposed as `NEXT_PUBLIC_*` env vars
+- **Artifact access filter at every consumption point** — `filter_accessible_artifact_ids()` applied in `/ask`, `/ask_stream`, knowledge router, and `_resolve_artifact_ids()` to prevent locked-file RAG bypass
+- **Scope set IDOR fixed** — scope sets re-isolated by `user_id`; cross-course artifact injection rejected with 422; locked artifacts blocked from being added to any scope set
+- **earn() optimistic lock** — mirrors `spend()` with 3-retry CAS pattern + force-write fallback, preventing concurrent refund races
+- **Credit award idempotency** — `approve_artifact` and `update_feedback_status` read old status before awarding; repeat calls never double-credit
+- **Error message sanitization** — generation worker stores `ExceptionType: 生成失败` instead of raw exception strings, preventing API key leakage in job failure messages
+- **Startup security checks** — production startup raises `RuntimeError` for default admin secret or missing JWT secret (was previously just a warning)
+- **Global logout** — `POST /auth/logout` now calls Supabase `POST /auth/v1/logout?scope=global` to actually revoke the session server-side
+
+**Dead code removed:**
+- Backend: `llm_adapter.py`, `models/flashcard.py`, `models/generation.py`
+- Frontend: 13 unused visual components, 3 unused knowledge proxy API routes, 4 insecure Next.js generate API routes (had no credit checks / exposed service role key)
+- Root junk: log files, screenshot artifacts, offline preview HTML
+
+---
+
 ### v0.9.0 (2026-03-13)
 
 **Features:**
@@ -682,6 +704,28 @@ Access `/admin` and enter the `X-Admin-Secret` in the UI.
 ---
 
 ## 更新日志
+
+### v1.0.0（2026-03-14）
+
+**安全加固（全面审计）：**
+- **邀请码注册原子化** — OTP 验证成功后若邀请码消耗失败，立即调用 `supabase.auth.admin.delete_user()` 删除账号，彻底堵死注册窗口
+- **密码重置 Token 校验** — `POST /auth/reset-password` 现验证 Bearer token 的 `amr` 字段必须包含 `{"method": "recovery"}`，拒绝普通 access token
+- **欢迎积分幂等** — 发放前检查 `credit_transactions` 是否已有 `welcome_bonus` 记录，防止重试重复发放
+- **Guest 后端强制** — `is_guest` 标志在 `get_current_user()` 中根据 `GUEST_EMAIL` 配置设置；所有生成端点入口调用 `_deny_guest()`；访客凭证不再作为 `NEXT_PUBLIC_*` 环境变量暴露
+- **每个消费点均过滤未解锁文件** — `/ask`、`/ask_stream`、knowledge 路由、`_resolve_artifact_ids()` 均调用 `filter_accessible_artifact_ids()`，防止 RAG 绕过付费锁
+- **Scope set IDOR 修复** — 恢复按 `user_id` 隔离；跨课程 artifact 注入返回 422；锁定文件禁止加入任何范围集
+- **earn() 乐观锁** — 与 `spend()` 同款 CAS 3 次重试 + 强制写入兜底，防止并发退款竞争
+- **积分发放幂等** — `approve_artifact` 和 `update_feedback_status` 先读旧状态再奖励，重复调用不会二次发积分
+- **错误信息脱敏** — generation worker 只存 `ExceptionType: 生成失败` 而非原始异常信息，防止 API Key 泄露
+- **启动安全检查** — 生产模式下 admin secret 使用默认值或缺少 JWT secret 直接 `RuntimeError`，不再仅打印警告
+- **全局登出** — `POST /auth/logout` 真正调用 Supabase `POST /auth/v1/logout?scope=global` 使 token 失效
+
+**屎山代码清除：**
+- 后端：删除 `llm_adapter.py`、`models/flashcard.py`、`models/generation.py`
+- 前端：删除 13 个废弃视觉组件、3 个废弃 knowledge 代理路由、4 个不安全 Next.js 生成代理路由（无积分校验 / 暴露 service role key）
+- 根目录：删除日志文件、截图文件、离线预览 HTML
+
+---
 
 ### v0.8.0（2026-03-12）
 

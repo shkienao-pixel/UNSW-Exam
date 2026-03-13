@@ -234,9 +234,12 @@ class TestListFeedback:
         sb = MagicMock()
         eq_mock = MagicMock()
         eq_mock.execute.return_value = MagicMock(data=[])
+        # Actual chain: .select().order("created_at").order("id").range().eq(...)
         (sb.table.return_value
            .select.return_value
            .order.return_value
+           .order.return_value
+           .range.return_value
            .eq.return_value) = eq_mock
         from app.core.dependencies import get_db
         from app.main import app
@@ -245,10 +248,13 @@ class TestListFeedback:
         resp = client.get("/admin/feedback?status=pending",
                           headers={"X-Admin-Secret": "test-admin-secret"})
         assert resp.status_code == 200
-        # eq must have been called with "status" filter
-        sb.table.return_value.select.return_value.order.return_value.eq.assert_called_once_with(
-            "status", "pending"
-        )
+        # eq must have been called with "status" filter on the range result
+        (sb.table.return_value
+           .select.return_value
+           .order.return_value
+           .order.return_value
+           .range.return_value
+           .eq.assert_called_once_with("status", "pending"))
 
     def test_no_status_filter_skips_eq(self):
         """Without ?status=, .eq() must NOT be called."""
