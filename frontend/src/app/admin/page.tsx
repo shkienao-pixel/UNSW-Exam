@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import {
   Users, BookOpen, FileText, Ticket, Key, MessageSquare,
-  Lock, Zap, Shield,
+  Lock, Zap, Shield, CalendarDays,
 } from 'lucide-react'
 import ExamMasterLogo from '@/components/ExamMasterLogo'
 import { useLang } from '@/lib/i18n'
@@ -15,6 +15,7 @@ import { InvitesTab } from './InvitesTab'
 import { ApiKeysTab } from './ApiKeysTab'
 import { FeedbackTab } from './FeedbackTab'
 import { CourseContentTab } from './CourseContentTab'
+import { PlannerBlueprintTab } from './PlannerBlueprintTab'
 
 function getTabs(t: (key: any) => string): { id: Tab; label: string; icon: React.ReactNode }[] {
   return [
@@ -25,6 +26,7 @@ function getTabs(t: (key: any) => string): { id: Tab; label: string; icon: React
     { id: 'api-keys', label: t('admin_tab_api_keys'), icon: <Key size={15} /> },
     { id: 'feedback', label: t('admin_tab_feedback'), icon: <MessageSquare size={15} /> },
     { id: 'course-content', label: t('admin_tab_course_content'), icon: <BookOpen size={15} /> },
+    { id: 'planner', label: '考试计划', icon: <CalendarDays size={15} /> },
   ]
 }
 
@@ -182,6 +184,7 @@ export default function AdminPage() {
         <div style={{ display: tab === 'api-keys'       ? undefined : 'none' }}><ApiKeysTab        secret={secret} /></div>
         <div style={{ display: tab === 'feedback'       ? undefined : 'none' }}><FeedbackTab       secret={secret} /></div>
         <div style={{ display: tab === 'course-content' ? undefined : 'none' }}><CourseContentTab  secret={secret} /></div>
+        <div style={{ display: tab === 'planner'        ? undefined : 'none' }}><PlannerBlueprintTab secret={secret} /></div>
       </div>
     </div>
   )

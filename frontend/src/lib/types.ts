@@ -259,3 +259,45 @@ export interface SummarySchemaV1 {
   likely_exam_questions: string[]
 }
 
+// ── Planner ───────────────────────────────────────────────────────────────────
+
+export interface PlannerKP {
+  id: string
+  title: string
+  topic?: string
+  done: boolean
+}
+
+export interface PlannerPaper {
+  id: string
+  title: string
+  done: boolean
+}
+
+export interface PlannerDay {
+  day_number: number
+  date: string          // ISO date
+  is_today: boolean
+  is_past: boolean
+  knowledge_points: PlannerKP[]
+  papers: PlannerPaper[]
+}
+
+export interface PlannerStats {
+  total_kp: number
+  done_kp: number
+  total_paper: number
+  done_paper: number
+}
+
+export interface PlannerPlan {
+  blueprint_exists: boolean
+  exam_date: string | null
+  today: string
+  total_days: number
+  remaining_days: number
+  elapsed_days: number
+  stats: PlannerStats
+  days: PlannerDay[]
+}
+

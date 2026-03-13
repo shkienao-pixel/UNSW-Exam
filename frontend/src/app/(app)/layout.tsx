@@ -13,7 +13,7 @@ import FloatingProgress from '@/components/FloatingProgress'
 import ExamCountdown from '@/components/ExamCountdown'
 import {
   LayoutDashboard, LogOut, ArrowLeft, Loader2, BookOpen, ChevronLeft, Menu, X, MessageSquarePlus, Send, CreditCard,
-  LibraryBig, Layers3, FileWarning, Target, FileText, ListTree, MessageCircleMore, Sparkles, SlidersHorizontal, Globe, RefreshCw,
+  LibraryBig, Layers3, FileWarning, Target, FileText, ListTree, MessageCircleMore, Sparkles, SlidersHorizontal, Globe, RefreshCw, CalendarDays,
 } from 'lucide-react'
 
 // ── Feature navigation config ─────────────────────────────────────────────────
@@ -22,6 +22,7 @@ const FEATURES = [
   { view: 'resources', labelKey: 'files', featured: true },
   { view: 'flashcards', labelKey: 'flashcards', featured: true },
   { view: 'mistakes', labelKey: 'mistakes', featured: true },
+  { view: 'planner', labelKey: 'planner' },
   { view: 'quiz', labelKey: 'quiz' },
   { view: 'course-summary', labelKey: 'knowledge_summary' },
   { view: 'outline', labelKey: 'outline' },
@@ -36,6 +37,7 @@ const FEATURE_ICON_MAP = {
   resources: { icon: LibraryBig, tint: '#9FD3C7', bg: 'rgba(159,211,199,0.1)' },
   flashcards: { icon: Layers3, tint: '#E7D08A', bg: 'rgba(200,165,90,0.12)' },
   mistakes: { icon: FileWarning, tint: '#F4A261', bg: 'rgba(244,162,97,0.12)' },
+  planner: { icon: CalendarDays, tint: '#7DD3C8', bg: 'rgba(125,211,200,0.12)' },
   quiz: { icon: Target, tint: '#87B6FF', bg: 'rgba(135,182,255,0.12)' },
   'course-summary': { icon: BookOpen, tint: '#A8D8B0', bg: 'rgba(168,216,176,0.12)' },
   outline: { icon: ListTree, tint: '#C7B6FF', bg: 'rgba(199,182,255,0.12)' },

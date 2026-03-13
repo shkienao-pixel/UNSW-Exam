@@ -25,6 +25,7 @@ import ReviewOutlineTab from '@/components/ReviewOutlineTab'
 import ResourceHubTab from '@/components/ResourceHubTab'
 
 import KnowledgeSummaryRenderer from '@/components/KnowledgeSummaryRenderer'
+import ExamPlannerTab from '@/components/ExamPlannerTab'
 
 // ── View routing ──────────────────────────────────────────────────────────────
 
@@ -75,6 +76,15 @@ function CoursePageInner() {
   // Ask 视图独占全屏（ChatGPT 风格），其他视图正常滚动
   if (view === 'ask') {
     return <AskTab courseId={courseId} scopeSets={scopeSets} artifacts={artifacts} />
+  }
+
+  // 考试计划视图
+  if (view === 'planner') {
+    return (
+      <div className="mx-auto w-full max-w-[780px] flex-1 overflow-y-auto px-5 py-8 sm:px-6 lg:py-10">
+        <ExamPlannerTab courseId={courseId} />
+      </div>
+    )
   }
 
   // 知识摘要视图：管理员上传的结构化课程摘要

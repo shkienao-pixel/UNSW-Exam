@@ -384,6 +384,16 @@ export const api = {
       }),
   },
 
+  planner: {
+    getPlan: (courseId: string) =>
+      req<import('./types').PlannerPlan>(`/courses/${courseId}/planner`),
+    toggle: (courseId: string, item_type: 'kp' | 'paper', item_id: string, done: boolean) =>
+      req<{ ok: boolean }>(`/courses/${courseId}/planner/toggle`, {
+        method: 'POST',
+        body: JSON.stringify({ item_type, item_id, done }),
+      }),
+  },
+
   courseContent: {
     status: (courseId: string, contentType: 'summary' | 'outline') =>
       req<{ status: CourseContentStatus; credits_required: number }>(
