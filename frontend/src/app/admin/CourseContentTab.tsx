@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { CheckCircle, EyeOff, FileText, ListTree, Sparkles, Loader2 } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { CheckCircle, EyeOff, FileText, ListTree, Sparkles, Loader2, Search, X } from 'lucide-react'
 import { Course, adminReq, Spinner, ErrorBox, API } from './_shared'
 import ReactMarkdown from 'react-markdown'
 import SummarySchemaRenderer from '@/components/SummarySchemaRenderer'
@@ -363,6 +363,9 @@ export function CourseContentTab({ secret }: { secret: string }) {
   const [courses, setCourses]   = useState<Course[]>([])
   const [selected, setSelected] = useState<Course | null>(null)
   const [loading, setLoading]   = useState(true)
+  const [query, setQuery]       = useState('')
+  const [dropOpen, setDropOpen] = useState(false)
+  const dropRef                 = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     adminReq<Course[]>(secret, '/admin/courses')
@@ -370,18 +373,88 @@ export function CourseContentTab({ secret }: { secret: string }) {
       .finally(() => setLoading(false))
   }, [secret])
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) {
+        setDropOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  const filtered = courses.filter(c => {
+    const q = query.toLowerCase()
+    return !q || c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q)
+  })
+
+  function selectCourse(c: Course) {
+    setSelected(c)
+    setQuery('')
+    setDropOpen(false)
+  }
+
   if (loading) return <div className="flex justify-center py-20"><Spinner /></div>
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <select
-          value={selected?.id ?? ''}
-          onChange={e => setSelected(courses.find(c => c.id === e.target.value) ?? null)}
-          className="rounded-lg px-3 py-2 text-sm border"
-          style={{ background: 'rgba(255,255,255,0.04)', color: '#CCC', borderColor: 'rgba(255,255,255,0.1)' }}>
-          {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+      {/* Course search picker */}
+      <div ref={dropRef} className="relative" style={{ maxWidth: 360 }}>
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: '#555' }} />
+          <input
+            type="text"
+            value={dropOpen ? query : (selected ? `${selected.code} — ${selected.name}` : '')}
+            onChange={e => { setQuery(e.target.value); setDropOpen(true) }}
+            onFocus={() => { setQuery(''); setDropOpen(true) }}
+            placeholder="搜索课程..."
+            className="w-full pl-8 pr-8 py-2 rounded-xl text-sm outline-none"
+            style={{
+              background: 'rgba(255,255,255,0.05)',
+              border: dropOpen ? '1px solid rgba(255,215,0,0.4)' : '1px solid rgba(255,255,255,0.1)',
+              color: '#CCC',
+            }}
+          />
+          {(query || selected) && (
+            <button
+              onClick={() => { setQuery(''); setSelected(null); setDropOpen(true) }}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2"
+              style={{ color: '#444' }}
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
+
+        {dropOpen && (
+          <div className="absolute z-20 mt-1 w-full rounded-xl overflow-hidden shadow-2xl"
+            style={{ background: 'rgba(14,16,24,0.98)', border: '1px solid rgba(255,255,255,0.1)', maxHeight: 280, overflowY: 'auto' }}>
+            {filtered.length === 0 ? (
+              <div className="px-4 py-3 text-xs" style={{ color: '#555' }}>无匹配课程</div>
+            ) : (
+              filtered.map(c => (
+                <button key={c.id} onClick={() => selectCourse(c)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-all"
+                  style={{
+                    background: selected?.id === c.id ? 'rgba(255,215,0,0.08)' : 'transparent',
+                    borderBottom: '1px solid rgba(255,255,255,0.04)',
+                  }}
+                  onMouseEnter={e => { if (selected?.id !== c.id) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)' }}
+                  onMouseLeave={e => { if (selected?.id !== c.id) (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+                >
+                  <span className="text-xs font-mono px-1.5 py-0.5 rounded flex-shrink-0"
+                    style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.2)' }}>
+                    {c.code}
+                  </span>
+                  <span className="text-sm truncate" style={{ color: selected?.id === c.id ? '#FFD700' : '#CCC' }}>
+                    {c.name}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        )}
       </div>
 
       {selected && (
