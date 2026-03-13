@@ -23,7 +23,7 @@ import SummarySchemaRenderer from '@/components/SummarySchemaRenderer'
 import type { SummarySchemaV1 } from '@/lib/types'
 import ReviewOutlineTab from '@/components/ReviewOutlineTab'
 import ResourceHubTab from '@/components/ResourceHubTab'
-import KnowledgeTab from '@/components/KnowledgeTab'
+
 import KnowledgeSummaryRenderer from '@/components/KnowledgeSummaryRenderer'
 
 // ── View routing ──────────────────────────────────────────────────────────────
@@ -86,14 +86,6 @@ function CoursePageInner() {
     )
   }
 
-  // 摘要→知识图谱视图：flex 布局，高度撑满（内部分栏+滚动）
-  if (view === 'summary') {
-    return (
-      <div className="p-6 overflow-hidden flex-1 flex flex-col min-h-0">
-        <KnowledgeTab courseId={courseId} />
-      </div>
-    )
-  }
 
   // 复习大纲视图：flex 布局，高度撑满（内部分栏+滚动）
   if (view === 'outline') {
