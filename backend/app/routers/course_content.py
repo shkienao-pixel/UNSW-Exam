@@ -150,7 +150,24 @@ def unlock_content(
         return {"ok": True, "already_unlocked": True}
     cost = svc.UNLOCK_COSTS[content_type]
     credit_svc.spend(db, current_user["id"], cost, f"unlock_{content_type}", course_id)
-    svc.record_unlock(db, current_user["id"], course_id, content_type)
+    # 防并发双扣：若 record_unlock 触发唯一约束（另一请求已写入），立即退还积分
+    try:
+        svc.record_unlock(db, current_user["id"], course_id, content_type)
+    except Exception as exc:
+        err_str = str(exc).lower()
+        if any(k in err_str for k in ("duplicate", "unique", "23505")):
+            credit_svc.earn(
+                db, current_user["id"], cost,
+                "refund",
+                ref_id=course_id,
+                note=f"并发解锁退款 {content_type}",
+            )
+            logger.warning(
+                "unlock_content concurrent duplicate refunded user=%s course=%s type=%s",
+                current_user["id"], course_id, content_type,
+            )
+            return {"ok": True, "already_unlocked": True}
+        raise
     return {"ok": True, "already_unlocked": False, "credits_spent": cost}
 
 

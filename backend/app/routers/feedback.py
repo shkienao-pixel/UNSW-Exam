@@ -73,14 +73,19 @@ def submit_feedback(
 @router.get("/admin/feedback")
 def list_feedback(
     status: str | None    = None,
+    limit: int            = 100,
+    offset: int           = 0,
     _: None               = Depends(_require_admin),
     supabase: Client      = Depends(get_db),
 ) -> list[dict[str, Any]]:
-    """List all feedback, newest first. Optional ?status= filter."""
+    """List feedback, newest first. Optional ?status= filter. Max 200 per page."""
+    limit = max(1, min(limit, 200))
     q = (
         supabase.table("user_feedback")
         .select("id, user_id, content, page_url, status, created_at")
         .order("created_at", desc=True)
+        .order("id", desc=True)
+        .range(offset, offset + limit - 1)
     )
     if status:
         q = q.eq("status", status)
