@@ -2,7 +2,6 @@ import type {
   TokenResponse, User, Course, Artifact, ScopeSet, Output, Flashcard, Mistake,
   GenerateBody, AskResponse, ExplainImageResponse,
   ReviewSettings, ReviewNodeProgress, ReviewNodeUpdate, TodayPlanResult,
-  KnowledgeOutline, KnowledgeGraph, KnowledgeOutlineNode, KnowledgeResult,
   DocType, Feedback, FeedbackStatus, CourseContentStatus,
 } from './types'
 
