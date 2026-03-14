@@ -1106,6 +1106,7 @@ function AskTab({ courseId, scopeSets, artifacts }: {
   const [contextMode, setContextMode]   = useState<'all' | 'revision'>('all')
   const bottomRef     = useRef<HTMLDivElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
+  const textareaRef   = useRef<HTMLTextAreaElement>(null)
   const autoSentRef   = useRef(false)
   const abortRef      = useRef<AbortController | null>(null)
 
@@ -1113,6 +1114,13 @@ function AskTab({ courseId, scopeSets, artifacts }: {
 
   const approvedCount = artifacts.filter(a => a.status === 'approved').length
   const revisionCount = artifacts.filter(a => a.status === 'approved' && a.doc_type === 'revision').length
+
+  function handleTextareaChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    setInput(e.target.value)
+    const ta = e.target
+    ta.style.height = 'auto'
+    ta.style.height = Math.min(ta.scrollHeight, 200) + 'px'
+  }
 
   function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -1283,79 +1291,74 @@ function AskTab({ courseId, scopeSets, artifacts }: {
     <>
     {lightboxSrc && <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
     <div className="flex flex-col h-full">
-      {/* 顶部标题栏 */}
-      <div className="flex-shrink-0 px-8 pt-6 pb-3 border-b"
-        style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-        <h2 className="text-xl font-bold text-white flex items-center gap-2">
-          <MessageSquare size={20} style={{ color: '#FFD700' }} /> {t('ask_title')}
-        </h2>
-        <p className="text-xs mt-0.5" style={{ color: '#555' }}>{t('ask_sub')}</p>
-      </div>
-
-      {/* scope 选择器 + 警告 */}
-      {(scopeSets.length > 0 || approvedCount === 0) && (
-        <div className="flex-shrink-0 px-8 py-2 flex flex-wrap items-center gap-3"
-          style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-          {scopeSets.length > 0 && (
-            <div className="flex items-center gap-2">
-              <label className="text-xs" style={{ color: '#666' }}>{t('ask_scope_label')}</label>
-              <select className="input-glass text-xs py-1" value={scopeSetId ?? ''}
-                onChange={e => setScopeSetId(Number(e.target.value) || undefined)}>
-                {scopeSets.map(s => <option key={s.id} value={s.id}>{s.name}{s.is_default ? ' (全部)' : ''}</option>)}
-              </select>
-            </div>
-          )}
-          {approvedCount === 0 && (
-            <p className="text-xs px-2.5 py-1 rounded-lg"
-              style={{ background: 'rgba(255,165,0,0.1)', color: '#FFA500', border: '1px solid rgba(255,165,0,0.2)' }}>
-              {t('ask_no_files')}
-            </p>
-          )}
-        </div>
-      )}
 
       {/* 消息列表（唯一滚动区域） */}
-      <div className="flex-1 overflow-y-auto min-h-0 px-8 py-4 space-y-4">
+      <div className="flex-1 overflow-y-auto min-h-0 py-6">
+
+        {/* 空状态 */}
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full gap-3" style={{ color: '#444' }}>
-            <MessageSquare size={36} className="opacity-30" />
+          <div className="flex flex-col items-center justify-center h-full gap-4" style={{ color: '#444' }}>
+            <div className="w-12 h-12 rounded-full flex items-center justify-center"
+              style={{ background: 'rgba(255,215,0,0.08)', border: '1px solid rgba(255,215,0,0.15)' }}>
+              <MessageSquare size={22} style={{ color: '#FFD700', opacity: 0.6 }} />
+            </div>
             <p className="text-sm">{t('ask_empty_msg')}</p>
+            {approvedCount === 0 && (
+              <p className="text-xs px-3 py-1.5 rounded-lg"
+                style={{ background: 'rgba(255,165,0,0.08)', color: '#FFA500', border: '1px solid rgba(255,165,0,0.18)' }}>
+                {t('ask_no_files')}
+              </p>
+            )}
           </div>
         )}
-        {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className="max-w-[82%] space-y-1.5">
-              {/* 用户上传的图片预览 */}
-              {m.role === 'user' && m.imagePreview && (
-                <div className="flex justify-end">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={m.imagePreview} alt="上传的图片"
-                    className="max-w-[240px] max-h-[180px] rounded-xl object-cover"
-                    style={{ border: '1px solid rgba(255,215,0,0.3)' }} />
-                </div>
-              )}
 
-              <div className="px-4 py-3 rounded-2xl text-sm"
-                style={{
-                  background: m.role === 'user' ? 'rgba(255,215,0,0.15)' : 'rgba(255,255,255,0.05)',
-                  color: m.role === 'user' ? '#FFD700' : '#CCC',
-                  border: `1px solid ${m.role === 'user' ? 'rgba(255,215,0,0.3)' : 'rgba(255,255,255,0.08)'}`,
-                }}>
-                {m.role === 'assistant'
-                  ? (
-                    m.streaming && !m.content ? (
-                      // 流式占位：显示阶段状态
-                      <div className="flex items-center gap-2" style={{ color: '#666' }}>
-                        <Loader2 size={14} className="animate-spin" />
-                        <span className="text-xs">
-                          {m.streamStatus === 'filtering'   ? '正在搜索相关资料…'     :
-                           m.streamStatus === 'generating'  ? '正在生成回答…'         :
-                           m.streamStatus === 'slow'        ? '正在深度思考，稍等片刻…' :
+        {messages.map((m, i) => (
+          <div key={i} className={`px-4 py-1 ${m.role === 'user' ? '' : ''}`}>
+            <div className="max-w-3xl mx-auto">
+              {m.role === 'user' ? (
+                /* ── 用户消息：右对齐气泡 ── */
+                <div className="flex flex-col items-end gap-1.5">
+                  {m.imagePreview && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={m.imagePreview} alt="上传的图片"
+                      className="max-w-[240px] max-h-[180px] rounded-2xl object-cover"
+                      style={{ border: '1px solid rgba(255,255,255,0.1)' }} />
+                  )}
+                  <div className="px-4 py-2.5 rounded-2xl text-sm max-w-[80%] whitespace-pre-wrap"
+                    style={{
+                      background: 'rgba(255,255,255,0.09)',
+                      color: '#E5E5E5',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      lineHeight: '1.6',
+                    }}>
+                    {m.content}
+                  </div>
+                </div>
+              ) : (
+                /* ── AI 消息：左侧头像 + 全宽文本 ── */
+                <div className="flex gap-3 py-2">
+                  {/* AI 头像 */}
+                  <div className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center mt-0.5"
+                    style={{ background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.2)' }}>
+                    <Sparkles size={13} style={{ color: '#FFD700' }} />
+                  </div>
+
+                  {/* 内容区 */}
+                  <div className="flex-1 min-w-0 space-y-3">
+                    {m.streaming && !m.content ? (
+                      /* 流式占位 */
+                      <div className="flex items-center gap-2 py-1" style={{ color: '#555' }}>
+                        <Loader2 size={14} className="animate-spin flex-shrink-0" />
+                        <span className="text-sm">
+                          {m.streamStatus === 'filtering'  ? '正在搜索相关资料…'      :
+                           m.streamStatus === 'generating' ? '正在生成回答…'          :
+                           m.streamStatus === 'slow'       ? '正在深度思考，稍等片刻…' :
                            t('ask_thinking')}
                         </span>
                       </div>
                     ) : (
-                      <div className="prose prose-invert prose-sm max-w-none">
+                      <div className="prose prose-invert prose-sm max-w-none"
+                        style={{ color: '#D1D5DB', lineHeight: '1.75' }}>
                         <ReactMarkdown
                           components={{
                             img: ({ src, alt }) => {
@@ -1386,206 +1389,216 @@ function AskTab({ courseId, scopeSets, artifacts }: {
                           />
                         )}
                       </div>
-                    )
-                  )
-                  : m.content}
-              </div>
+                    )}
 
-              {/* 检索范围徽章（仅复习资料模式显示） */}
-              {m.role === 'assistant' && m.contextMode === 'revision' && (
-                <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px]"
-                  style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)', color: '#a5b4fc' }}>
-                  <BookOpen size={10} />
-                  <span>仅复习资料检索</span>
-                </div>
-              )}
+                    {/* 来源引用 */}
+                    {m.sources && m.sources.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {m.sources.map(s => (
+                          s.storage_url
+                            ? <a key={s.artifact_id} href={s.storage_url} target="_blank" rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-md transition-opacity hover:opacity-100"
+                                style={{ background: 'rgba(255,215,0,0.06)', color: '#FFD700', opacity: 0.65, border: '1px solid rgba(255,215,0,0.12)' }}>
+                                <ExternalLink size={9} />{s.file_name}
+                              </a>
+                            : <span key={s.artifact_id} className="text-xs px-2 py-0.5 rounded-md"
+                                style={{ background: 'rgba(255,255,255,0.04)', color: '#555' }}>
+                                {s.file_name}
+                              </span>
+                        ))}
+                        {m.contextMode === 'revision' && (
+                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md"
+                            style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', color: '#a5b4fc' }}>
+                            <BookOpen size={9} />仅复习资料
+                          </span>
+                        )}
+                      </div>
+                    )}
 
-              {/* 来源引用 */}
-              {m.role === 'assistant' && m.sources && m.sources.length > 0 && (
-                <div className="px-3 py-2 rounded-xl text-xs space-y-1"
-                  style={{ background: 'rgba(255,215,0,0.04)', border: '1px solid rgba(255,215,0,0.1)' }}>
-                  <p style={{ color: '#666' }}>{t('ask_sources')}</p>
-                  {m.sources.map(s => (
-                    s.storage_url
-                      ? <a key={s.artifact_id} href={s.storage_url} target="_blank" rel="noopener noreferrer"
-                          className="flex items-center gap-1 transition-opacity hover:opacity-100"
-                          style={{ color: '#FFD700', opacity: 0.75 }}>
-                          <ExternalLink size={10} />{s.file_name}
-                        </a>
-                      : <span key={s.artifact_id} style={{ color: '#555' }}>· {s.file_name}</span>
-                  ))}
-                </div>
-              )}
-
-              {/* 生成图解按钮 + 图解结果 */}
-              {m.role === 'assistant' && (
-                <div>
-                  {m.explainImage ? (
-                    <div className="mt-2 rounded-xl overflow-hidden"
-                      style={{ border: '1px solid rgba(255,215,0,0.2)' }}>
-                      <p className="px-3 py-1.5 text-xs flex items-center gap-1"
-                        style={{ color: '#888', background: 'rgba(255,215,0,0.04)' }}>
-                        <Sparkles size={10} style={{ color: '#FFD700' }} />
-                        AI 生成讲解图
-                        <span className="ml-auto opacity-50 text-[10px]">点击放大</span>
-                      </p>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={m.explainImage} alt="AI 讲解图"
-                        className="w-full cursor-zoom-in"
-                        style={{ background: '#fff' }}
-                        onClick={() => setLightboxSrc(m.explainImage!)} />
-                    </div>
-                  ) : m.explainFailed ? (
-                    <p className="text-xs px-1" style={{ color: '#555' }}>图解生成失败，请重试</p>
-                  ) : (
-                    <button
-                      onClick={() => generateExplainImage(i)}
-                      disabled={!!m.loadingExplain}
-                      className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg transition-opacity hover:opacity-100"
-                      style={{
-                        opacity: m.loadingExplain ? 0.6 : 0.5,
-                        color: '#FFD700',
-                        border: '1px solid rgba(255,215,0,0.2)',
-                        background: 'rgba(255,215,0,0.04)',
-                      }}>
-                      {m.loadingExplain
-                        ? <><Loader2 size={10} className="animate-spin" />生成中…</>
-                        : <><Sparkles size={10} />生成讲解图</>}
-                    </button>
-                  )}
+                    {/* 生成讲解图 */}
+                    {m.explainImage ? (
+                      <div className="rounded-xl overflow-hidden"
+                        style={{ border: '1px solid rgba(255,255,255,0.08)', maxWidth: 480 }}>
+                        <p className="px-3 py-1.5 text-xs flex items-center gap-1"
+                          style={{ color: '#666', background: 'rgba(255,255,255,0.03)' }}>
+                          <Sparkles size={10} style={{ color: '#FFD700' }} />AI 讲解图
+                          <span className="ml-auto opacity-40 text-[10px]">点击放大</span>
+                        </p>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={m.explainImage} alt="AI 讲解图"
+                          className="w-full cursor-zoom-in"
+                          style={{ background: '#fff' }}
+                          onClick={() => setLightboxSrc(m.explainImage!)} />
+                      </div>
+                    ) : m.explainFailed ? (
+                      <p className="text-xs" style={{ color: '#555' }}>图解生成失败，请重试</p>
+                    ) : !m.streaming && m.content ? (
+                      <button
+                        onClick={() => generateExplainImage(i)}
+                        disabled={!!m.loadingExplain}
+                        className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg transition-opacity hover:opacity-100"
+                        style={{
+                          opacity: m.loadingExplain ? 0.5 : 0.4,
+                          color: '#888',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                        }}>
+                        {m.loadingExplain
+                          ? <><Loader2 size={10} className="animate-spin" />生成中…</>
+                          : <><Sparkles size={10} />生成讲解图</>}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               )}
             </div>
           </div>
         ))}
+
         {loading && !messages.at(-1)?.streaming && (
-          <div className="flex justify-start">
-            <div className="px-4 py-3 rounded-2xl text-sm" style={{ background: 'rgba(255,255,255,0.05)', color: '#666' }}>
-              <Loader2 size={14} className="animate-spin inline mr-2" />{t('ask_thinking')}
+          <div className="px-4 py-1">
+            <div className="max-w-3xl mx-auto flex gap-3">
+              <div className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center"
+                style={{ background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.2)' }}>
+                <Sparkles size={13} style={{ color: '#FFD700' }} />
+              </div>
+              <div className="flex items-center gap-2 py-1" style={{ color: '#555' }}>
+                <Loader2 size={14} className="animate-spin" />
+                <span className="text-sm">{t('ask_thinking')}</span>
+              </div>
             </div>
           </div>
         )}
         <div ref={bottomRef} />
       </div>
 
-      {/* 底部输入区（固定在底部，永远可见） */}
-      {/* Bug 2 fix: paddingBottom 叠加 safe-area-inset-bottom，防止 iOS Home Indicator 遮挡 */}
-      <div className="flex-shrink-0 px-8 pt-3 border-t"
-        style={{
-          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1.5rem)',
-          borderColor: 'rgba(255,255,255,0.05)',
-        }}>
+      {/* ── 底部输入区 ── */}
+      <div className="flex-shrink-0 px-4 pt-3 pb-4"
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)' }}>
+        <div className="max-w-3xl mx-auto space-y-2">
 
-      {/* Context Mode 切换 */}
-      <div className="flex items-center gap-1.5 mb-2">
-        <span className="text-xs mr-1" style={{ color: '#555' }}>检索范围：</span>
-        {(
-          [
-            { mode: 'all'      as const, label: '全库提问', title: '在所有已上传资料中检索' },
-            { mode: 'revision' as const, label: '仅复习资料', title: '仅在「复习总结」类型文件中检索' },
-          ] as const
-        ).map(({ mode, label, title }) => {
-          const active = contextMode === mode
-          const disabled = mode === 'revision' && revisionCount === 0
-          return (
-            <button
-              key={mode}
-              title={disabled ? '该课程暂无「复习总结」类型文件' : title}
-              disabled={disabled}
-              onClick={() => setContextMode(mode)}
-              className="text-xs px-2.5 py-1 rounded-full transition-all"
-              style={{
-                background: active
-                  ? (mode === 'revision' ? 'rgba(99,102,241,0.25)' : 'rgba(255,215,0,0.18)')
-                  : 'rgba(255,255,255,0.04)',
-                border: active
-                  ? (mode === 'revision' ? '1px solid rgba(99,102,241,0.5)' : '1px solid rgba(255,215,0,0.4)')
-                  : '1px solid rgba(255,255,255,0.08)',
-                color: active
-                  ? (mode === 'revision' ? '#a5b4fc' : '#FFD700')
-                  : '#555',
-                opacity: disabled ? 0.35 : 1,
-                cursor: disabled ? 'not-allowed' : 'pointer',
-                fontWeight: active ? 600 : 400,
-              }}>
-              {label}
-            </button>
-          )
-        })}
-        {contextMode === 'revision' && revisionCount === 0 && (
-          <span className="text-xs" style={{ color: '#F87171' }}>
-            暂无复习资料，请先上传
-          </span>
-        )}
-        {contextMode === 'revision' && revisionCount > 0 && (
-          <span className="text-xs" style={{ color: '#6366F1', opacity: 0.7 }}>
-            · {revisionCount} 份复习资料
-          </span>
-        )}
-      </div>
+          {/* 顶部工具栏：scope 选择 + context mode */}
+          <div className="flex flex-wrap items-center gap-2">
+            {scopeSets.length > 0 && (
+              <select className="input-glass text-xs py-1 rounded-lg" value={scopeSetId ?? ''}
+                onChange={e => setScopeSetId(Number(e.target.value) || undefined)}>
+                {scopeSets.map(s => <option key={s.id} value={s.id}>{s.name}{s.is_default ? ' (全部)' : ''}</option>)}
+              </select>
+            )}
+            {(
+              [
+                { mode: 'all'      as const, label: '全库' },
+                { mode: 'revision' as const, label: '仅复习资料' },
+              ] as const
+            ).map(({ mode, label }) => {
+              const active = contextMode === mode
+              const disabled = mode === 'revision' && revisionCount === 0
+              return (
+                <button key={mode} disabled={disabled} onClick={() => setContextMode(mode)}
+                  className="text-xs px-2.5 py-1 rounded-full transition-all"
+                  style={{
+                    background: active
+                      ? (mode === 'revision' ? 'rgba(99,102,241,0.2)' : 'rgba(255,215,0,0.12)')
+                      : 'transparent',
+                    border: active
+                      ? (mode === 'revision' ? '1px solid rgba(99,102,241,0.4)' : '1px solid rgba(255,215,0,0.3)')
+                      : '1px solid rgba(255,255,255,0.07)',
+                    color: active ? (mode === 'revision' ? '#a5b4fc' : '#FFD700') : '#555',
+                    opacity: disabled ? 0.3 : 1,
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                  }}>
+                  {label}
+                </button>
+              )
+            })}
+            {contextMode === 'revision' && revisionCount > 0 && (
+              <span className="text-xs" style={{ color: '#6366F1', opacity: 0.6 }}>· {revisionCount} 份</span>
+            )}
+          </div>
 
-      {/* 图片预览 */}
-      {imagePreview && (
-        <div className="flex items-center gap-2 mb-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={imagePreview} alt="待发送图片"
-            className="h-14 w-14 rounded-lg object-cover"
-            style={{ border: '1px solid rgba(255,215,0,0.3)' }} />
-          <span className="text-xs flex-1 truncate" style={{ color: '#888' }}>{imageFile?.name}</span>
-          <button onClick={clearImage} className="p-1 rounded-full hover:bg-white/10 transition-colors"
-            style={{ color: '#666' }}>
-            <X size={14} />
-          </button>
-        </div>
-      )}
+          {/* 图片预览条 */}
+          {imagePreview && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={imagePreview} alt="待发送图片"
+                className="h-10 w-10 rounded-lg object-cover flex-shrink-0"
+                style={{ border: '1px solid rgba(255,255,255,0.12)' }} />
+              <span className="text-xs flex-1 truncate" style={{ color: '#666' }}>{imageFile?.name}</span>
+              <button onClick={clearImage} className="p-1 rounded-full hover:bg-white/10 transition-colors flex-shrink-0"
+                style={{ color: '#555' }}>
+                <X size={13} />
+              </button>
+            </div>
+          )}
 
-      <div className="flex gap-2">
-        {/* 隐藏文件选择 */}
-        <input ref={imageInputRef} type="file" accept="image/*"
-          className="hidden" onChange={handleImageSelect} />
-
-        {/* 上传图片按钮 */}
-        <button
-          onClick={() => imageInputRef.current?.click()}
-          disabled={loading || approvedCount === 0}
-          title="上传图片（Gemini 多模态分析）"
-          className="px-3 rounded-xl transition-opacity hover:opacity-100"
-          style={{
-            opacity: 0.55,
-            background: imagePreview ? 'rgba(255,215,0,0.12)' : 'rgba(255,255,255,0.05)',
-            border: `1px solid ${imagePreview ? 'rgba(255,215,0,0.4)' : 'rgba(255,255,255,0.08)'}`,
-            color: imagePreview ? '#FFD700' : '#666',
-          }}>
-          <ImagePlus size={16} />
-        </button>
-
-        <input className="input-glass flex-1 text-sm" placeholder={loading ? '生成中，可随时点击停止…' : t('ask_placeholder')}
-          value={input} onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-          disabled={loading || approvedCount === 0} />
-
-        {loading ? (
-          <button
-            className="px-4 rounded-xl transition-colors"
+          {/* 主输入框 */}
+          <div className="relative rounded-2xl"
             style={{
-              background: 'rgba(239,68,68,0.15)',
-              border: '1px solid rgba(239,68,68,0.35)',
-              color: '#F87171',
-            }}
-            onClick={() => abortRef.current?.abort()}
-            title="停止生成">
-            <Square size={14} />
-          </button>
-        ) : (
-          <button className="btn-gold px-4" onClick={() => send()}
-            disabled={loading || !input.trim() || approvedCount === 0}>
-            <Send size={14} />
-          </button>
-        )}
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.12)',
+            }}>
+            <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
+
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              className="w-full bg-transparent text-sm resize-none outline-none"
+              style={{
+                color: '#E5E5E5',
+                padding: '12px 50px 12px 48px',
+                lineHeight: '1.6',
+                maxHeight: '200px',
+                overflowY: 'auto',
+              }}
+              placeholder={loading ? '生成中，可随时点击停止…' : t('ask_placeholder')}
+              value={input}
+              onChange={handleTextareaChange}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+              }}
+              disabled={approvedCount === 0}
+            />
+
+            {/* 上传图片按钮（左侧） */}
+            <button
+              onClick={() => imageInputRef.current?.click()}
+              disabled={loading || approvedCount === 0}
+              title="上传图片"
+              className="absolute left-3 bottom-3 p-1.5 rounded-lg transition-colors hover:bg-white/10"
+              style={{ color: imagePreview ? '#FFD700' : '#555' }}>
+              <ImagePlus size={16} />
+            </button>
+
+            {/* 发送 / 停止按钮（右侧） */}
+            {loading ? (
+              <button
+                onClick={() => abortRef.current?.abort()}
+                title="停止生成"
+                className="absolute right-3 bottom-2.5 p-1.5 rounded-lg transition-colors"
+                style={{ background: 'rgba(239,68,68,0.15)', color: '#F87171', border: '1px solid rgba(239,68,68,0.25)' }}>
+                <Square size={14} />
+              </button>
+            ) : (
+              <button
+                onClick={() => send()}
+                disabled={!input.trim() || approvedCount === 0}
+                className="absolute right-3 bottom-2.5 p-1.5 rounded-lg transition-all"
+                style={{
+                  background: input.trim() && approvedCount > 0 ? 'rgba(255,215,0,0.9)' : 'rgba(255,255,255,0.06)',
+                  color: input.trim() && approvedCount > 0 ? '#000' : '#444',
+                  border: '1px solid transparent',
+                }}>
+                <Send size={14} />
+              </button>
+            )}
+          </div>
+
+          <p className="text-center text-[11px]" style={{ color: '#333' }}>
+            Enter 发送 · Shift+Enter 换行
+          </p>
+        </div>
       </div>
 
-      </div>{/* end 底部输入区 */}
     </div>
     </>
   )
