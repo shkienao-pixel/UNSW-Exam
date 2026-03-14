@@ -33,6 +33,7 @@ from app.models.auth import (
     VerifyOtpRequest,
 )
 from app.services import credit_service
+from app.core.supabase_client import restore_service_role_auth
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -139,6 +140,10 @@ def register(body: RegisterRequest, supabase: Client = Depends(get_db)) -> Regis
                     raise AuthError("This email is already registered and verified. Please log in.") from resend_exc
             return RegisterResponse(status="otp_sent", email=body.email)
         raise AuthError(_friendly_auth_error(exc, "Registration")) from exc
+    finally:
+        # supabase-py v2 updates the shared PostgREST auth header to the new user's
+        # JWT after sign_up(); restore service-role key so subsequent admin ops work.
+        restore_service_role_auth()
 
     # Registration always requires OTP — never return tokens here.
     return RegisterResponse(status="otp_sent", email=body.email)
@@ -157,6 +162,9 @@ def verify_otp(body: VerifyOtpRequest, supabase: Client = Depends(get_db)) -> To
         )
     except Exception as exc:
         raise AuthError(_friendly_auth_error(exc, "OTP verification")) from exc
+    finally:
+        # Restore service-role key so subsequent table ops bypass RLS correctly.
+        restore_service_role_auth()
 
     if resp.session is None:
         raise AuthError("Invalid or expired verification code.")

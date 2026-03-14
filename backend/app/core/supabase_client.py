@@ -43,3 +43,22 @@ def get_supabase() -> Client:
         _created_at = now
         logger.debug("Supabase client (re)created")
     return _client
+
+
+def restore_service_role_auth() -> None:
+    """Reset PostgREST auth header back to the service-role key.
+
+    supabase-py v2 listens to auth state changes and replaces the PostgREST
+    Authorization header with the newly signed-in user's JWT whenever
+    auth.sign_up() / auth.verify_otp() is called on the shared singleton client.
+    This causes subsequent admin table operations to run under the user's JWT,
+    which triggers RLS violations even though RLS is meant to be bypassed by
+    the service-role key.
+
+    Call this immediately after any supabase.auth.sign_up() / verify_otp() call.
+    """
+    global _client
+    if _client is not None:
+        cfg = get_settings()
+        _client.postgrest.auth(cfg.supabase_service_role_key)
+        logger.debug("PostgREST auth restored to service-role key")
