@@ -238,7 +238,11 @@ function MockSessionList({
       await loadSessions()
       // Auto-start the new session
       const { questions } = await api.exam.getQuestions(courseId, { mock_session_id: session_id })
-      if (questions.length > 0) onStart(questions, undefined, session_id)
+      if (questions.length > 0) {
+        onStart(questions, undefined, session_id)
+      } else {
+        alert(lang === 'zh' ? '生成完成但未返回题目，请重试' : 'Generation completed but no questions returned, please retry')
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       alert(msg)

@@ -43,6 +43,10 @@ def _payload_to_body(payload: dict[str, Any]) -> SimpleNamespace:
         artifact_ids=payload.get("artifact_ids"),
         num_questions=int(payload.get("num_questions", 10)),
         exclude_topics=list(payload.get("exclude_topics") or []),
+        # exam_mock fields
+        num_mcq=int(payload.get("num_mcq", 10)),
+        num_short=int(payload.get("num_short", 5)),
+        session_id=payload.get("session_id", ""),
     )
 
 
