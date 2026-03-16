@@ -63,21 +63,14 @@ def _ensure_exam_pages_bucket(supabase: Client) -> None:
     _BUCKET_CREATED = True
 
 
-def _upload_page_image(supabase: Client, img_bytes: bytes, artifact_id: int, page_num: int) -> str | None:
-    """Upload a page screenshot to Supabase Storage and return its public URL.
+def _upload_page_image(supabase: Client, jpeg_bytes: bytes, artifact_id: int, page_num: int) -> str | None:
+    """Upload a JPEG page screenshot to Supabase Storage and return its public URL.
 
     Uses a dedicated 'exam-pages' bucket (public, image/* allowed).
-    Converts to JPEG for smaller payload.
+    Caller must supply JPEG bytes (not PNG).
     """
     try:
-        import fitz as _fitz
         _ensure_exam_pages_bucket(supabase)
-        # Convert PNG bytes → JPEG to reduce size and avoid bucket MIME restrictions
-        _pix = _fitz.Pixmap(stream=img_bytes, filetype="png")
-        if _pix.alpha:
-            _pix = _fitz.Pixmap(_fitz.csRGB, _pix)
-        jpeg_bytes = _pix.tobytes("jpeg", 85)
-
         path = f"{artifact_id}/page_{page_num + 1}.jpg"
         supabase.storage.from_(_EXAM_PAGES_BUCKET).upload(
             path, jpeg_bytes, {"content-type": "image/jpeg", "upsert": "true"}
@@ -108,8 +101,9 @@ def _extract_questions_vision(data: bytes, openai_key: str, supabase: Client, ar
         page = doc[page_num]
         mat = fitz.Matrix(2.0, 2.0)
         pix = page.get_pixmap(matrix=mat)
-        img_bytes = pix.tobytes("png")
-        b64 = base64.b64encode(img_bytes).decode()
+        # Generate JPEG for upload (smaller); keep PNG for base64 to preserve quality
+        jpeg_bytes = pix.tobytes("jpeg", 85)
+        b64 = base64.b64encode(pix.tobytes("png")).decode()
 
         try:
             resp = client.chat.completions.create(
@@ -138,7 +132,7 @@ def _extract_questions_vision(data: bytes, openai_key: str, supabase: Client, ar
         # Upload page screenshot only when gpt-5.4 says there are visuals
         page_image_url: str | None = None
         if has_visual and page_qs:
-            page_image_url = _upload_page_image(supabase, img_bytes, artifact_id, page_num)
+            page_image_url = _upload_page_image(supabase, jpeg_bytes, artifact_id, page_num)
 
         for q in page_qs:
             if q.get("question_text"):
