@@ -20,6 +20,54 @@ from app.services.generate_service import _chat, _extract_json, _raw_extract
 logger = logging.getLogger(__name__)
 
 _MAX_PDF_CHARS = 80_000
+_MIN_TEXT_LEN = 100  # below this, treat PDF as scanned and use Vision
+
+
+def _extract_text_vision(data: bytes, openai_key: str) -> str:
+    """Convert each PDF page to an image and use GPT-4o Vision to OCR the content."""
+    import base64
+    import io
+    import fitz  # pymupdf
+
+    doc = fitz.open(stream=data, filetype="pdf")
+    all_text: list[str] = []
+
+    from openai import OpenAI
+    client = OpenAI(api_key=openai_key, timeout=120.0)
+
+    for page_num in range(len(doc)):
+        page = doc[page_num]
+        mat = fitz.Matrix(2.0, 2.0)  # 2x zoom for better resolution
+        pix = page.get_pixmap(matrix=mat)
+        img_bytes = pix.tobytes("png")
+        b64 = base64.b64encode(img_bytes).decode()
+
+        try:
+            resp = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "This is a page from a university exam paper. Extract ALL text exactly as written, preserving question numbers, options (A/B/C/D), and structure. Output plain text only.",
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{b64}", "detail": "high"},
+                        },
+                    ],
+                }],
+                max_tokens=4096,
+            )
+            page_text = resp.choices[0].message.content or ""
+            all_text.append(page_text)
+            logger.info("_extract_text_vision: page %d extracted %d chars", page_num + 1, len(page_text))
+        except Exception as exc:
+            logger.warning("_extract_text_vision: page %d failed: %s", page_num + 1, exc)
+
+    doc.close()
+    return "\n\n".join(all_text)
 
 
 # ── Extract questions from past exam PDF ──────────────────────────────────────
@@ -82,6 +130,18 @@ def extract_questions_from_artifact(
             "extract_questions: text extraction failed for artifact %s: %s", artifact_id, exc
         )
         return []
+
+    # Scanned PDF fallback: if text is too short, use GPT-4o Vision OCR
+    if ft == "pdf" and len(text.strip()) < _MIN_TEXT_LEN:
+        logger.info(
+            "extract_questions: artifact %s looks like scanned PDF (%d chars), trying Vision OCR",
+            artifact_id, len(text.strip()),
+        )
+        try:
+            text = _extract_text_vision(data, openai_key)
+        except Exception as exc:
+            logger.error("extract_questions: Vision OCR failed for artifact %s: %s", artifact_id, exc)
+            return []
 
     if not text.strip():
         return []
