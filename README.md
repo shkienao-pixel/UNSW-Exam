@@ -49,6 +49,18 @@
 
 ## Changelog
 
+### v1.4.0 (2026-03-17)
+
+**Exam Feature Overhaul:**
+- **真题解锁积分制** — 每份真题首次访问需支付 150 积分解锁，之后永久免费；`exam_unlocks` 表记录解锁状态，前端显示 🔒/开始做题 按钮
+- **模拟题生成积分** — 每次生成扣 100 积分（`gen_exam_mock`），接入 generation_worker 积分扣费流程
+- **修复模拟题 0 题问题** — `_payload_to_body` 未解包 `session_id/num_mcq/num_short`，导致所有题以 `mock_session_id=""` 存入 DB；前端拿 UUID 查询返回空，现已修复
+- **修复 Storage 403** — `auth.sign_up/verify_otp` 污染共享 Supabase client 的 Storage auth header；`restore_service_role_auth()` 现同时重置 PostgREST 和 Storage；`_bg_extract_questions` 后台任务开始时调用
+- **MCQ 识别改进** — 跨页合并时若 continuation 为 mcq，提升合并题的 question_type 并继承 options；Vision/text prompt 扩展支持 `(A)/(B)/(C)/(D)` 格式
+- **migration 030** — `exam_unlocks(user_id, artifact_id)` 表
+
+---
+
 ### v1.3.0 (2026-03-16)
 
 **AI Q&A Overhaul:**
