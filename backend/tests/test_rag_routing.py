@@ -314,48 +314,4 @@ class TestDocTypeErrorMessages:
         assert "复习总结" in detail or "revision" in detail
 
 
-# ── Knowledge router revision-strict routing ──────────────────────────────────
-
-class TestKnowledgeRoutingRevisionStrict:
-    def _make_client(self):
-        from fastapi.testclient import TestClient
-        from app.main import app
-        from app.core.dependencies import get_current_user, get_db
-        app.dependency_overrides[get_current_user] = lambda: {"id": "u1", "email": "t@t.com"}
-        app.dependency_overrides[get_db] = lambda: MagicMock()
-        return TestClient(app, raise_server_exceptions=False)
-
-    def test_knowledge_build_uses_revision_when_available(self):
-        client = self._make_client()
-        with (
-            patch("app.services.course_service.get_course", return_value={"id": "c1"}),
-            patch("app.routers.knowledge.get_artifact_ids_by_doc_type", return_value=[5, 6]) as mock_gaid,
-            patch("app.routers.knowledge._get_context", return_value=("some content here", [])),
-            patch("app.routers.knowledge._stage_extract", return_value={"outline": {"nodes": []}, "graph": {"nodes": [], "edges": []}}),
-            patch("app.routers.knowledge._save_knowledge"),
-            patch("app.routers.knowledge.get_settings") as ms,
-        ):
-            ms.return_value.openai_api_key = "key"
-            resp = client.post("/knowledge/build", json={"course_id": "c1", "allow_ai_fill": False})
-        # Verify get_artifact_ids_by_doc_type was called with course_id and ["revision"]
-        # (don't compare the supabase mock object directly — use call_args)
-        assert mock_gaid.called
-        _args, _kwargs = mock_gaid.call_args
-        assert _args[1] == "c1"          # course_id
-        assert _args[2] == ["revision"]  # doc_types
-
-    def test_knowledge_build_no_revision_raises_app_error(self):
-        """Revision-strict: when no revision docs found, return 400 with a helpful message."""
-        client = self._make_client()
-        with (
-            patch("app.services.course_service.get_course", return_value={"id": "c1"}),
-            patch("app.routers.knowledge.get_artifact_ids_by_doc_type", return_value=[]),
-            patch("app.routers.knowledge._get_context", return_value=("", [])),
-            patch("app.routers.knowledge.get_settings") as ms,
-        ):
-            ms.return_value.openai_api_key = "key"
-            resp = client.post("/knowledge/build", json={"course_id": "c1", "allow_ai_fill": False})
-        # Revision strict — no fallback — should return 400 with a meaningful Chinese error
-        assert resp.status_code in (400, 422)
-        detail = resp.json().get("detail", "")
-        assert "复习" in detail or "revision" in detail
+# TestKnowledgeRoutingRevisionStrict removed — knowledge router was deleted

@@ -33,13 +33,13 @@ def test_check_credits_ok():
     app.dependency_overrides[get_current_user] = override_auth
     app.dependency_overrides[get_db] = override_db
     try:
-        with patch("app.routers.credits.credit_service.get_balance", return_value=10):
+        with patch("app.routers.credits.credit_service.get_balance", return_value=50):
             resp = client.post("/credits/check", json={"type_": "gen_ask"})
         assert resp.status_code == 200
         body = resp.json()
         assert body["ok"] is True
-        assert body["required"] == 3
-        assert body["balance"] == 10
+        assert body["required"] == 20
+        assert body["balance"] == 50
     finally:
         app.dependency_overrides.pop(get_current_user, None)
         app.dependency_overrides.pop(get_db, None)
@@ -49,12 +49,12 @@ def test_check_credits_insufficient_returns_402():
     app.dependency_overrides[get_current_user] = override_auth
     app.dependency_overrides[get_db] = override_db
     try:
-        with patch("app.routers.credits.credit_service.get_balance", return_value=1):
+        with patch("app.routers.credits.credit_service.get_balance", return_value=5):
             resp = client.post("/credits/check", json={"type_": "gen_ask"})
         assert resp.status_code == 402
         body = resp.json()
-        assert body["required"] == 3
-        assert body["balance"] == 1
+        assert body["required"] == 20
+        assert body["balance"] == 5
     finally:
         app.dependency_overrides.pop(get_current_user, None)
         app.dependency_overrides.pop(get_db, None)

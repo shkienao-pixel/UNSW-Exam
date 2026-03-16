@@ -36,7 +36,7 @@
 
 | Feature | Description |
 |---------|-------------|
-| **AI Q&A (RAG)** | Multi-model retrieval-augmented Q&A grounded in uploaded materials, with citations and optional image generation |
+| **AI Q&A** | Direct Gemini 3.1 Pro Q&A with course context injection; supports image upload (VQA), multi-turn conversation history, draggable floating window |
 | **Summary** | GPT-4o distills key knowledge points from course materials |
 | **Quiz** | Generates de-duplicated multiple-choice questions, dynamically excluding previously seen topics |
 | **Flashcards** | MCQ + knowledge card dual mode, with a mistakes book |
@@ -48,6 +48,39 @@
 ---
 
 ## Changelog
+
+### v1.3.0 (2026-03-16)
+
+**AI Q&A Overhaul:**
+- **Direct Gemini 3.1 Pro generation** — Removed 3-stage RAG pipeline (pgvector retrieval → GPT-4o filter → Gemini generate); now sends question directly to Gemini 3.1 Pro for significantly faster responses
+- **Fixed system prompt** — Rewrote `GEMINI_ANSWER_SYSTEM`; previous prompt triggered "抱歉文档里没有" prefix on every answer due to stale RAG fallback logic; now answers cleanly without preamble
+- **Course name injection** — Current course name passed as context in every Gemini request (`【当前课程：COMP1531】`), improving answer relevance
+- **Per-course message isolation** — Chat history now keyed by `floating_ask_messages_${courseId}`; switching courses no longer pollutes conversation context
+- **Credit balance display** — Real-time credit counter shown in AI window title bar; turns red below 40 credits; refreshes after each message
+- **`gen_ask` cost updated** — 3 → 20 credits per query (reflecting Gemini 3.1 Pro usage)
+- **History limit** — Increased from 10 to 20 messages (leveraging Gemini's large context window)
+
+**Floating AI Window UX:**
+- **Draggable FAB** — Replaced sidebar AI Q&A button with a globally draggable floating action button; position persisted to localStorage
+- **User-resizable window** — Right/bottom/corner drag handles; size persisted to localStorage
+- **Background generation** — Closing/minimizing window no longer interrupts generation; FAB shows spinning animation and stop button when loading
+- **Mobile keyboard adaptation** — Uses `visualViewport` API to shrink bottom sheet when soft keyboard opens, keeping input visible
+- **Adaptive font sizes** — Desktop: 15px base / 13px secondary; Mobile: 13px / 12px; responds to window resize
+- **Removed dead UI** — Scope selector and context mode buttons removed (RAG removed, controls had no effect)
+
+**Bug Fixes:**
+- Fixed `sendMessage` stale closure — conversation history now read from `messagesRef` instead of captured state, preventing stale history in multi-turn conversations
+- Fixed double `localStorage.setItem` on resize end
+- Moved `loadSize`/`loadPos` to module scope (were recreated on every render)
+- `isMobile` now responds to `resize` events (was a one-time computed value)
+- Backend: Gemini key validated before credit deduction (previously user could be charged before key error)
+- Removed dead code: `art_ids`, `uid`, scope resolution in stream endpoint after RAG removal
+- Removed `scopeSets`/`artifacts` from floating context (unused after RAG removal)
+- Updated tests: credits test mock balance/assertions updated to reflect new `gen_ask` cost; deleted `TestKnowledgeRoutingRevisionStrict` (references deleted `knowledge` router)
+
+**Test Results:** Backend 178/178 ✅ · Frontend 44/44 ✅
+
+---
 
 ### v1.2.0 (2026-03-16)
 
