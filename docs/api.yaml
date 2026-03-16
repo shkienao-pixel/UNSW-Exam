@@ -1,0 +1,2783 @@
+openapi: "3.0.3"
+info:
+  title: UNSW Exam Master API
+  version: "1.0.0"
+  description: |
+    AI 驱动考试复习平台后端 API。
+    - 认证：除特殊标注外，所有用户端点使用 `Authorization: Bearer <access_token>`
+    - 管理端：使用 `X-Admin-Secret` 请求头
+    - 积分不足时返回 HTTP 402
+
+servers:
+  - url: https://api.exammaster.tech
+    description: 生产环境
+  - url: http://localhost:8005
+    description: 本地开发
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    AdminSecret:
+      type: apiKey
+      in: header
+      name: X-Admin-Secret
+
+  schemas:
+    # ── 公共 ──────────────────────────────────────────────
+    TokenResponse:
+      type: object
+      properties:
+        access_token:  { type: string }
+        refresh_token: { type: string }
+        expires_in:    { type: integer }
+
+    UserOut:
+      type: object
+      properties:
+        id:    { type: string, format: uuid }
+        email: { type: string, format: email }
+
+    MessageResponse:
+      type: object
+      properties:
+        message: { type: string }
+
+    OkResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+
+    # ── 课程 ──────────────────────────────────────────────
+    CourseOut:
+      type: object
+      properties:
+        id:        { type: string, format: uuid }
+        code:      { type: string, example: COMP3311 }
+        name:      { type: string }
+        exam_date: { type: string, format: date, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    CourseCreate:
+      type: object
+      required: [code, name]
+      properties:
+        code:      { type: string }
+        name:      { type: string }
+        exam_date: { type: string, format: date, nullable: true }
+
+    # ── 文件 ──────────────────────────────────────────────
+    ArtifactOut:
+      type: object
+      properties:
+        id:          { type: integer }
+        course_id:   { type: string, format: uuid }
+        file_name:   { type: string }
+        storage_url: { type: string, nullable: true }
+        status:      { type: string, enum: [pending, approved, rejected] }
+        doc_type:    { type: string, enum: [lecture, tutorial, revision, past_exam, assignment, other] }
+        week:        { type: integer, nullable: true }
+        uploaded_by: { type: string, format: uuid, nullable: true }
+        created_at:  { type: string, format: date-time }
+
+    # ── 范围集 ────────────────────────────────────────────
+    ScopeSetOut:
+      type: object
+      properties:
+        id:          { type: integer }
+        course_id:   { type: string, format: uuid }
+        name:        { type: string }
+        artifact_ids: { type: array, items: { type: integer } }
+
+    ScopeSetCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+
+    # ── 生成内容 ──────────────────────────────────────────
+    OutputOut:
+      type: object
+      properties:
+        id:          { type: integer }
+        course_id:   { type: string, format: uuid }
+        output_type: { type: string, enum: [summary, quiz, outline, flashcards] }
+        content:     { type: object }
+        created_at:  { type: string, format: date-time }
+
+    GenerateRequest:
+      type: object
+      properties:
+        scope_set_id:    { type: integer, nullable: true }
+        artifact_ids:    { type: array, items: { type: integer }, nullable: true }
+        num_questions:   { type: integer, nullable: true }
+        exclude_topics:  { type: array, items: { type: string }, nullable: true }
+
+    JobStatusResponse:
+      type: object
+      properties:
+        status:    { type: string, enum: [pending, processing, done, failed] }
+        output_id: { type: integer, nullable: true }
+        error_msg: { type: string, nullable: true }
+
+    # ── RAG 问答 ──────────────────────────────────────────
+    HistoryMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:    { type: string, enum: [user, assistant] }
+        content: { type: string }
+
+    AskRequest:
+      type: object
+      required: [question]
+      properties:
+        question:     { type: string }
+        scope_set_id: { type: integer, nullable: true }
+        context_mode: { type: string, enum: [all, revision], default: all }
+        history:      { type: array, items: { $ref: '#/components/schemas/HistoryMessage' } }
+
+    AskSource:
+      type: object
+      properties:
+        artifact_id:  { type: integer }
+        file_name:    { type: string }
+        storage_url:  { type: string, nullable: true }
+
+    AskResponse:
+      type: object
+      properties:
+        question:    { type: string }
+        answer:      { type: string }
+        sources:     { type: array, items: { $ref: '#/components/schemas/AskSource' } }
+        image_url:   { type: string, nullable: true }
+        model_used:  { type: string }
+
+    # ── 积分 ──────────────────────────────────────────────
+    CreditBalance:
+      type: object
+      properties:
+        balance: { type: integer }
+
+    CreditTransaction:
+      type: object
+      properties:
+        id:         { type: string }
+        amount:     { type: integer }
+        type:       { type: string }
+        note:       { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    # ── 反馈 ──────────────────────────────────────────────
+    FeedbackOut:
+      type: object
+      properties:
+        id:        { type: string }
+        user_id:   { type: string, format: uuid }
+        content:   { type: string }
+        page_url:  { type: string }
+        status:    { type: string, enum: [pending, in_progress, resolved, adopted] }
+        created_at: { type: string, format: date-time }
+
+    # ── 选课 ──────────────────────────────────────────────
+    EnrollmentOut:
+      type: object
+      properties:
+        id:        { type: string }
+        course_id: { type: string, format: uuid }
+        term:      { type: string }
+        year:      { type: integer }
+        created_at: { type: string, format: date-time }
+
+    # ── 考试题目 ──────────────────────────────────────────
+    ExamQuestion:
+      type: object
+      properties:
+        id:            { type: integer }
+        course_id:     { type: string, format: uuid }
+        artifact_id:   { type: integer, nullable: true }
+        source_type:   { type: string, enum: [past_exam, mock] }
+        question_type: { type: string, enum: [mcq, short_answer] }
+        question_index: { type: integer }
+        question_text: { type: string }
+        options:       { type: array, items: { type: string }, nullable: true }
+        correct_answer: { type: string, nullable: true }
+        explanation:   { type: string, nullable: true }
+        mock_session_id: { type: string, nullable: true }
+        is_favorite:   { type: boolean }
+        prev_answer:   { type: string, nullable: true }
+        prev_correct:  { type: boolean, nullable: true }
+        prev_feedback: { type: string, nullable: true }
+        created_at:    { type: string, format: date-time }
+
+    SubmitAnswer:
+      type: object
+      required: [question_id, user_answer]
+      properties:
+        question_id:  { type: integer }
+        user_answer:  { type: string }
+
+    SubmitResult:
+      type: object
+      properties:
+        question_id: { type: integer }
+        is_correct:  { type: boolean }
+        feedback:    { type: string }
+
+    # ── API 密钥 ──────────────────────────────────────────
+    ApiKeyOut:
+      type: object
+      properties:
+        id:         { type: integer }
+        provider:   { type: string, enum: [openai, gemini, deepseek] }
+        label:      { type: string, nullable: true }
+        is_active:  { type: boolean }
+        created_at: { type: string, format: date-time }
+
+# ────────────────────────────────────────────────────────────────
+# PATHS
+# ────────────────────────────────────────────────────────────────
+paths:
+
+  # ══════════════════════════════════════════
+  # SYSTEM
+  # ══════════════════════════════════════════
+
+  /health:
+    get:
+      tags: [system]
+      summary: 健康检查（存活探针）
+      description: 返回服务状态和 Supabase 连通性。
+      responses:
+        "200":
+          description: 服务正常
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:   { type: string, example: ok }
+                  supabase: { type: string, example: connected }
+
+  # ══════════════════════════════════════════
+  # AUTH
+  # ══════════════════════════════════════════
+
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: 开始注册（验证邀请码 + 发送 OTP）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, invite_code]
+              properties:
+                email:       { type: string, format: email }
+                password:    { type: string, minLength: 6 }
+                invite_code: { type: string }
+      responses:
+        "200":
+          description: OTP 已发送
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: otp_sent }
+                  email:  { type: string }
+        "400":
+          description: 邀请码无效或已用完
+
+  /auth/verify-otp:
+    post:
+      tags: [auth]
+      summary: 验证 OTP，完成注册，消费邀请码
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, token]
+              properties:
+                email: { type: string }
+                token: { type: string }
+      responses:
+        "200":
+          description: 注册成功，返回 JWT
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        "400":
+          description: OTP 错误或已过期
+
+  /auth/resend-otp:
+    post:
+      tags: [auth]
+      summary: 重新发送 OTP 邮件
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+      responses:
+        "200":
+          description: 发送成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+
+  /auth/guest-token:
+    post:
+      tags: [auth]
+      summary: 获取游客 JWT Token
+      responses:
+        "200":
+          description: 游客 Token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: 邮箱密码登录
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:    { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: 登录成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        "401":
+          description: 邮箱或密码错误
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: 刷新 access_token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+
+  /auth/request-reset:
+    post:
+      tags: [auth]
+      summary: 请求密码重置邮件
+      description: 始终返回成功（防止邮箱枚举）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageResponse' }
+
+  /auth/reset-password:
+    post:
+      tags: [auth]
+      summary: 用 recovery token 重置密码
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [access_token, new_password]
+              properties:
+                access_token:  { type: string }
+                new_password:  { type: string, minLength: 6 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageResponse' }
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: 注销当前会话
+      security:
+        - BearerAuth: []
+      responses:
+        "204":
+          description: 注销成功
+
+  /auth/me:
+    get:
+      tags: [auth]
+      summary: 获取当前用户信息
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserOut' }
+
+  # ══════════════════════════════════════════
+  # COURSES
+  # ══════════════════════════════════════════
+
+  /courses:
+    get:
+      tags: [courses]
+      summary: 列出所有共享课程
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CourseOut' }
+
+  /courses/{course_id}:
+    get:
+      tags: [courses]
+      summary: 获取单个课程详情
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseOut' }
+        "404":
+          description: 课程不存在
+
+  # ══════════════════════════════════════════
+  # ARTIFACTS
+  # ══════════════════════════════════════════
+
+  /courses/{course_id}/artifacts:
+    get:
+      tags: [artifacts]
+      summary: 列出课程文件
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, default: approved }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ArtifactOut' }
+
+    post:
+      tags: [artifacts]
+      summary: 用户上传文件（进入审核队列）
+      description: 最大 50 MB，上传后 status=pending，等待管理员审批。
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:     { type: string, format: binary }
+                doc_type: { type: string, default: lecture }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArtifactOut' }
+
+  /courses/{course_id}/artifacts/url:
+    post:
+      tags: [artifacts]
+      summary: 用户提交 URL 引用
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, display_name]
+              properties:
+                url:          { type: string }
+                display_name: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArtifactOut' }
+
+  /courses/{course_id}/artifacts/{artifact_id}/unlock:
+    post:
+      tags: [artifacts]
+      summary: 花积分解锁他人文件（50 积分）
+      description: 幂等——已解锁直接返回，不重复扣费。
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: artifact_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:               { type: boolean }
+                  already_unlocked: { type: boolean }
+                  storage_url:      { type: string, nullable: true }
+        "402":
+          description: 积分不足
+
+  /courses/{course_id}/artifacts/unlock-all:
+    post:
+      tags: [artifacts]
+      summary: 一次性解锁课程内所有锁定文件
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:             { type: boolean }
+                  locked_count:   { type: integer }
+                  unlocked_count: { type: integer }
+                  credits_spent:  { type: integer }
+
+  /courses/{course_id}/artifacts/{artifact_id}/doc-type:
+    patch:
+      tags: [artifacts]
+      summary: 上传者修改文件分类（同步 ChromaDB 元数据）
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: artifact_id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [doc_type]
+              properties:
+                doc_type: { type: string, enum: [lecture, tutorial, revision, past_exam, assignment, other] }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArtifactOut' }
+        "403":
+          description: 只有上传者可修改
+
+  /courses/{course_id}/artifacts/{artifact_id}:
+    delete:
+      tags: [artifacts]
+      summary: 删除文件
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: artifact_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  id: { type: integer }
+
+  # ══════════════════════════════════════════
+  # SCOPE SETS
+  # ══════════════════════════════════════════
+
+  /courses/{course_id}/scope-sets:
+    get:
+      tags: [scope-sets]
+      summary: 列出课程的范围集（若无则自动创建默认）
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ScopeSetOut' }
+
+    post:
+      tags: [scope-sets]
+      summary: 创建新范围集
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ScopeSetCreate' }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScopeSetOut' }
+
+  /courses/{course_id}/scope-sets/{scope_set_id}:
+    get:
+      tags: [scope-sets]
+      summary: 获取单个范围集
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: scope_set_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScopeSetOut' }
+
+    patch:
+      tags: [scope-sets]
+      summary: 重命名范围集
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: scope_set_id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ScopeSetCreate' }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScopeSetOut' }
+
+    delete:
+      tags: [scope-sets]
+      summary: 删除范围集
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: scope_set_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  id: { type: integer }
+
+  /courses/{course_id}/scope-sets/{scope_set_id}/items:
+    put:
+      tags: [scope-sets]
+      summary: 替换范围集内的文件列表
+      description: 防止跨课程 IDOR；未解锁文件不可加入。
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: scope_set_id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [artifact_ids]
+              properties:
+                artifact_ids: { type: array, items: { type: integer } }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScopeSetOut' }
+
+  # ══════════════════════════════════════════
+  # OUTPUTS
+  # ══════════════════════════════════════════
+
+  /courses/{course_id}/outputs:
+    get:
+      tags: [outputs]
+      summary: 列出生成的内容（可按类型过滤）
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: output_type
+          in: query
+          schema: { type: string, enum: [summary, quiz, outline, flashcards], default: "" }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/OutputOut' }
+
+  /courses/{course_id}/outputs/{output_id}:
+    get:
+      tags: [outputs]
+      summary: 获取单个生成内容
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: output_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OutputOut' }
+
+    delete:
+      tags: [outputs]
+      summary: 删除生成内容
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: output_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  id: { type: integer }
+
+  # ══════════════════════════════════════════
+  # CONTENT
+  # ══════════════════════════════════════════
+
+  /courses/{course_id}/content:
+    get:
+      tags: [content]
+      summary: 提取课程文件文本（用于前端预览生成范围）
+      description: 优先级：artifact_ids > scope_set_id > 全部已审核文件。
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: scope_set_id
+          in: query
+          schema: { type: integer, nullable: true }
+        - name: artifact_ids
+          in: query
+          description: 逗号分隔的文件 ID
+          schema: { type: string, default: "" }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  course_id:      { type: string }
+                  artifacts:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:   { type: integer }
+                        name: { type: string }
+                        type: { type: string }
+                        text: { type: string }
+                  total_chars:    { type: integer }
+                  artifact_count: { type: integer }
+
+  # ══════════════════════════════════════════
+  # GENERATION
+  # ══════════════════════════════════════════
+
+  /courses/{course_id}/generate/summary:
+    post:
+      tags: [generation]
+      summary: 异步生成课程总结
+      description: 立即返回 job_id，使用 GET /courses/{course_id}/jobs/{job_id} 轮询结果。
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GenerateRequest' }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id: { type: string }
+        "402":
+          description: 积分不足
+
+  /courses/{course_id}/generate/quiz:
+    post:
+      tags: [generation]
+      summary: 异步生成测验题目
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GenerateRequest' }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id: { type: string }
+
+  /courses/{course_id}/generate/outline:
+    post:
+      tags: [generation]
+      summary: 异步生成课程大纲
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GenerateRequest' }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id: { type: string }
+
+  /courses/{course_id}/generate/flashcards:
+    post:
+      tags: [generation]
+      summary: 异步生成闪卡
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GenerateRequest' }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id: { type: string }
+
+  /courses/{course_id}/jobs/{job_id}:
+    get:
+      tags: [generation]
+      summary: 轮询异步生成任务状态
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: job_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobStatusResponse' }
+
+  /courses/{course_id}/generate/ask:
+    post:
+      tags: [generation]
+      summary: RAG 问答（同步，4 阶段流水线）
+      description: |
+        pgvector 检索 → GPT-4o-mini 过滤 → Gemini 生成 → 可选 Imagen 配图。
+        Gemini 失败时自动回退至 GPT-4o。消耗 gen_ask 积分。
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AskRequest' }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AskResponse' }
+        "402":
+          description: 积分不足
+
+  /courses/{course_id}/generate/ask/stream:
+    post:
+      tags: [generation]
+      summary: RAG 问答（流式 SSE）
+      description: |
+        实时推送 tokens。事件类型：
+        - `{type:"status", phase:"filtering"|"generating"}`
+        - `{type:"token", text:"..."}`
+        - `{type:"done", answer, sources, image_url, model_used}`
+        - `{type:"error", message, code?}`
+        失败时自动退款。
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AskRequest' }
+      responses:
+        "200":
+          description: SSE 流
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /courses/{course_id}/generate/translate:
+    post:
+      tags: [generation]
+      summary: 批量翻译文本（GPT-4o-mini）
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [texts]
+              properties:
+                texts:       { type: array, items: { type: string } }
+                target_lang: { type: string, enum: [en, zh], default: en }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  translations: { type: array, items: { type: string } }
+
+  # ══════════════════════════════════════════
+  # CREDITS
+  # ══════════════════════════════════════════
+
+  /credits/balance:
+    get:
+      tags: [credits]
+      summary: 获取用户积分余额
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreditBalance' }
+
+  /credits/check:
+    post:
+      tags: [credits]
+      summary: 验证是否有足够积分（不扣费）
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type_]
+              properties:
+                type_: { type: string, enum: [gen_ask, unlock_upload, gen_summary, gen_quiz, gen_outline, gen_flashcards] }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:       { type: boolean }
+                  balance:  { type: integer }
+                  required: { type: integer }
+        "402":
+          description: 积分不足
+
+  /credits/deduct:
+    post:
+      tags: [credits]
+      summary: 扣除积分
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type_]
+              properties:
+                type_: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreditBalance' }
+
+  /credits/transactions:
+    get:
+      tags: [credits]
+      summary: 积分交易历史
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CreditTransaction' }
+
+  # ══════════════════════════════════════════
+  # ENROLLMENTS
+  # ══════════════════════════════════════════
+
+  /enrollments/status:
+    get:
+      tags: [enrollments]
+      summary: 获取选课状态（学期配置 + 已选课程列表）
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  current_term:        { type: string }
+                  current_year:        { type: integer }
+                  enrollment_cost:     { type: integer }
+                  max_per_term:        { type: integer }
+                  enrolled_course_ids: { type: array, items: { type: string } }
+                  slots_used:          { type: integer }
+                  slots_remaining:     { type: integer }
+
+  /enrollments:
+    get:
+      tags: [enrollments]
+      summary: 列出用户当前学期的选课记录
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/EnrollmentOut' }
+
+    post:
+      tags: [enrollments]
+      summary: 选课（花积分）
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [course_id]
+              properties:
+                course_id: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:         { type: boolean }
+                  enrollment: { $ref: '#/components/schemas/EnrollmentOut' }
+                  term:       { type: string }
+                  year:       { type: integer }
+        "402":
+          description: 积分不足
+
+  /enrollments/check/{course_id}:
+    get:
+      tags: [enrollments]
+      summary: 检查是否已选某课程
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enrolled: { type: boolean }
+                  term:     { type: string }
+                  year:     { type: integer }
+
+  # ══════════════════════════════════════════
+  # REVIEW PLAN
+  # ══════════════════════════════════════════
+
+  /review/settings:
+    get:
+      tags: [review]
+      summary: 获取用户复习计划配置（复习开始日 + 考试日）
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:              { type: string, nullable: true }
+                  user_id:         { type: string }
+                  course_id:       { type: string }
+                  review_start_at: { type: string, format: date-time, nullable: true }
+                  exam_at:         { type: string, format: date-time, nullable: true }
+
+    post:
+      tags: [review]
+      summary: 保存复习计划配置（upsert）
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [course_id]
+              properties:
+                course_id:       { type: string }
+                review_start_at: { type: string, format: date-time, nullable: true }
+                exam_at:         { type: string, format: date-time, nullable: true }
+      responses:
+        "200":
+          description: 保存成功
+
+  /review/progress:
+    get:
+      tags: [review]
+      summary: 获取用户课程大纲节点的所有进度记录
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    node_id:          { type: string }
+                    done:             { type: boolean }
+                    priority:         { type: integer, nullable: true }
+                    estimate_minutes: { type: integer, nullable: true }
+                    status:           { type: string, nullable: true }
+                    last_reviewed_at: { type: string, format: date-time, nullable: true }
+                    next_review_at:   { type: string, format: date-time, nullable: true }
+
+    post:
+      tags: [review]
+      summary: 批量 upsert 节点进度（仅更新提供的字段）
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [course_id, updates]
+              properties:
+                course_id: { type: string }
+                updates:
+                  type: array
+                  items:
+                    type: object
+                    required: [node_id]
+                    properties:
+                      node_id:          { type: string }
+                      done:             { type: boolean }
+                      priority:         { type: integer }
+                      estimate_minutes: { type: integer }
+                      status:           { type: string }
+                      last_reviewed_at: { type: string }
+                      next_review_at:   { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:      { type: boolean }
+                  updated: { type: integer }
+
+  /review/today_plan:
+    post:
+      tags: [review]
+      summary: 计算今日推荐复习节点
+      description: |
+        基于优先级、间隔复习算法和时间预算，计算今日应复习的节点 ID。
+        每日目标 = ceil(未做数 / 剩余天数)，限制在 [3, 15] 之间。
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [course_id, outline_nodes]
+              properties:
+                course_id:    { type: string }
+                outline_nodes:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      node_id:          { type: string }
+                      title:            { type: string }
+                      level:            { type: integer }
+                      done:             { type: boolean }
+                      priority:         { type: integer, nullable: true }
+                      estimate_minutes: { type: integer, nullable: true }
+                      status:           { type: string, nullable: true }
+                budget_minutes: { type: integer, default: 60 }
+                allow_spacing:  { type: boolean, default: true }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  node_ids:       { type: array, items: { type: string } }
+                  target_count:   { type: integer }
+                  remaining_days: { type: integer }
+                  total_undone:   { type: integer }
+
+  # ══════════════════════════════════════════
+  # FEEDBACK
+  # ══════════════════════════════════════════
+
+  /feedback:
+    post:
+      tags: [feedback]
+      summary: 提交用户反馈
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content, page_url]
+              properties:
+                content:  { type: string, minLength: 1, maxLength: 2000 }
+                page_url: { type: string, maxLength: 500 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  id: { type: string }
+
+  # ══════════════════════════════════════════
+  # EXAM
+  # ══════════════════════════════════════════
+
+  /courses/{course_id}/exam/past-exams:
+    get:
+      tags: [exam]
+      summary: 列出该课程已提取题目的真题文件
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:          { type: integer }
+                    file_name:   { type: string }
+                    artifact_id: { type: integer }
+                    created_at:  { type: string }
+
+  /courses/{course_id}/exam/questions:
+    get:
+      tags: [exam]
+      summary: 获取真题或模拟卷的题目（含用户答题记录）
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: artifact_id
+          in: query
+          schema: { type: integer }
+          description: 真题文件 ID（与 mock_session_id 二选一）
+        - name: mock_session_id
+          in: query
+          schema: { type: string }
+          description: 模拟卷会话 ID（与 artifact_id 二选一）
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  questions:
+                    type: array
+                    items: { $ref: '#/components/schemas/ExamQuestion' }
+                  total: { type: integer }
+
+  /courses/{course_id}/exam/mock/generate:
+    post:
+      tags: [exam]
+      summary: 触发异步生成模拟卷题目
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                num_mcq:   { type: integer, default: 10 }
+                num_short: { type: integer, default: 5 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id:     { type: string }
+                  session_id: { type: string }
+
+  /courses/{course_id}/exam/mock/sessions:
+    get:
+      tags: [exam]
+      summary: 列出历史模拟卷会话
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:            { type: string }
+                    created_at:    { type: string }
+                    num_questions: { type: integer }
+
+  /courses/{course_id}/exam/submit:
+    post:
+      tags: [exam]
+      summary: 提交答题，AI 自动批改
+      description: 选择题本地判断，短答题用 GPT 批改。
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answers]
+              properties:
+                answers:
+                  type: array
+                  items: { $ref: '#/components/schemas/SubmitAnswer' }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items: { $ref: '#/components/schemas/SubmitResult' }
+
+  /courses/{course_id}/exam/favorites/{question_id}:
+    post:
+      tags: [exam]
+      summary: 切换题目收藏状态（toggle）
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: question_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  is_favorite: { type: boolean }
+
+  /courses/{course_id}/exam/favorites:
+    get:
+      tags: [exam]
+      summary: 列出用户在该课程收藏的题目
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ExamQuestion' }
+
+  /exam/favorites:
+    get:
+      tags: [exam]
+      summary: 列出用户在所有课程收藏的题目（Mistakes 页面）
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ExamQuestion' }
+
+  # ══════════════════════════════════════════
+  # COURSE CONTENT (Admin Published Content)
+  # ══════════════════════════════════════════
+
+  /courses/{course_id}/course-content/{content_type}/status:
+    get:
+      tags: [course-content]
+      summary: 获取课程内容状态和解锁费用
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: content_type
+          in: path
+          required: true
+          schema: { type: string, enum: [summary, outline] }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:           { type: string, enum: [locked, unlocked, not_published] }
+                  credits_required: { type: integer }
+
+  /courses/{course_id}/course-content/{content_type}/unlock:
+    post:
+      tags: [course-content]
+      summary: 花积分解锁课程内容（幂等）
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: content_type
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:               { type: boolean }
+                  already_unlocked: { type: boolean }
+                  credits_spent:    { type: integer, nullable: true }
+
+  /courses/{course_id}/course-content/{content_type}:
+    get:
+      tags: [course-content]
+      summary: 获取已解锁的课程内容
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: content_type
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content_json: { type: object }
+
+  /courses/{course_id}/course-content/{content_type}/admin:
+    get:
+      tags: [course-content]
+      summary: 管理员获取课程内容（无需解锁）
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: content_type
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:       { type: string, enum: [draft, published, hidden, not_generated] }
+                  content_json: { type: object, nullable: true }
+                  updated_at:   { type: string, nullable: true }
+
+    put:
+      tags: [course-content]
+      summary: 管理员更新/发布课程内容
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: content_type
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content_json: { type: object, nullable: true }
+                status:       { type: string, enum: [draft, published, hidden] }
+      responses:
+        "200":
+          description: 更新成功
+
+  /courses/{course_id}/course-content/{content_type}/refine:
+    post:
+      tags: [course-content]
+      summary: 管理员用 LLM 从原始文本生成内容架构（存为草稿）
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: content_type
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [context]
+              properties:
+                context: { type: string, description: 原始文本内容 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:       { type: string, example: draft }
+                  content_json: { type: object }
+
+  # ══════════════════════════════════════════
+  # PLANNER
+  # ══════════════════════════════════════════
+
+  /courses/{course_id}/planner:
+    get:
+      tags: [planner]
+      summary: 生成用户考试复习计划（基于 blueprint + 用户进度）
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                description: 结构化复习计划
+
+  /courses/{course_id}/planner/toggle:
+    post:
+      tags: [planner]
+      summary: 标记考点/真题为完成或未完成
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [item_type, item_id, done]
+              properties:
+                item_type: { type: string, enum: [kp, paper] }
+                item_id:   { type: string }
+                done:      { type: boolean }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  # ══════════════════════════════════════════
+  # ADMIN — ARTIFACTS
+  # ══════════════════════════════════════════
+
+  /admin/artifacts:
+    get:
+      tags: [admin]
+      summary: 列出文件（按状态过滤）
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, default: pending }
+        - name: course_id
+          in: query
+          schema: { type: string, nullable: true }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ArtifactOut' }
+
+  /admin/artifacts/{artifact_id}/approve:
+    patch:
+      tags: [admin]
+      summary: 批准文件（触发后台 RAG 索引 + 题目提取）
+      description: 首次审核通过奖励上传者 1 积分。
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: artifact_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArtifactOut' }
+
+  /admin/artifacts/{artifact_id}/reject:
+    patch:
+      tags: [admin]
+      summary: 拒绝文件（可选原因，后台清理向量）
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: artifact_id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, default: "" }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArtifactOut' }
+
+  /admin/artifacts/{artifact_id}/extract-questions:
+    post:
+      tags: [admin]
+      summary: 手动触发（重新）提取 past_exam 文件的考试题目
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: artifact_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:          { type: boolean }
+                  artifact_id: { type: integer }
+                  message:     { type: string }
+
+  /admin/artifacts/{artifact_id}/doc-type:
+    patch:
+      tags: [admin]
+      summary: 管理员修改文件分类（同步 ChromaDB 元数据）
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: artifact_id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [doc_type]
+              properties:
+                doc_type: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArtifactOut' }
+
+  /admin/artifacts/{artifact_id}/week:
+    patch:
+      tags: [admin]
+      summary: 为文件标记教学周（1-10 或 null）
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: artifact_id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [week]
+              properties:
+                week: { type: integer, nullable: true, minimum: 1, maximum: 10 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArtifactOut' }
+
+  /admin/artifacts/{artifact_id}:
+    delete:
+      tags: [admin]
+      summary: 管理员删除文件
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: artifact_id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: course_id
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  id: { type: integer }
+
+  # ══════════════════════════════════════════
+  # ADMIN — COURSES
+  # ══════════════════════════════════════════
+
+  /admin/courses:
+    get:
+      tags: [admin]
+      summary: 列出所有课程（管理员视图）
+      security:
+        - AdminSecret: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CourseOut' }
+
+    post:
+      tags: [admin]
+      summary: 创建新课程
+      security:
+        - AdminSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CourseCreate' }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseOut' }
+
+  /admin/courses/{course_id}:
+    delete:
+      tags: [admin]
+      summary: 删除课程及所有关联数据
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  id: { type: string }
+
+  /admin/courses/{course_id}/exam-date:
+    patch:
+      tags: [admin]
+      summary: 设置/清除课程考试日期
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [exam_date]
+              properties:
+                exam_date: { type: string, format: date, nullable: true }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CourseOut' }
+
+  /admin/courses/{course_id}/artifacts:
+    post:
+      tags: [admin]
+      summary: 管理员上传文件（立即批准，触发 RAG 索引）
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:     { type: string, format: binary }
+                doc_type: { type: string, default: lecture }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArtifactOut' }
+
+  /admin/courses/{course_id}/artifacts/url:
+    post:
+      tags: [admin]
+      summary: 管理员添加 URL 引用（立即批准）
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, display_name]
+              properties:
+                url:          { type: string }
+                display_name: { type: string }
+                doc_type:     { type: string, default: other }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArtifactOut' }
+
+  /admin/courses/{course_id}/reindex:
+    post:
+      tags: [admin]
+      summary: 重新索引课程所有已批准文件（同步，可能耗时）
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+  /admin/courses/{course_id}/extract-all-questions:
+    post:
+      tags: [admin]
+      summary: 重新提取课程所有 past_exam 文件的题目
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:      { type: boolean }
+                  count:   { type: integer }
+                  message: { type: string }
+
+  /admin/courses/{course_id}/extraction-status:
+    get:
+      tags: [admin]
+      summary: 获取课程题目提取进度
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  done:  { type: integer }
+
+  # ══════════════════════════════════════════
+  # ADMIN — USERS
+  # ══════════════════════════════════════════
+
+  /admin/users:
+    get:
+      tags: [admin]
+      summary: 列出所有注册用户
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: include_unverified
+          in: query
+          schema: { type: boolean, default: true }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:               { type: string }
+                    email:            { type: string }
+                    created_at:       { type: string }
+                    last_sign_in_at:  { type: string, nullable: true }
+                    email_confirmed:  { type: boolean }
+
+  /admin/users/{user_id}/confirm-email:
+    post:
+      tags: [admin]
+      summary: 强制确认用户邮箱
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  id: { type: string }
+
+  /admin/users/{user_id}:
+    delete:
+      tags: [admin]
+      summary: 删除用户（硬删除）
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: email
+          in: query
+          schema: { type: string, nullable: true }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:                { type: boolean }
+                  id:                { type: string }
+                  already_deleted:   { type: boolean }
+                  deleted_duplicates: { type: integer }
+
+  /admin/users/credits:
+    get:
+      tags: [admin]
+      summary: 获取所有用户积分余额 map
+      security:
+        - AdminSecret: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: { type: integer }
+                description: "{ user_id: balance }"
+
+  /admin/users/{user_id}/credits/adjust:
+    post:
+      tags: [admin]
+      summary: 管理员手动增减用户积分
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, amount]
+              properties:
+                action: { type: string, enum: [add, deduct] }
+                amount: { type: integer, minimum: 1 }
+                note:   { type: string, nullable: true }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:      { type: boolean }
+                  user_id: { type: string }
+                  balance: { type: integer }
+
+  # ══════════════════════════════════════════
+  # ADMIN — INVITES
+  # ══════════════════════════════════════════
+
+  /admin/invites:
+    get:
+      tags: [admin]
+      summary: 列出所有邀请码（按创建时间倒序）
+      security:
+        - AdminSecret: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:        { type: string }
+                    code:      { type: string }
+                    note:      { type: string }
+                    max_uses:  { type: integer }
+                    use_count: { type: integer }
+
+    post:
+      tags: [admin]
+      summary: 生成新邀请码
+      security:
+        - AdminSecret: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:     { type: string, default: "" }
+                max_uses: { type: integer, default: 1 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:        { type: string }
+                  code:      { type: string }
+                  note:      { type: string }
+                  max_uses:  { type: integer }
+                  use_count: { type: integer }
+
+  /admin/invites/{invite_id}:
+    delete:
+      tags: [admin]
+      summary: 删除邀请码
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: invite_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  id: { type: string }
+
+  # ══════════════════════════════════════════
+  # ADMIN — API KEYS
+  # ══════════════════════════════════════════
+
+  /admin/api-keys:
+    get:
+      tags: [admin]
+      summary: 列出所有 API 密钥（掩码，不返回完整密钥）
+      security:
+        - AdminSecret: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ApiKeyOut' }
+
+    post:
+      tags: [admin]
+      summary: 添加新 API 密钥（自动激活，其他同 provider 密钥失活）
+      security:
+        - AdminSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, api_key]
+              properties:
+                provider: { type: string, enum: [openai, gemini, deepseek] }
+                api_key:  { type: string }
+                label:    { type: string, nullable: true }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiKeyOut' }
+
+  /admin/api-keys/{key_id}/activate:
+    patch:
+      tags: [admin]
+      summary: 切换某 provider 的激活密钥
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: key_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:           { type: boolean }
+                  activated_id: { type: integer }
+                  provider:     { type: string }
+
+  /admin/api-keys/{key_id}:
+    delete:
+      tags: [admin]
+      summary: 永久删除 API 密钥
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: key_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:         { type: boolean }
+                  deleted_id: { type: integer }
+                  provider:   { type: string }
+
+  # ══════════════════════════════════════════
+  # ADMIN — FEEDBACK
+  # ══════════════════════════════════════════
+
+  /admin/feedback:
+    get:
+      tags: [admin]
+      summary: 列出用户反馈（可按状态过滤，最多 200 条/页）
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, nullable: true }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 100, maximum: 200 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/FeedbackOut' }
+
+  /admin/feedback/ai-summary:
+    get:
+      tags: [admin]
+      summary: DeepSeek AI 分析待处理反馈，生成 PM 报告
+      description: 需要 DEEPSEEK_API_KEY。报告含：紧急Bug / 体验问题 / 新需求 / 行动指南。
+      security:
+        - AdminSecret: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary:        { type: string, description: Markdown 格式报告 }
+                  feedback_count: { type: integer }
+                  analyzed_at:    { type: string }
+
+  /admin/feedback/{feedback_id}:
+    patch:
+      tags: [admin]
+      summary: 更新反馈状态（adopted 时奖励提交者 1 积分）
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: feedback_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [pending, in_progress, resolved, adopted] }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+
+  # ══════════════════════════════════════════
+  # ADMIN — CREDITS
+  # ══════════════════════════════════════════
+
+  /admin/credits/grant:
+    post:
+      tags: [admin]
+      summary: 管理员赠予用户积分
+      security:
+        - AdminSecret: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, amount]
+              properties:
+                user_id: { type: string }
+                amount:  { type: integer, minimum: 1 }
+                note:    { type: string, nullable: true }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transaction: { type: object }
+                  new_balance: { type: integer }
+
+  # ══════════════════════════════════════════
+  # ADMIN — PLANNER
+  # ══════════════════════════════════════════
+
+  /admin/planner/{course_id}:
+    get:
+      tags: [admin]
+      summary: 获取课程复习计划模板（blueprint）
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  blueprint: { type: object }
+
+    put:
+      tags: [admin]
+      summary: 创建/更新课程复习计划模板
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [blueprint]
+              properties:
+                blueprint: { type: object }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  blueprint: { type: object }
+
+    delete:
+      tags: [admin]
+      summary: 删除课程复习计划模板
+      security:
+        - AdminSecret: []
+      parameters:
+        - name: course_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkResponse' }
+
+tags:
+  - name: system
+    description: 系统健康检查
+  - name: auth
+    description: 用户认证（注册 / 登录 / OTP / 密码重置）
+  - name: courses
+    description: 课程列表与详情
+  - name: artifacts
+    description: 课程文件管理（上传 / 审核 / 解锁）
+  - name: scope-sets
+    description: 生成范围集（选择哪些文件参与生成）
+  - name: outputs
+    description: AI 生成内容列表（summary / quiz / outline / flashcards）
+  - name: content
+    description: 课程文件文本提取
+  - name: generation
+    description: AI 内容生成（异步任务 + 流式 Q&A）
+  - name: credits
+    description: 积分系统（余额 / 扣费 / 历史）
+  - name: enrollments
+    description: 选课管理
+  - name: review
+    description: 复习计划（进度跟踪 + 今日推荐）
+  - name: feedback
+    description: 用户反馈提交
+  - name: exam
+    description: 真题 / 模拟卷 / 答题批改 / 收藏
+  - name: course-content
+    description: 管理员发布的课程内容（摘要 / 大纲）
+  - name: planner
+    description: 考试复习计划（考点追踪）
+  - name: admin
+    description: 管理员接口（需要 X-Admin-Secret）
