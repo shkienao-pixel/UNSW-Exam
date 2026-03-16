@@ -161,7 +161,7 @@ def gpt_filter_chunks(
                 {"role": "user",   "content": user_msg},
             ],
             temperature=0.0,
-            max_tokens=4096,
+            max_completion_tokens=4096,
         )
         result = (resp.choices[0].message.content or "").strip()
         if result == "NO_RELEVANT_INFO":

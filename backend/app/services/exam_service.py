@@ -25,21 +25,21 @@ _MIN_TEXT_LEN = 100  # below this, treat PDF as scanned and use Vision
 _VISION_SYSTEM = (
     "You are an expert university exam paper parser.\n"
     "Analyze this exam page image and return a JSON object with two fields.\n\n"
-    "Field 1 — \"has_visual\": boolean.\n"
-    "  Set true if the page contains diagrams, figures, graphs, equations, tables, or any visual element\n"
-    "  that is NECESSARY to understand or answer the questions on this page.\n"
-    "  Set false if the page is pure text (no visuals needed to answer).\n\n"
-    "Field 2 — \"questions\": array of question objects extracted from this page.\n"
-    "  Rules for extraction:\n"
+    "Field 1 — \"questions\": array of question objects on this page.\n"
+    "  Rules:\n"
     "  1. Extract questions exactly as written — do NOT rephrase.\n"
     "  2. Classify each as \"mcq\" (has A/B/C/D options) or \"short_answer\" (everything else).\n"
     "  3. For MCQ: list options as plain text (no \"A.\" prefix), set correct_answer to the letter if answer key visible, else null.\n"
     "  4. For short_answer: set correct_answer to a concise reference answer if clearly shown, else null.\n"
-    "  5. If this page has NO questions (cover page, instructions only), return an empty array [].\n\n"
+    "  5. If this page has NO questions (cover page, instructions only), return an empty array [].\n"
+    "  6. For each question, estimate its vertical position on the page as y_start_pct and y_end_pct (0–100, percentage from top).\n"
+    "     Include any figure/diagram/table that belongs to the question in the range.\n"
+    "     Only set has_visual=true for a question if it has a diagram, figure, graph, table, or equation IMAGE that is essential to answer it.\n\n"
+    "Field 2 — \"page_has_visual\": boolean — true if the page contains ANY visual element (figure/diagram/table/equation image).\n\n"
     "Return ONLY a raw JSON object — no markdown fences, no extra text.\n"
-    "Format: {\"has_visual\": true/false, \"questions\": [{\"question_index\":1,\"question_type\":\"mcq\","
+    "Format: {\"page_has_visual\": true/false, \"questions\": [{\"question_index\":1,\"question_type\":\"mcq\","
     "\"question_text\":\"...\",\"options\":[\"opt\",\"opt\",\"opt\",\"opt\"],"
-    "\"correct_answer\":\"A\",\"explanation\":null}, ...]}"
+    "\"correct_answer\":\"A\",\"explanation\":null,\"has_visual\":false,\"y_start_pct\":10,\"y_end_pct\":35}, ...]}"
 )
 
 
@@ -60,21 +60,17 @@ def _ensure_exam_pages_bucket(supabase: Client) -> None:
     _BUCKET_CREATED = True
 
 
-def _upload_page_image(supabase: Client, jpeg_bytes: bytes, artifact_id: int, page_num: int) -> str | None:
-    """Upload a JPEG page screenshot to Supabase Storage and return its public URL.
-
-    Uses a dedicated 'exam-pages' bucket (public, image/* allowed).
-    Caller must supply JPEG bytes (not PNG).
-    """
+def _upload_page_image(supabase: Client, jpeg_bytes: bytes, artifact_id: int, page_num: int, q_index: int = 0) -> str | None:
+    """Upload a JPEG question crop to Supabase Storage and return its public URL."""
     try:
         _ensure_exam_pages_bucket(supabase)
-        path = f"{artifact_id}/page_{page_num + 1}.jpg"
+        path = f"{artifact_id}/p{page_num + 1}_q{q_index}.jpg"
         supabase.storage.from_(_EXAM_PAGES_BUCKET).upload(
             path, jpeg_bytes, {"content-type": "image/jpeg", "upsert": "true"}
         )
         return supabase.storage.from_(_EXAM_PAGES_BUCKET).get_public_url(path)
     except Exception as exc:
-        logger.warning("_upload_page_image: failed for artifact %s page %d: %s", artifact_id, page_num + 1, exc)
+        logger.warning("_upload_page_image: failed for artifact %s page %d q %d: %s", artifact_id, page_num + 1, q_index, exc)
         return None
 
 
@@ -117,24 +113,34 @@ def _extract_questions_vision(data: bytes, openai_key: str, supabase: Client, ar
             raw = resp.choices[0].message.content or "{}"
             raw = _extract_json(raw)
             parsed = json.loads(raw) if raw else {}
-            has_visual: bool = bool(parsed.get("has_visual", False))
+            page_has_visual: bool = bool(parsed.get("page_has_visual", False))
             page_qs: list = parsed.get("questions", [])
             if not isinstance(page_qs, list):
                 page_qs = []
         except Exception as exc:
             logger.warning("_extract_questions_vision: page %d failed: %s", page_num + 1, exc)
-            has_visual = False
+            page_has_visual = False
             page_qs = []
 
-        # Upload page screenshot only when gpt-5.4 says there are visuals
-        page_image_url: str | None = None
-        if has_visual and page_qs:
-            page_image_url = _upload_page_image(supabase, jpeg_bytes, artifact_id, page_num)
+        img_h = pix.height
 
         for q in page_qs:
-            if q.get("question_text"):
-                q["question_index"] = global_index
-                q["page_image_url"] = page_image_url
+            if not q.get("question_text"):
+                continue
+
+            q_image_url: str | None = None
+            if q.get("has_visual") and page_has_visual:
+                # Crop just this question's vertical region from the page image
+                y_start = max(0, int(q.get("y_start_pct", 0) / 100 * img_h) - 10)
+                y_end   = min(img_h, int(q.get("y_end_pct", 100) / 100 * img_h) + 10)
+                stride = pix.width * pix.n
+                crop_samples = bytes(pix.samples[y_start * stride : y_end * stride])
+                crop_pix = fitz.Pixmap(pix.colorspace, pix.width, y_end - y_start, crop_samples, pix.alpha)
+                crop_jpeg = crop_pix.tobytes("jpeg", 85)
+                q_image_url = _upload_page_image(supabase, crop_jpeg, artifact_id, page_num, global_index)
+
+            q["question_index"] = global_index
+            q["page_image_url"] = q_image_url
                 all_questions.append(q)
                 global_index += 1
 
