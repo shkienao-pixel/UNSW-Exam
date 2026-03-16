@@ -29,7 +29,6 @@ const FEATURES = [
   { view: 'quiz', labelKey: 'quiz' },
   { view: 'course-summary', labelKey: 'knowledge_summary' },
   { view: 'outline', labelKey: 'outline' },
-  { view: 'generate', labelKey: 'generate' },
   { view: 'scope', labelKey: 'scope' },
 ]
 
@@ -44,7 +43,6 @@ const FEATURE_ICON_MAP = {
   'course-summary': { icon: BookOpen, tint: '#A8D8B0', bg: 'rgba(168,216,176,0.12)' },
   outline: { icon: ListTree, tint: '#C7B6FF', bg: 'rgba(199,182,255,0.12)' },
   ask: { icon: MessageCircleMore, tint: '#9BC5B6', bg: 'rgba(155,197,182,0.12)' },
-  generate: { icon: Sparkles, tint: '#E6CF98', bg: 'rgba(230,207,152,0.12)' },
   scope: { icon: SlidersHorizontal, tint: '#AEB7C8', bg: 'rgba(174,183,200,0.12)' },
 } as const
 

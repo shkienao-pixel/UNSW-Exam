@@ -141,10 +141,7 @@ function CoursePageInner() {
       {view === 'flashcards' && <FlashcardsTab courseId={courseId} />}
       {view === 'mistakes'   && <MistakesTab courseId={courseId} />}
       {view === 'quiz'       && <ExamTab courseId={courseId} />}
-      {view === 'generate'   && (
-        <GenerateTab courseId={courseId} scopeSets={scopeSets} setScopeSets={setScopeSets}
-          artifacts={artifacts} setOutputs={setOutputs} />
-      )}
+
       {view === 'outputs'    && <OutputsTab courseId={courseId} outputs={outputs} setOutputs={setOutputs} />}
       {view === 'resources'  && (
         role === 'guest' ? (
@@ -423,11 +420,6 @@ function TypedOutputsView({
         <div className="text-center py-20 glass rounded-2xl" style={{ color: '#444' }}>
           <BookOpen size={52} className="mx-auto mb-4 opacity-20" />
           <p className="text-base font-medium text-white mb-4">{emptyTitle}</p>
-          <a href={`/courses/${courseId}?view=generate`}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"
-            style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}>
-            <Zap size={14} /> {emptyLinkLabel}
-          </a>
         </div>
       ) : selected ? renderContent(selected) : null}
     </div>
@@ -854,11 +846,6 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
         <div className="text-center py-20 glass rounded-2xl" style={{ color: '#444' }}>
           <BookOpen size={52} className="mx-auto mb-4 opacity-20" />
           <p className="text-base font-medium text-white mb-4">{t('empty_fc')}</p>
-          <a href={`/courses/${courseId}?view=generate`}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium"
-            style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}>
-            <Zap size={14} /> {t('empty_fc_btn')}
-          </a>
         </div>
       ) : (
         <>
@@ -892,11 +879,6 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                   style={{ background: 'rgba(255,255,255,0.05)', color: '#ddd', border: '1px solid rgba(255,255,255,0.08)' }}>
                   <RotateCcw size={14} /> {lang === 'zh' ? '再做一次' : 'Redo'}
                 </button>
-                <a href={`/courses/${courseId}?view=generate`}
-                  className="flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium"
-                  style={{ background: 'rgba(200,165,90,0.12)', color: '#e6cf98', border: '1px solid rgba(200,165,90,0.2)' }}>
-                  <Zap size={14} /> {lang === 'zh' ? '再来一套' : 'Generate New'}
-                </a>
               </div>
             </div>
           ) : (
@@ -1592,235 +1574,6 @@ function AskTab({ courseId, scopeSets, artifacts }: {
   )
 }
 
-// ── AI 生成 Tab ───────────────────────────────────────────────────────────────
-
-type GenType = 'quiz' | 'flashcards'
-
-function GenerateTab({ courseId, scopeSets, setScopeSets, artifacts, setOutputs }: {
-  courseId: string
-  scopeSets: ScopeSet[]
-  setScopeSets: React.Dispatch<React.SetStateAction<ScopeSet[]>>
-  artifacts: Artifact[]
-  setOutputs: React.Dispatch<React.SetStateAction<Output[]>>
-}) {
-  const { t } = useLang()
-  const { trackGeneration } = useGeneration()
-  const isMounted = useRef(true)
-  useEffect(() => () => { isMounted.current = false }, [])
-
-  const [genType, setGenType] = useState<GenType>('quiz')
-  const [scopeSetId, setScopeSetId] = useState<number | undefined>(scopeSets[0]?.id)
-  const [numQuestions, setNumQuestions] = useState(10)
-  const [generating, setGenerating] = useState(false)
-  const [genSuccess, setGenSuccess] = useState<GenType | null>(null)
-  const [error, setError] = useState('')
-  const [creditsModal, setCreditsModal] = useState<{ balance: number; required: number } | null>(null)
-
-  const [showCreateScope, setShowCreateScope] = useState(false)
-  const [newScopeName, setNewScopeName] = useState('')
-  const [newScopeFiles, setNewScopeFiles] = useState<Set<number>>(new Set())
-  const [creatingScope, setCreatingScope] = useState(false)
-
-  const approvedArtifacts = artifacts.filter(a => a.status === 'approved')
-  const approvedCount = approvedArtifacts.length
-
-  const genTypes = [
-    { key: 'quiz' as GenType, icon: <Target size={18} style={{ color: '#FFD700' }} />, labelKey: 'gen_quiz' as const, descKey: 'gen_desc_quiz' as const },
-    { key: 'flashcards' as GenType, icon: <Layers3 size={18} style={{ color: '#FFD700' }} />, labelKey: 'gen_flashcards' as const, descKey: 'gen_desc_flashcards' as const },
-  ]
-
-  function toggleNewScopeFile(id: number) {
-    setNewScopeFiles(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
-  }
-
-  async function createScope() {
-    if (!newScopeName.trim()) return
-    setCreatingScope(true)
-    try {
-      const created = await api.scopeSets.create(courseId, newScopeName.trim())
-      const fileIds = [...newScopeFiles]
-      const finalScope = fileIds.length > 0
-        ? await api.scopeSets.updateItems(courseId, created.id, fileIds)
-        : created
-      setScopeSets(prev => [...prev, finalScope])
-      setScopeSetId(finalScope.id)
-      setShowCreateScope(false); setNewScopeName(''); setNewScopeFiles(new Set())
-    } catch { alert(t('save_err')) } finally { setCreatingScope(false) }
-  }
-
-  async function generate() {
-    setError(''); setGenSuccess(null); setGenerating(true)
-    const body = {
-      ...(scopeSetId ? { scope_set_id: scopeSetId } : {}),
-      ...(genType === 'quiz' ? { num_questions: numQuestions } : {}),
-    }
-    const promise = api.generate[genType](courseId, body)
-
-    // Register with global progress tracker (persists across navigation)
-    trackGeneration({
-      label: t(`gen_${genType}`),
-      viewLink: `/courses/${courseId}?view=${genType}`,
-      promise,
-      onSuccess: out => {
-        if (isMounted.current) {
-          setOutputs(prev => [out, ...prev])
-          setGenSuccess(genType)
-          setGenerating(false)
-        }
-      },
-      onError: err => {
-        if (isMounted.current) {
-          if ((err as any)?.code === 'INSUFFICIENT_CREDITS') {
-            setCreditsModal({ balance: (err as any).balance ?? 0, required: (err as any).required ?? 1 })
-          } else {
-            setError(err?.message || t('gen_err'))
-          }
-          setGenerating(false)
-        }
-      },
-    })
-  }
-
-  const viewLabels: Record<GenType, string> = {
-    quiz: t('gen_quiz'),
-    flashcards: t('gen_flashcards'),
-  }
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-          <Zap size={22} style={{ color: '#FFD700' }} /> {t('generate_title')}
-        </h2>
-        <p className="text-sm mt-0.5" style={{ color: '#555' }}>{t('generate_sub')}</p>
-      </div>
-
-      {/* Type cards */}
-      <div className="grid grid-cols-2 gap-3">
-        {genTypes.map(g => (
-          <button key={g.key} onClick={() => { setGenType(g.key); setGenSuccess(null) }}
-            className="glass p-4 text-left transition-all rounded-xl"
-            style={{ outline: genType === g.key ? '1px solid #FFD700' : 'none' }}>
-            <div className="mb-1 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-white/[0.03]">{g.icon}</div>
-            <div className="font-medium text-sm text-white">{t(g.labelKey)}</div>
-            <div className="text-xs mt-0.5" style={{ color: '#666' }}>{t(g.descKey)}</div>
-          </button>
-        ))}
-      </div>
-
-      {/* Scope selector */}
-      <div className="space-y-2">
-        <label className="block text-sm" style={{ color: '#AAA' }}>{t('gen_scope')}</label>
-        <div className="flex items-center gap-2">
-          {scopeSets.length > 0 ? (
-            <select className="input-glass text-sm flex-1" value={scopeSetId ?? ''}
-              onChange={e => setScopeSetId(Number(e.target.value) || undefined)}>
-              {scopeSets.map(s => <option key={s.id} value={s.id}>{s.name}{s.is_default ? ' (全部)' : ''}</option>)}
-            </select>
-          ) : <span className="text-sm flex-1" style={{ color: '#555' }}>—</span>}
-          <button onClick={() => setShowCreateScope(v => !v)}
-            className="px-3 py-1.5 rounded-lg text-xs transition-all"
-            style={{
-              background: showCreateScope ? 'rgba(255,215,0,0.1)' : 'rgba(255,255,255,0.04)',
-              color: showCreateScope ? '#FFD700' : '#666',
-              border: `1px solid ${showCreateScope ? 'rgba(255,215,0,0.3)' : 'rgba(255,255,255,0.08)'}`,
-            }}>
-            {t('gen_new_scope')}
-          </button>
-        </div>
-
-        {showCreateScope && (
-          <div className="glass p-4 rounded-xl space-y-3" style={{ border: '1px solid rgba(255,215,0,0.12)' }}>
-            <input placeholder={t('gen_scope_ph')} value={newScopeName}
-              onChange={e => setNewScopeName(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') createScope() }}
-              className="input-glass text-sm w-full" />
-            {approvedArtifacts.length > 0 && (
-              <div>
-                <p className="text-xs mb-2" style={{ color: '#555' }}>{t('gen_scope_files')}</p>
-                <div className="space-y-1.5 max-h-36 overflow-y-auto">
-                  {approvedArtifacts.map(a => (
-                    <label key={a.id} className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" className="accent-yellow-400"
-                        checked={newScopeFiles.has(a.id)} onChange={() => toggleNewScopeFile(a.id)} />
-                      <span className="text-xs truncate" style={{ color: newScopeFiles.has(a.id) ? '#CCC' : '#666' }}>
-                        {a.file_name}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div className="flex gap-2">
-              <button className="btn-gold text-xs px-3 py-1.5 flex items-center gap-1"
-                onClick={createScope} disabled={creatingScope || !newScopeName.trim()}>
-                {creatingScope && <Loader2 size={12} className="animate-spin" />}{t('gen_create')}
-              </button>
-              <button onClick={() => { setShowCreateScope(false); setNewScopeName(''); setNewScopeFiles(new Set()) }}
-                className="text-xs px-3 py-1.5 rounded-lg" style={{ color: '#666', background: 'rgba(255,255,255,0.04)' }}>
-                {t('gen_cancel')}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {genType === 'quiz' && (
-        <div>
-          <label className="block text-sm mb-2" style={{ color: '#AAA' }}>{t('gen_num_q')}</label>
-          <input type="number" min={3} max={20} value={numQuestions}
-            onChange={e => setNumQuestions(Number(e.target.value))}
-            className="input-glass text-sm w-24" />
-        </div>
-      )}
-
-      {approvedCount === 0 && (
-        <div className="text-sm px-3 py-2 rounded-lg"
-          style={{ background: 'rgba(255,165,0,0.1)', color: '#FFA500', border: '1px solid rgba(255,165,0,0.2)' }}>
-          {t('gen_no_files')}
-        </div>
-      )}
-
-      <button className="btn-gold flex items-center gap-2 text-sm" onClick={generate}
-        disabled={generating || approvedCount === 0}>
-        {generating ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
-        {generating ? t('gen_loading') : t('gen_btn')}
-        {!generating && (
-          <span className="ml-auto text-xs opacity-60">
-            -1 ✦
-          </span>
-        )}
-      </button>
-
-      {creditsModal && (
-        <InsufficientCreditsModal
-          balance={creditsModal.balance}
-          required={creditsModal.required}
-          onClose={() => setCreditsModal(null)}
-        />
-      )}
-
-      {error && (
-        <div className="text-sm px-3 py-2 rounded-lg"
-          style={{ background: 'rgba(255,68,68,0.1)', color: '#FF6666', border: '1px solid rgba(255,68,68,0.2)' }}>
-          {error}
-        </div>
-      )}
-
-      {genSuccess && (
-        <div className="flex items-center gap-3 text-sm px-4 py-3 rounded-xl"
-          style={{ background: 'rgba(34,197,94,0.08)', color: '#22C55E', border: '1px solid rgba(34,197,94,0.2)' }}>
-          {t('gen_done_prefix')}
-          <a href={`/courses/${courseId}?view=${genSuccess}`}
-            className="font-semibold underline hover:opacity-80">
-            {viewLabels[genSuccess]}
-          </a>
-          {t('gen_done_suffix')}
-        </div>
-      )}
-    </div>
-  )
-}
 
 // ── 历史输出 Tab ──────────────────────────────────────────────────────────────
 
@@ -2425,13 +2178,6 @@ function QuizDisplay({
               style={{ background: 'rgba(255,255,255,0.05)', color: '#ddd', border: '1px solid rgba(255,255,255,0.08)' }}>
               <RotateCcw size={14} /> {lang === 'zh' ? '再做一次' : 'Redo'}
             </button>
-            {courseId && (
-              <a href={`/courses/${courseId}?view=generate`}
-                className="flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium"
-                style={{ background: 'rgba(200,165,90,0.12)', color: '#e6cf98', border: '1px solid rgba(200,165,90,0.2)' }}>
-                <Zap size={14} /> {lang === 'zh' ? '再来一套' : 'Generate New'}
-              </a>
-            )}
           </div>
         </div>
       )}
