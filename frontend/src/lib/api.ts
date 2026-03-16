@@ -101,25 +101,31 @@ function nextReq<T>(path: string, options: RequestInit = {}): Promise<T> {
   return _fetch<T>(path, options, false)
 }
 
-/** 轮询异步生成 job，直到 done / failed / 超时。返回 Output 对象。 */
-async function _pollJob(courseId: string, jobId: string, timeoutMs = 300_000): Promise<Output> {
+type JobResult = { status: string; output_id: number | null; error_msg: string | null }
+
+/** 轮询 job 直到 done / failed / 超时。底层原语，供上层封装复用。 */
+async function _waitJob(courseId: string, jobId: string, timeoutMs = 300_000): Promise<JobResult> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     await new Promise(r => setTimeout(r, 2000))
-    const job = await req<{ status: string; output_id: number | null; error_msg: string | null }>(
-      `/courses/${courseId}/jobs/${jobId}`
-    )
-    if (job.status === 'done' && job.output_id != null)
-      return req<Output>(`/courses/${courseId}/outputs/${job.output_id}`)
+    const job = await req<JobResult>(`/courses/${courseId}/jobs/${jobId}`)
+    if (job.status === 'done') return job
     if (job.status === 'failed')
       throw Object.assign(new Error(job.error_msg ?? '生成失败'), { code: 'GEN_FAILED' })
     // pending / processing → continue polling
   }
-  // 超时后任务仍在后台运行，不是失败，给用户明确提示
   throw Object.assign(
     new Error('前端等待超时（5分钟），任务仍在后台运行，请稍后刷新页面在历史记录中查看结果'),
     { code: 'POLL_TIMEOUT', job_id: jobId }
   )
+}
+
+/** 轮询 job，完成后拉取并返回 Output 对象。 */
+async function _pollJob(courseId: string, jobId: string, timeoutMs = 300_000): Promise<Output> {
+  const job = await _waitJob(courseId, jobId, timeoutMs)
+  if (job.output_id != null)
+    return req<Output>(`/courses/${courseId}/outputs/${job.output_id}`)
+  throw Object.assign(new Error('生成完成但未返回输出'), { code: 'GEN_FAILED' })
 }
 
 export const api = {
@@ -425,21 +431,8 @@ export const api = {
         `/courses/${courseId}/exam/mock/generate`,
         { method: 'POST', body: JSON.stringify(body) },
       )
-      // Poll until done (status=done, output_id may be null for exam_mock)
-      const deadline = Date.now() + 300_000
-      while (Date.now() < deadline) {
-        await new Promise(r => setTimeout(r, 2000))
-        const job = await req<{ status: string; error_msg: string | null }>(
-          `/courses/${courseId}/jobs/${job_id}`
-        )
-        if (job.status === 'done') return { session_id }
-        if (job.status === 'failed')
-          throw Object.assign(new Error(job.error_msg ?? '模拟题生成失败'), { code: 'GEN_FAILED' })
-      }
-      throw Object.assign(
-        new Error('等待超时，请稍后刷新页面查看结果'),
-        { code: 'POLL_TIMEOUT' },
-      )
+      await _waitJob(courseId, job_id)
+      return { session_id }
     },
 
     listMockSessions: (courseId: string) =>
