@@ -177,10 +177,25 @@ def gpt_filter_chunks(
 #  STAGE 2 — Gemini Text: generate the final answer
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _build_history_prefix(history: list[dict]) -> str:
+    """将最近对话记录格式化为文本前缀，注入到 user_content 最前面。"""
+    if not history:
+        return ""
+    lines = ["[对话历史（仅供参考，请以最新问题为准）]"]
+    for m in history[-10:]:  # 最多取最近 10 条（5轮）
+        role_label = "学生" if m.get("role") == "user" else "AI"
+        content = str(m.get("content", "")).strip()
+        if content:
+            lines.append(f"{role_label}：{content[:600]}")  # 截断过长的历史
+    lines.append("---")
+    return "\n".join(lines) + "\n\n"
+
+
 def gemini_generate_answer(
     query: str,
     filtered_context: str,
     gemini_key: str,
+    history: list[dict] | None = None,
 ) -> str:
     """Stage 2: Gemini 生成最终回答，内置防幻觉 + 兜底协议。
 
@@ -192,14 +207,17 @@ def gemini_generate_answer(
     Returns:
         Markdown 格式回答，失败时返回空字符串（调用方降级到 GPT）。
     """
+    history_prefix = _build_history_prefix(history or [])
+
     if filtered_context.strip():
         user_content = (
+            f"{history_prefix}"
             f"参考资料（来自课程材料）：\n\n{filtered_context}"
             f"\n\n---\n\n学生问题：{query}"
         )
     else:
-        # 无相关文档 → 触发 GEMINI_ANSWER_SYSTEM 中的兜底协议
         user_content = (
+            f"{history_prefix}"
             f"学生问题：{query}\n\n"
             "(参考资料：NO_RELEVANT_INFO — 请执行系统指令中的兜底协议)"
         )
@@ -228,18 +246,23 @@ def gemini_generate_answer_stream(
     query: str,
     filtered_context: str,
     gemini_key: str,
+    history: list[dict] | None = None,
 ):
     """Stage 2 (流式版本): Gemini 流式生成回答，逐块 yield 文本。
 
     失败时静默结束（调用方降级到 GPT 整块输出）。
     """
+    history_prefix = _build_history_prefix(history or [])
+
     if filtered_context.strip():
         user_content = (
+            f"{history_prefix}"
             f"参考资料（来自课程材料）：\n\n{filtered_context}"
             f"\n\n---\n\n学生问题：{query}"
         )
     else:
         user_content = (
+            f"{history_prefix}"
             f"学生问题：{query}\n\n"
             "(参考资料：NO_RELEVANT_INFO — 请执行系统指令中的兜底协议)"
         )

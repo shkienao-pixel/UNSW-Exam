@@ -57,10 +57,16 @@ class GenerateRequest(BaseModel):
     exclude_topics: list[str]         = []  # 鍘嗗彶棰樼洰涓婚锛岀敓鎴愭椂鍥為伩
 
 
+class HistoryMessage(BaseModel):
+    role:    str   # "user" | "assistant"
+    content: str
+
+
 class AskRequest(BaseModel):
     question:     str
     scope_set_id: int | None = None
     context_mode: str = "all"  # "all" | "revision"
+    history:      list[HistoryMessage] = []  # recent conversation turns (max 5)
 
 
 class TranslateRequest(BaseModel):
@@ -266,8 +272,10 @@ def ask_question(
         answer = ""
         model_used = "gpt-5.4"
 
+        history = [{"role": m.role, "content": m.content} for m in (body.history or [])]
+
         if gemini_key:
-            answer = gemini_generate_answer(body.question, filtered_context, gemini_key)
+            answer = gemini_generate_answer(body.question, filtered_context, gemini_key, history=history)
             if answer:
                 model_used = "gemini-3.1-pro-preview"
 
@@ -411,12 +419,13 @@ def ask_question_stream(
 
         yield _sse({"type": "status", "phase": "generating"})
 
+        history = [{"role": m.role, "content": m.content} for m in (body.history or [])]
         full_answer = ""
         model_used  = "gpt-5.4"
 
         try:
             if gemini_key:
-                for token in gemini_generate_answer_stream(body.question, filtered_context, gemini_key):
+                for token in gemini_generate_answer_stream(body.question, filtered_context, gemini_key, history=history):
                     full_answer += token
                     yield _sse({"type": "token", "text": token})
                 if full_answer:

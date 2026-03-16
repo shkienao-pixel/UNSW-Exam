@@ -9,6 +9,8 @@ import { api } from '@/lib/api'
 import type { Course } from '@/lib/types'
 import { useLang } from '@/lib/i18n'
 import { GenerationProvider } from '@/lib/generation-context'
+import { FloatingAskProvider, useFloatingAsk } from '@/lib/floating-ask-context'
+import FloatingAskWindow from '@/components/FloatingAskWindow'
 import FloatingProgress from '@/components/FloatingProgress'
 import ExamCountdown from '@/components/ExamCountdown'
 import {
@@ -18,6 +20,7 @@ import {
 
 // ── Feature navigation config ─────────────────────────────────────────────────
 
+// 'ask' view removed — AI 问答 now lives in the floating window
 const FEATURES = [
   { view: 'resources', labelKey: 'files', featured: true },
   { view: 'flashcards', labelKey: 'flashcards', featured: true },
@@ -26,7 +29,6 @@ const FEATURES = [
   { view: 'quiz', labelKey: 'quiz' },
   { view: 'course-summary', labelKey: 'knowledge_summary' },
   { view: 'outline', labelKey: 'outline' },
-  { view: 'ask', labelKey: 'ask' },
   { view: 'generate', labelKey: 'generate' },
   { view: 'scope', labelKey: 'scope' },
 ]
@@ -184,6 +186,7 @@ function CourseSidebar({
   const { t } = useLang()
   const { role } = useAuth()
   const currentView = searchParams.get('view') || 'flashcards'
+  const { openWindow } = useFloatingAsk()
 
   return (
     <nav className={`no-scrollbar flex flex-1 flex-col overflow-y-auto overflow-x-hidden ${collapsed ? 'items-center gap-2 px-2 py-3' : 'gap-2 px-3 py-4'}`}>
@@ -264,6 +267,28 @@ function CourseSidebar({
           </HoverLink>
         )
       })}
+
+      {/* AI 问答 — opens floating window */}
+      <button
+        onClick={() => { openWindow(); onNavClick?.() }}
+        className={`flex items-center rounded-[14px] text-sm transition-all hover:bg-white/[0.04] ${collapsed ? 'h-11 w-11 justify-center px-0 py-0' : 'gap-2.5 px-3 py-2.5'}`}
+        style={{
+          color: 'rgba(255,255,255,0.44)',
+          background: 'rgba(255,255,255,0.01)',
+          border: '1px solid rgba(255,255,255,0.02)',
+          textShadow: 'none',
+          width: collapsed ? 44 : '100%',
+        }}
+        title={t('ask' as any)}
+      >
+        <span
+          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-white/5"
+          style={{ color: '#9BC5B6', background: 'rgba(155,197,182,0.12)' }}
+        >
+          <MessageCircleMore size={14} />
+        </span>
+        {!collapsed && t('ask' as any)}
+      </button>
     </nav>
   )
 }
@@ -670,6 +695,9 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
       {/* Floating generation progress — always on top */}
       <FloatingProgress />
 
+      {/* Floating AI Q&A window */}
+      <FloatingAskWindow />
+
       {/* Global feedback button */}
       <FeedbackWidget />
     </div>
@@ -803,7 +831,9 @@ function FeedbackWidget() {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <GenerationProvider>
-      <AppLayoutInner>{children}</AppLayoutInner>
+      <FloatingAskProvider>
+        <AppLayoutInner>{children}</AppLayoutInner>
+      </FloatingAskProvider>
     </GenerationProvider>
   )
 }

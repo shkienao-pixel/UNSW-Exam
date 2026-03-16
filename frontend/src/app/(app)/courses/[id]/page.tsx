@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef, Suspense } from 'react'
 import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
 import type { StreamEvent } from '@/lib/api'
+import { useFloatingAsk } from '@/lib/floating-ask-context'
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/i18n'
 import { useGeneration } from '@/lib/generation-context'
@@ -48,6 +49,7 @@ function CoursePageInner() {
   const { t } = useLang()
   const { role, user } = useAuth()
   const [creditBalance, setCreditBalance] = useState(0)
+  const { setCourseContext } = useFloatingAsk()
 
   const load = useCallback(async () => {
     try {
@@ -78,6 +80,13 @@ function CoursePageInner() {
 
   useEffect(() => { load() }, [load])
 
+  // Keep floating AI window in sync with this course's data
+  useEffect(() => {
+    if (courseId && artifacts.length >= 0 && scopeSets.length >= 0) {
+      setCourseContext(courseId, scopeSets, artifacts)
+    }
+  }, [courseId, artifacts, scopeSets, setCourseContext])
+
   if (loading) return (
     <div className="flex items-center justify-center min-h-screen">
       <Loader2 className="animate-spin" style={{ color: '#FFD700' }} size={32} />
@@ -97,11 +106,6 @@ function CoursePageInner() {
         onEnrolled={load}
       />
     )
-  }
-
-  // Ask 视图独占全屏（ChatGPT 风格），其他视图正常滚动
-  if (view === 'ask') {
-    return <AskTab courseId={courseId} scopeSets={scopeSets} artifacts={artifacts} />
   }
 
   // 考试计划视图
@@ -821,10 +825,6 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
   function prev() { setCardIndex(i => Math.max(i - 1, 0)); setFlipped(false); setChosen(null); setRevealed(false) }
   function restart() { setCardIndex(0); setFlipped(false); setChosen(null); setRevealed(false); setFinished(false) }
 
-  function askAI(question: string) {
-    router.push(`/courses/${courseId}?view=ask&q=${encodeURIComponent(question)}`)
-  }
-
   if (loading) return <div className="flex justify-center py-16"><Loader2 className="animate-spin" style={{ color: '#FFD700' }} size={28} /></div>
 
   return (
@@ -928,12 +928,6 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                           {biText(flipped ? card.back : card.front, biMode)}
                         </p>
                       </div>
-                      {/* Ask AI link */}
-                      <button onClick={() => askAI(card.front)}
-                        className="flex items-center gap-1.5 text-xs transition-opacity hover:opacity-100 mx-auto"
-                        style={{ color: '#555', opacity: 0.7 }}>
-                        <HelpCircle size={12} />不懂了？问 AI
-                      </button>
                     </div>
                   )}
 
@@ -968,13 +962,6 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                             biMode,
                           )}
                         </p>
-                      )}
-                      {revealed && (
-                        <button onClick={() => askAI(card.question)}
-                          className="flex items-center gap-1.5 text-xs transition-opacity hover:opacity-100"
-                          style={{ color: '#555', opacity: 0.7 }}>
-                          <HelpCircle size={12} />不懂了？问 AI
-                        </button>
                       )}
                     </div>
                   )}
@@ -2287,7 +2274,6 @@ function QuizDisplay({
   sources?: QuizSource[]
   courseId?: string
 }) {
-  const router = useRouter()
   const { lang } = useLang()
   const [answers, setAnswers] = useState<Record<number, string>>({})
   const [revealed, setRevealed] = useState<Record<number, boolean>>({})
@@ -2299,11 +2285,6 @@ function QuizDisplay({
     ([idx, label]) => label === questions[Number(idx)]?.answer
   ).length
   const allDone = answeredCount === questions.length
-
-  function askAI(question: string) {
-    if (!courseId) return
-    router.push(`/courses/${courseId}?view=ask&q=${encodeURIComponent(question)}`)
-  }
 
   function handleAnswer(i: number, label: string, q: QuizQuestion) {
     if (revealed[i]) return // already answered
@@ -2408,23 +2389,15 @@ function QuizDisplay({
               </div>
             )}
 
-            {/* Bottom row: translation + ask AI */}
-            <div className="flex items-center justify-between pt-1">
-              {courseId && (
+            {/* Translation row */}
+            {courseId && (
+              <div className="pt-1">
                 <TranslatablePanel
                   courseId={courseId}
                   texts={[q.question, ...q.options, q.explanation || ''].filter(Boolean)}
                 />
-              )}
-              {courseId && (
-                <button onClick={() => askAI(q.question)}
-                  className="flex items-center gap-1.5 text-xs transition-opacity hover:opacity-100 flex-shrink-0"
-                  style={{ color: '#555', opacity: 0.7 }}>
-                  <HelpCircle size={12} />
-                  {lang === 'zh' ? '不懂？问 AI' : 'Ask AI'}
-                </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )
       })}
