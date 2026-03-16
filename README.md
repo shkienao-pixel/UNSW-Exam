@@ -16,6 +16,7 @@
 - [Product Overview](#product-overview)
 - [Tech Stack](#tech-stack)
 - [System Architecture](#system-architecture)
+- [Frontend Architecture](#frontend-architecture)
 - [Directory Structure](#directory-structure)
 - [Database Design](#database-design)
 - [API Routes](#api-routes)
@@ -47,6 +48,17 @@
 ---
 
 ## Changelog
+
+### v1.2.0 (2026-03-16)
+
+**Frontend Refactoring (zero functional changes):**
+
+- **Phase 1 — Utility extraction**: Moved `biText`, `extractToc`, `extractTocFromHtml`, `parseContentJson`, and related types from `courses/[id]/page.tsx` into `src/lib/utils.ts` for reuse across components
+- **Phase 2 — Two-layer frontend architecture**: Introduced `src/services/` (pure TypeScript, no React dependency) and `src/hooks/` (React `useState`/`useEffect` wrappers). Extracted `useCourseData`, `useEnrollment`, `useCredits`, `useTranslation`, `useCourseList` hooks; backed by `services/courses.ts`, `services/credits.ts`, `services/enrollment.ts`, `services/translation.ts`
+- **Phase 3 — Component extraction**: Split 10 inline component functions out of `layout.tsx` and `courses/[id]/page.tsx` into dedicated files: `SidebarHeader`, `CourseSidebar`, `DefaultSidebar`, `SidebarFooter`, `FeedbackWidget`, `HoverLink`, `TranslationPanel`, `TypedOutputsView`, `SummaryTab`, plus `lib/navigation.ts` for shared sidebar constants. Deleted dead code `BilingualToggle` (was defined but never rendered)
+- **Phase 4 — API deduplication**: Extracted `_waitJob()` from `api.ts` to eliminate the duplicate 14-line polling loop in `exam.generateMock`. Both `_pollJob` and `generateMock` now delegate to the shared primitive
+
+---
 
 ### v1.1.0 (2026-03-14)
 
@@ -266,6 +278,29 @@ User question
   Imagen 3: generate visual aid for complex concepts
 ```
 
+### Frontend Architecture
+
+The frontend adopts a **three-layer separation** to decouple UI rendering from business logic and keep the codebase mobile-ready:
+
+```
+components/   ← UI layer: pure rendering, receives props, no API calls
+    ↑
+hooks/        ← React state layer: useState/useEffect, orchestrates services
+    ↑
+services/     ← Business logic layer: pure TypeScript functions, zero React dependency
+    ↑
+lib/api.ts    ← HTTP transport: all backend API calls
+```
+
+**Key design decisions:**
+
+- `services/` has **no React imports** — functions like `fetchCreditBalance()` or `fetchEnrollmentInfo()` can be called from any JavaScript environment, including React Native
+- `hooks/` wraps services with React state management. Example: `useCredits` calls `services/credits.ts` and exposes `{ balance, refresh, deduct }` to components
+- `components/` only renders — it accepts props and calls hooks; it does not call API directly
+- The **backend API is unchanged** — a future mobile app only needs to add a new UI layer; `services/` can be reused as-is
+
+---
+
 ### File Processing Pipeline
 
 ```
@@ -339,21 +374,39 @@ UNSW-Exam/
 │       │   │   ├── login/
 │       │   │   └── register/
 │       │   ├── (app)/              # Route group: login required
+│       │   │   ├── layout.tsx      # App shell (sidebar, providers, mobile drawer)
 │       │   │   ├── dashboard/      # Course list + create course
 │       │   │   ├── courses/[id]/   # Main feature page
 │       │   │   └── mistakes/       # Mistakes book
 │       │   ├── admin/              # Admin panel (single page, multi-tab)
 │       │   └── api/                # Next.js Route Handlers (backend proxy)
-│       ├── components/
-│       │   ├── course/             # Course page components
-│       │   ├── flashcard/          # Flashcard components
-│       │   ├── generation/         # Generation result display
-│       │   ├── KnowledgeTab.tsx    # Knowledge outline + graph tab
-│       │   ├── MistakesView.tsx    # Mistakes book view
-│       │   └── ReviewOutlineTab.tsx # Review outline tab
+│       ├── components/             # UI layer — pure rendering, no business logic
+│       │   ├── SidebarHeader.tsx   # Logo + credits + collapse toggle
+│       │   ├── CourseSidebar.tsx   # Course feature nav links
+│       │   ├── DefaultSidebar.tsx  # Dashboard nav + course list
+│       │   ├── SidebarFooter.tsx   # Language toggle + logout
+│       │   ├── FeedbackWidget.tsx  # Floating feedback button + modal
+│       │   ├── HoverLink.tsx       # Hover-scale animated Link wrapper
+│       │   ├── TranslationPanel.tsx # Per-question + full-content translation
+│       │   ├── TypedOutputsView.tsx # Generic output list (quiz / flashcards)
+│       │   ├── SummaryTab.tsx      # Knowledge summary (markdown/html/schema_v1)
+│       │   └── ...                 # Other feature components
+│       ├── hooks/                  # React state layer — useState/useEffect wrappers
+│       │   ├── useCredits.ts       # Credit balance + deduct (optimistic)
+│       │   ├── useCourseData.ts    # Course + artifacts + scopeSets
+│       │   ├── useEnrollment.ts    # Enrollment status + term/cost
+│       │   ├── useTranslation.ts   # Toggle translation with caching
+│       │   └── useCourseList.ts    # Course list for sidebar
+│       ├── services/               # Business logic layer — pure TS, no React dependency
+│       │   ├── credits.ts          # fetchCreditBalance()
+│       │   ├── courses.ts          # fetchCourse(), fetchCourseList(), fetchCourseContext()
+│       │   ├── enrollment.ts       # fetchEnrollmentInfo()
+│       │   └── translation.ts      # translateTexts()
 │       └── lib/
 │           ├── api.ts              # All backend API calls (with Chinese error messages)
+│           ├── navigation.ts       # Sidebar constants (FEATURES, FEATURE_ICON_MAP, etc.)
 │           ├── types.ts            # Global TypeScript type definitions
+│           ├── utils.ts            # Shared utilities (biText, extractToc, parseContentJson…)
 │           ├── auth-context.tsx    # Global auth state (AuthContext)
 │           ├── i18n.tsx            # Bilingual (Chinese / English)
 │           └── mistakes-store.ts   # Local mistakes state
@@ -696,6 +749,7 @@ Access `/admin` and enter the `X-Admin-Secret` in the UI.
 - [产品概述](#产品概述)
 - [技术栈](#技术栈)
 - [系统架构](#系统架构)
+- [前端架构设计](#前端架构设计)
 - [目录结构](#目录结构)
 - [数据库设计](#数据库设计)
 - [API 路由总览](#api-路由总览)
@@ -727,6 +781,17 @@ Access `/admin` and enter the `X-Admin-Secret` in the UI.
 ---
 
 ## 更新日志
+
+### v1.2.0（2026-03-16）
+
+**前端架构重构（零功能改动）：**
+
+- **Phase 1 — 工具函数提取**：将 `courses/[id]/page.tsx` 中的 `biText`、`extractToc`、`extractTocFromHtml`、`parseContentJson` 及相关类型迁移至 `src/lib/utils.ts`，供多处复用
+- **Phase 2 — 两层前端架构**：引入 `src/services/`（纯 TypeScript，无 React 依赖）和 `src/hooks/`（React `useState`/`useEffect` 封装层）。提取 `useCourseData`、`useEnrollment`、`useCredits`、`useTranslation`、`useCourseList` 五个 hook，底层由 `services/courses.ts`、`services/credits.ts`、`services/enrollment.ts`、`services/translation.ts` 支撑
+- **Phase 3 — 组件拆分**：将 `layout.tsx` 和 `courses/[id]/page.tsx` 中 10 个内联组件函数提取为独立文件：`SidebarHeader`、`CourseSidebar`、`DefaultSidebar`、`SidebarFooter`、`FeedbackWidget`、`HoverLink`、`TranslationPanel`、`TypedOutputsView`、`SummaryTab`，以及侧边栏共享常量 `lib/navigation.ts`。同时删除从未被渲染的死代码 `BilingualToggle`
+- **Phase 4 — API 去重**：从 `api.ts` 中提取 `_waitJob()` 公共函数，消除 `exam.generateMock` 中重复实现的 14 行轮询循环；`_pollJob` 和 `generateMock` 均复用该底层函数
+
+---
 
 ### v1.1.0（2026-03-14）
 
@@ -929,6 +994,29 @@ Access `/admin` and enter the `X-Admin-Secret` in the UI.
   Imagen 3：复杂概念可视化辅助图
 ```
 
+### 前端架构设计
+
+前端采用三层分离架构，业务逻辑与 React 完全解耦：
+
+```
+components/   ← UI 展示层（React 组件）
+    ↑
+hooks/        ← React 状态层（useXxx 封装副作用）
+    ↑
+services/     ← 业务逻辑层（纯 TypeScript，零 React 依赖）
+    ↑
+lib/api.ts    ← HTTP 传输层
+```
+
+| 层级 | 目录 | 职责 |
+|------|------|------|
+| UI 层 | `src/components/` | 纯渲染，不含业务逻辑，直接迁移至 React Native |
+| 状态层 | `src/hooks/` | useState / useEffect 封装，协调 services 与 UI |
+| 逻辑层 | `src/services/` | 纯 TS 函数，无任何 React 导入，可跨平台复用 |
+| 传输层 | `src/lib/api.ts` | 统一 HTTP 请求封装，后端 API 接口保持不变 |
+
+> **移动端扩展策略**：`services/` 层不依赖 React，React Native App 只需新增 UI 层，`hooks/` 与 `services/` 可直接复用，无需改动业务逻辑。
+
 ### 文件处理流水线
 
 ```
@@ -1002,21 +1090,39 @@ UNSW-Exam/
 │       │   │   ├── login/
 │       │   │   └── register/
 │       │   ├── (app)/              # 路由组：需要登录
+│       │   │   ├── layout.tsx      # 应用壳（侧边栏、Providers、移动端抽屉）
 │       │   │   ├── dashboard/      # 课程列表 + 新建课程
 │       │   │   ├── courses/[id]/   # 主功能页
 │       │   │   └── mistakes/       # 错题本
 │       │   ├── admin/              # 管理后台（单页多 Tab）
 │       │   └── api/                # Next.js Route Handlers（代理到后端）
-│       ├── components/
-│       │   ├── course/             # 课程页各功能组件
-│       │   ├── flashcard/          # 闪卡组件
-│       │   ├── generation/         # 生成结果展示
-│       │   ├── KnowledgeTab.tsx    # 知识大纲 + 图谱
-│       │   ├── MistakesView.tsx    # 错题本视图
-│       │   └── ReviewOutlineTab.tsx # 复习大纲
+│       ├── components/             # UI 层 —— 纯渲染，不包含业务逻辑
+│       │   ├── SidebarHeader.tsx   # Logo + 积分 + 折叠切换
+│       │   ├── CourseSidebar.tsx   # 课程功能导航链接
+│       │   ├── DefaultSidebar.tsx  # Dashboard 导航 + 课程列表
+│       │   ├── SidebarFooter.tsx   # 语言切换 + 退出登录
+│       │   ├── FeedbackWidget.tsx  # 浮动反馈按钮 + 弹窗
+│       │   ├── HoverLink.tsx       # 悬停缩放动效 Link 封装
+│       │   ├── TranslationPanel.tsx # 题目级 + 全文翻译面板
+│       │   ├── TypedOutputsView.tsx # 通用输出列表（测验 / 闪卡）
+│       │   ├── SummaryTab.tsx      # 知识摘要（markdown/html/schema_v1）
+│       │   └── ...                 # 其他功能组件
+│       ├── hooks/                  # React 状态层 —— useState/useEffect 封装
+│       │   ├── useCredits.ts       # 积分余额 + 扣除（乐观更新）
+│       │   ├── useCourseData.ts    # 课程 + artifacts + scopeSets
+│       │   ├── useEnrollment.ts    # 选课状态 + 学期/费用
+│       │   ├── useTranslation.ts   # 翻译开关（带缓存）
+│       │   └── useCourseList.ts    # 侧边栏课程列表
+│       ├── services/               # 业务逻辑层 —— 纯 TypeScript，无 React 依赖
+│       │   ├── credits.ts          # fetchCreditBalance()
+│       │   ├── courses.ts          # fetchCourse()、fetchCourseList()、fetchCourseContext()
+│       │   ├── enrollment.ts       # fetchEnrollmentInfo()
+│       │   └── translation.ts      # translateTexts()
 │       └── lib/
 │           ├── api.ts              # 后端 API 调用封装（含错误中文化）
+│           ├── navigation.ts       # 侧边栏共享常量（FEATURES、FEATURE_ICON_MAP 等）
 │           ├── types.ts            # 全局 TypeScript 类型定义
+│           ├── utils.ts            # 工具函数（biText、extractToc、parseContentJson…）
 │           ├── auth-context.tsx    # 全局认证状态（AuthContext）
 │           ├── i18n.tsx            # 中英双语
 │           └── mistakes-store.ts   # 错题本本地状态
