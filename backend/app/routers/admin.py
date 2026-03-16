@@ -199,6 +199,31 @@ def approve_artifact(
     return art
 
 
+@router.post("/artifacts/{artifact_id}/extract-questions")
+def extract_questions_for_artifact(
+    artifact_id: int,
+    background_tasks: BackgroundTasks,
+    _: None = Depends(_require_admin),
+    supabase: Client = Depends(get_db),
+) -> dict[str, Any]:
+    """Manually trigger (re-)extraction of questions from a past_exam artifact.
+
+    Deletes any existing questions for this artifact first so it re-runs cleanly.
+    """
+    art_rows = supabase.table("artifacts").select("*").eq("id", artifact_id).execute().data or []
+    if not art_rows:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    art = art_rows[0]
+    if art.get("doc_type") != "past_exam":
+        raise HTTPException(status_code=400, detail="Only past_exam artifacts support question extraction")
+
+    # Delete existing questions so re-extraction runs fresh
+    supabase.table("exam_questions").delete().eq("artifact_id", artifact_id).execute()
+
+    background_tasks.add_task(_bg_extract_questions, supabase, art)
+    return {"ok": True, "artifact_id": artifact_id, "message": "Question extraction started in background"}
+
+
 @router.patch("/artifacts/{artifact_id}/doc-type", response_model=ArtifactOut)
 def update_artifact_doc_type(
     artifact_id: int,

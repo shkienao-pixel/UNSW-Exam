@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import {
   Loader2, CheckCircle, XCircle, ChevronLeft,
-  DatabaseZap, Upload, RefreshCw, Search,
+  DatabaseZap, Upload, RefreshCw, Search, FileSearch,
 } from 'lucide-react'
 import { useLang } from '@/lib/i18n'
 import {
@@ -67,6 +67,7 @@ export function ArtifactsTab({ secret, coursesVersion }: { secret: string; cours
   const [docTypeFilter, setDocTypeFilter] = useState<DocType | 'all'>('all')
   const [lectureWeekFilter, setLectureWeekFilter] = useState<'all' | LectureWeekBucket>('all')
   const [fileSearch, setFileSearch] = useState('')
+  const [extracting, setExtracting] = useState<number | null>(null)
 
   // 闂傚倷绀侀幉锛勬暜閹烘嚚娲晝閳ь剟鎮?status 闂傚倷绀侀幖顐﹀疮椤愶附鍋夊┑鍌滎焾闂傤垶鏌涘┑鍕姢缁惧墽鍋撻妵鍕籍閸屾艾浠橀梺璇叉唉瀹曠數妲愰幒妤婃晝闁靛鍠栧▓顓㈡⒑閻戔晛澧查柣鐕傜畱椤洦绻濆顒傚€為梺闈涱煭缁犳垼顣?
   useEffect(() => {
@@ -129,6 +130,15 @@ export function ArtifactsTab({ secret, coursesVersion }: { secret: string; cours
       await adminReq(secret, `/admin/artifacts/${id}/approve`, { method: 'PATCH' })
       if (selectedCourse) await loadFiles(selectedCourse.id, statusFilter)
     } catch (e: unknown) { setError(String(e)) }
+  }
+
+  async function extractQuestions(id: number) {
+    setExtracting(id)
+    try {
+      await adminReq(secret, `/admin/artifacts/${id}/extract-questions`, { method: 'POST' })
+      showToast(tt('题目提取已启动，后台处理中...', 'Extraction started in background'))
+    } catch (e: unknown) { setError(String(e)) }
+    finally { setExtracting(null) }
   }
 
   function showToast(msg: string) {
@@ -628,6 +638,19 @@ export function ArtifactsTab({ secret, coursesVersion }: { secret: string; cours
                     <XCircle size={16} />
                   </button>
                 </div>
+              )}
+              {a.status === 'approved' && a.doc_type === 'past_exam' && (
+                <button
+                  onClick={() => extractQuestions(a.id)}
+                  disabled={extracting === a.id}
+                  className="p-1.5 rounded-lg transition-colors duration-150 flex-shrink-0"
+                  title={tt('重新提取真题', 'Re-extract questions')}
+                  style={{ color: '#f97316' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(249,115,22,0.12)' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+                >
+                  {extracting === a.id ? <Loader2 size={16} className="animate-spin" /> : <FileSearch size={16} />}
+                </button>
               )}
               <DeleteBtn onClick={() => deleteArtifact(a.id, a.file_name)} />
             </div>
