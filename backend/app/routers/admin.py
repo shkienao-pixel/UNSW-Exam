@@ -102,6 +102,39 @@ def _require_admin(
         raise HTTPException(status_code=403, detail="Admin access required")
 
 
+def _bg_extract_questions(supabase: Client, artifact: dict) -> None:
+    """Background task: extract exam questions from past_exam type artifacts.
+
+    Only runs for doc_type='past_exam'. Idempotent — skips if already extracted.
+    Must be a sync function (not async) so FastAPI runs it in a thread pool.
+    """
+    if artifact.get("doc_type") != "past_exam":
+        return
+    sp = artifact.get("storage_path")
+    ft = artifact.get("file_type", "pdf")
+    if not sp or ft not in ("pdf", "word", "text"):
+        return
+    try:
+        from app.services.exam_service import extract_questions_from_artifact
+        from app.services.llm_key_service import get_api_key
+        from app.core.config import get_settings
+        openai_key = get_api_key("openai", supabase) or get_settings().openai_api_key
+        questions = extract_questions_from_artifact(
+            supabase,
+            artifact["id"],
+            artifact["course_id"],
+            openai_key,
+        )
+        logger.info(
+            "_bg_extract_questions: extracted %d questions for artifact %s",
+            len(questions), artifact.get("id"),
+        )
+    except Exception as exc:
+        logger.warning(
+            "_bg_extract_questions failed for artifact %s: %s", artifact.get("id"), exc
+        )
+
+
 def _bg_process(supabase: Client, artifact: dict) -> None:
     """Background task: chunk + embed one artifact.
 
@@ -154,6 +187,7 @@ def approve_artifact(
 
     art = update_artifact_status(supabase, artifact_id, status="approved")
     background_tasks.add_task(_bg_process, supabase, art)
+    background_tasks.add_task(_bg_extract_questions, supabase, art)
 
     uploader_id = art.get("user_id")
     if uploader_id and old_status != "approved":
@@ -291,6 +325,7 @@ def admin_upload_file(
         doc_type=doc_type,
     )
     background_tasks.add_task(_bg_process, supabase, art)
+    background_tasks.add_task(_bg_extract_questions, supabase, art)
     return art
 
 

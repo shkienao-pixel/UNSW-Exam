@@ -14,15 +14,16 @@ from supabase import Client
 from app.core.config import get_settings
 from app.core.exceptions import InsufficientCreditsError
 from app.core.supabase_client import get_supabase
-from app.services import credit_service, generate_service, job_service
+from app.services import credit_service, exam_service, generate_service, job_service
 
 logger = logging.getLogger(__name__)
 
 _GEN_FN = {
-    "summary": generate_service.run_summary,
-    "quiz": generate_service.run_quiz,
-    "outline": generate_service.run_outline,
+    "summary":    generate_service.run_summary,
+    "quiz":       generate_service.run_quiz,
+    "outline":    generate_service.run_outline,
     "flashcards": generate_service.run_flashcards,
+    "exam_mock":  exam_service.run_mock_generation,
 }
 
 # job_type → credit type（与 credit_service.COSTS 中的 key 对应）
@@ -31,6 +32,7 @@ _JOB_CREDIT_TYPE: dict[str, str] = {
     "quiz":       "gen_quiz",
     "outline":    "gen_outline",
     "flashcards": "gen_flashcards",
+    # exam_mock 暂时免费（不在 COSTS 中）
 }
 
 
@@ -95,7 +97,12 @@ async def _run_job(db: Client, job: dict[str, Any], worker_id: str) -> None:
                     return
 
         output = await asyncio.to_thread(_GEN_FN[job_type], db, user_id, course_id, body)
-        await asyncio.to_thread(job_service.finish_job, db, job_id, output["id"])
+        # exam_mock returns {"id": None} — no outputs row, finish without output_id
+        if output.get("id") is not None:
+            await asyncio.to_thread(job_service.finish_job, db, job_id, output["id"])
+        else:
+            from app.services.job_service import _patch
+            await asyncio.to_thread(_patch, db, job_id, {"status": "done"})
         logger.info("generation job done worker=%s job=%s output=%s", worker_id, job_id, output["id"])
 
     except Exception as exc:

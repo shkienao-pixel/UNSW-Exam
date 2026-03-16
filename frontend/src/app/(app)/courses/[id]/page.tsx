@@ -27,6 +27,7 @@ import ResourceHubTab from '@/components/ResourceHubTab'
 import KnowledgeSummaryRenderer from '@/components/KnowledgeSummaryRenderer'
 import ExamPlannerTab from '@/components/ExamPlannerTab'
 import CourseLockedScreen from '@/components/CourseLockedScreen'
+import ExamTab from '@/components/ExamTab'
 
 // ── View routing ──────────────────────────────────────────────────────────────
 
@@ -135,7 +136,7 @@ function CoursePageInner() {
     <div className="mx-auto w-full max-w-[1180px] flex-1 overflow-y-auto px-5 py-8 sm:px-6 lg:py-10">
       {view === 'flashcards' && <FlashcardsTab courseId={courseId} />}
       {view === 'mistakes'   && <MistakesTab courseId={courseId} />}
-      {view === 'quiz'       && <QuizTab courseId={courseId} />}
+      {view === 'quiz'       && <ExamTab courseId={courseId} />}
       {view === 'generate'   && (
         <GenerateTab courseId={courseId} scopeSets={scopeSets} setScopeSets={setScopeSets}
           artifacts={artifacts} setOutputs={setOutputs} />

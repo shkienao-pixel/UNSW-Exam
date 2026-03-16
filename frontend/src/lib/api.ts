@@ -3,6 +3,7 @@ import type {
   GenerateBody, AskResponse, ExplainImageResponse,
   ReviewSettings, ReviewNodeProgress, ReviewNodeUpdate, TodayPlanResult,
   DocType, Feedback, FeedbackStatus, CourseContentStatus,
+  ExamQuestion, PastExamFile, MockSession, GradeResult, ExamQuestionsResponse,
 } from './types'
 
 export type StreamEvent =
@@ -401,6 +402,68 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ item_type, item_id, done }),
       }),
+  },
+
+  exam: {
+    listPastExams: (courseId: string) =>
+      req<PastExamFile[]>(`/courses/${courseId}/exam/past-exams`),
+
+    getQuestions: (courseId: string, params: { artifact_id?: number; mock_session_id?: string }) => {
+      const qs = new URLSearchParams()
+      if (params.artifact_id != null) qs.set('artifact_id', String(params.artifact_id))
+      if (params.mock_session_id)      qs.set('mock_session_id', params.mock_session_id)
+      return req<ExamQuestionsResponse>(`/courses/${courseId}/exam/questions?${qs}`)
+    },
+
+    /** Trigger mock generation. Poll job until done, then return session_id. */
+    generateMock: async (
+      courseId: string,
+      body: { num_mcq: number; num_short: number },
+    ): Promise<{ session_id: string }> => {
+      const { job_id, session_id } = await req<{ job_id: string; session_id: string }>(
+        `/courses/${courseId}/exam/mock/generate`,
+        { method: 'POST', body: JSON.stringify(body) },
+      )
+      // Poll until done (status=done, output_id may be null for exam_mock)
+      const deadline = Date.now() + 300_000
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 2000))
+        const job = await req<{ status: string; error_msg: string | null }>(
+          `/courses/${courseId}/jobs/${job_id}`
+        )
+        if (job.status === 'done') return { session_id }
+        if (job.status === 'failed')
+          throw Object.assign(new Error(job.error_msg ?? '模拟题生成失败'), { code: 'GEN_FAILED' })
+      }
+      throw Object.assign(
+        new Error('等待超时，请稍后刷新页面查看结果'),
+        { code: 'POLL_TIMEOUT' },
+      )
+    },
+
+    listMockSessions: (courseId: string) =>
+      req<MockSession[]>(`/courses/${courseId}/exam/mock/sessions`),
+
+    submitAnswers: (
+      courseId: string,
+      answers: { question_id: number; user_answer: string }[],
+    ) =>
+      req<{ results: GradeResult[] }>(
+        `/courses/${courseId}/exam/submit`,
+        { method: 'POST', body: JSON.stringify({ answers }) },
+      ),
+
+    toggleFavorite: (courseId: string, questionId: number) =>
+      req<{ is_favorite: boolean }>(
+        `/courses/${courseId}/exam/favorites/${questionId}`,
+        { method: 'POST' },
+      ),
+
+    listCourseFavorites: (courseId: string) =>
+      req<ExamQuestion[]>(`/courses/${courseId}/exam/favorites`),
+
+    listAllFavorites: () =>
+      req<ExamQuestion[]>('/exam/favorites'),
   },
 
   courseContent: {

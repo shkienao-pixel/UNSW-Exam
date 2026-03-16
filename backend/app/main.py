@@ -13,7 +13,7 @@ from app.core.exceptions import InsufficientCreditsError
 from app.core.supabase_client import get_supabase
 from app.services.generation_worker import start_generation_worker, stop_generation_workers
 from app.routers import auth, courses, artifacts, scope_sets, outputs, admin, content, generate, review, feedback, credits
-from app.routers import course_content, planner, enrollments
+from app.routers import course_content, planner, enrollments, exam
 
 settings = get_settings()
 _logger = logging.getLogger(__name__)
@@ -53,6 +53,8 @@ app.include_router(course_content.router, prefix="/courses", tags=["course-conte
 app.include_router(enrollments.router,   prefix="/enrollments", tags=["enrollments"])
 app.include_router(planner.router,       prefix="/courses/{course_id}", tags=["planner"])
 app.include_router(planner.admin_router, prefix="/admin", tags=["admin"])
+app.include_router(exam.router,          prefix="/courses/{course_id}", tags=["exam"])
+app.include_router(exam.global_router,   prefix="",                     tags=["exam"])
 
 
 @app.on_event("startup")

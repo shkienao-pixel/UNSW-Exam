@@ -259,6 +259,52 @@ export interface SummarySchemaV1 {
   likely_exam_questions: string[]
 }
 
+// ── Exam (真题 + 模拟题) ────────────────────────────────────────────────────────
+
+export interface ExamQuestion {
+  id: number
+  course_id: string
+  artifact_id: number | null
+  source_type: 'past_exam' | 'mock'
+  question_type: 'mcq' | 'short_answer'
+  question_index: number
+  question_text: string
+  options: string[] | null
+  correct_answer: string | null
+  explanation: string | null
+  mock_session_id: string | null
+  created_at: string
+  // injected by GET /exam/questions
+  is_favorite?: boolean
+  prev_answer?: string | null
+  prev_correct?: boolean | null
+  prev_feedback?: string | null
+}
+
+export interface PastExamFile {
+  artifact_id: number
+  file_name: string
+  question_count: number
+  created_at: string
+}
+
+export interface MockSession {
+  session_id: string
+  question_count: number
+  created_at: string
+}
+
+export interface GradeResult {
+  question_id: number
+  is_correct: boolean | null
+  feedback: string | null
+}
+
+export interface ExamQuestionsResponse {
+  questions: ExamQuestion[]
+  total: number
+}
+
 // ── Enrollment ────────────────────────────────────────────────────────────────
 
 export type Term = 'T1' | 'T2' | 'T3'

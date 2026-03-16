@@ -1,20 +1,24 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMistakes, masterMistake, deleteMistake } from '@/lib/mistakes-store'
 import type { StoredMistake } from '@/lib/mistakes-store'
 import {
   AlertTriangle, BookOpen, CheckCircle, Trash2,
-  ExternalLink, FileText, Play, RotateCcw,
+  ExternalLink, FileText, Play, RotateCcw, Heart, Loader2, XCircle,
 } from 'lucide-react'
+import { api } from '@/lib/api'
+import type { ExamQuestion } from '@/lib/types'
 
 type StatusFilter = 'active' | 'mastered' | 'all'
 type SourceFilter = 'all' | 'quiz' | 'flashcard'
+type MainTab = 'mistakes' | 'favorites'
 
 // ── Main view (used both standalone + inside course tab) ──────────────────────
 
 export default function MistakesView({ courseId }: { courseId?: string }) {
   const { all, active, mastered, master, remove } = useMistakes()
+  const [mainTab, setMainTab] = useState<MainTab>('mistakes')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
   const [practiceMode, setPracticeMode] = useState(false)
@@ -42,6 +46,27 @@ export default function MistakesView({ courseId }: { courseId?: string }) {
 
   return (
     <div className="space-y-6">
+
+      {/* ── Main tab switcher ── */}
+      <div className="flex gap-2">
+        {(['mistakes', 'favorites'] as MainTab[]).map(t => (
+          <button
+            key={t}
+            onClick={() => setMainTab(t)}
+            className="px-4 py-2 rounded-xl text-sm font-medium transition-all"
+            style={{
+              background: mainTab === t ? 'rgba(255,215,0,0.15)' : 'rgba(255,255,255,0.03)',
+              color: mainTab === t ? '#FFD700' : '#666',
+              border: `1px solid ${mainTab === t ? 'rgba(255,215,0,0.35)' : 'rgba(255,255,255,0.06)'}`,
+            }}
+          >
+            {t === 'mistakes' ? '❌ 错题集' : '❤️ 收藏'}
+          </button>
+        ))}
+      </div>
+
+      {mainTab === 'favorites' && <FavoritesTab courseId={courseId} />}
+      {mainTab === 'mistakes' && <>
 
       {/* ── Header ── */}
       <div className="flex items-start justify-between gap-4">
@@ -133,6 +158,91 @@ export default function MistakesView({ courseId }: { courseId?: string }) {
           ))}
         </div>
       )}
+      </>}
+    </div>
+  )
+}
+
+// ── Favorites Tab ─────────────────────────────────────────────────────────────
+
+function FavoritesTab({ courseId }: { courseId?: string }) {
+  const [favorites, setFavorites] = useState<ExamQuestion[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fn = courseId
+      ? () => api.exam.listCourseFavorites(courseId)
+      : () => api.exam.listAllFavorites()
+    fn().then(setFavorites).finally(() => setLoading(false))
+  }, [courseId])
+
+  async function handleUnfavorite(qId: number) {
+    const q = favorites.find(f => f.id === qId)
+    if (!q) return
+    setFavorites(prev => prev.filter(f => f.id !== qId))
+    try {
+      await api.exam.toggleFavorite(q.course_id, qId)
+    } catch {
+      setFavorites(prev => [...prev, q])
+    }
+  }
+
+  if (loading) return (
+    <div className="flex justify-center py-16">
+      <Loader2 className="animate-spin" style={{ color: '#FFD700' }} size={24} />
+    </div>
+  )
+
+  if (favorites.length === 0) return (
+    <div className="text-center py-20 glass rounded-2xl" style={{ color: '#444' }}>
+      <Heart size={48} className="mx-auto mb-4 opacity-20" />
+      <p className="text-sm text-white mb-2">暂无收藏</p>
+      <p className="text-xs" style={{ color: '#555' }}>做题时点击心形图标即可收藏</p>
+    </div>
+  )
+
+  return (
+    <div className="space-y-3">
+      {favorites.map(q => (
+        <div
+          key={q.id}
+          className="rounded-2xl p-4 space-y-2"
+          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,107,107,0.15)' }}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <span className="text-xs px-2 py-0.5 rounded-full mr-2" style={{ background: 'rgba(255,107,107,0.1)', color: '#FF6B6B', border: '1px solid rgba(255,107,107,0.2)' }}>
+                {q.question_type === 'mcq' ? '选择题' : '简答题'}
+              </span>
+              <span className="text-xs" style={{ color: '#555' }}>
+                {q.source_type === 'past_exam' ? '真题' : '模拟题'}
+              </span>
+              <p className="text-sm text-white mt-2 leading-relaxed">{q.question_text}</p>
+              {q.options && (
+                <div className="mt-2 space-y-1">
+                  {q.options.map((opt, j) => (
+                    <p key={j} className="text-xs" style={{ color: '#666' }}>
+                      {String.fromCharCode(65 + j)}. {opt}
+                    </p>
+                  ))}
+                </div>
+              )}
+              {q.correct_answer && (
+                <p className="text-xs mt-2" style={{ color: '#22C55E' }}>
+                  ✓ {q.question_type === 'mcq' ? `正确答案：${q.correct_answer}` : q.correct_answer}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={() => handleUnfavorite(q.id)}
+              className="flex-shrink-0 transition-all hover:scale-110"
+              title="取消收藏"
+            >
+              <Heart size={18} fill="#FF6B6B" style={{ color: '#FF6B6B' }} />
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
