@@ -254,6 +254,39 @@ def extract_all_questions_for_course(
     return {"ok": True, "count": len(arts), "message": f"Started extraction for {len(arts)} artifacts"}
 
 
+@router.get("/courses/{course_id}/extraction-status")
+def get_extraction_status(
+    course_id: str,
+    _: None = Depends(_require_admin),
+    supabase: Client = Depends(get_db),
+) -> dict[str, Any]:
+    """Return extraction progress: how many past_exam artifacts have questions extracted."""
+    arts = (
+        supabase.table("artifacts")
+        .select("id")
+        .eq("course_id", course_id)
+        .eq("doc_type", "past_exam")
+        .eq("status", "approved")
+        .execute()
+        .data or []
+    )
+    total = len(arts)
+    if total == 0:
+        return {"total": 0, "done": 0}
+
+    artifact_ids = [a["id"] for a in arts]
+    done_rows = (
+        supabase.table("exam_questions")
+        .select("artifact_id")
+        .in_("artifact_id", artifact_ids)
+        .eq("source_type", "past_exam")
+        .execute()
+        .data or []
+    )
+    done = len({r["artifact_id"] for r in done_rows})
+    return {"total": total, "done": done}
+
+
 @router.patch("/artifacts/{artifact_id}/doc-type", response_model=ArtifactOut)
 def update_artifact_doc_type(
     artifact_id: int,

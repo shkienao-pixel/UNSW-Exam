@@ -68,6 +68,8 @@ export function ArtifactsTab({ secret, coursesVersion }: { secret: string; cours
   const [lectureWeekFilter, setLectureWeekFilter] = useState<'all' | LectureWeekBucket>('all')
   const [fileSearch, setFileSearch] = useState('')
   const [extracting, setExtracting] = useState<number | null>(null)
+  const [extractionProgress, setExtractionProgress] = useState<{ total: number; done: number } | null>(null)
+  const extractionPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // 闂傚倷绀侀幉锛勬暜閹烘嚚娲晝閳ь剟鎮?status 闂傚倷绀侀幖顐﹀疮椤愶附鍋夊┑鍌滎焾闂傤垶鏌涘┑鍕姢缁惧墽鍋撻妵鍕籍閸屾艾浠橀梺璇叉唉瀹曠數妲愰幒妤婃晝闁靛鍠栧▓顓㈡⒑閻戔晛澧查柣鐕傜畱椤洦绻濆顒傚€為梺闈涱煭缁犳垼顣?
   useEffect(() => {
@@ -149,7 +151,21 @@ export function ArtifactsTab({ secret, coursesVersion }: { secret: string; cours
     ))) return
     try {
       const res = await adminReq(secret, `/admin/courses/${selectedCourse.id}/extract-all-questions`, { method: 'POST' }) as { count: number }
-      showToast(tt(`已启动 ${res.count} 个文件的题目提取`, `Started extraction for ${res.count} files`))
+      setExtractionProgress({ total: res.count, done: 0 })
+      if (extractionPollRef.current) clearInterval(extractionPollRef.current)
+      const courseId = selectedCourse.id
+      extractionPollRef.current = setInterval(async () => {
+        try {
+          const status = await adminReq(secret, `/admin/courses/${courseId}/extraction-status`, { method: 'GET' }) as { total: number; done: number }
+          setExtractionProgress({ total: status.total, done: status.done })
+          if (status.done >= status.total && status.total > 0) {
+            clearInterval(extractionPollRef.current!)
+            extractionPollRef.current = null
+            setTimeout(() => setExtractionProgress(null), 4000)
+            showToast(tt(`✅ 提取完成！共处理 ${status.total} 份试卷`, `✅ Done! Processed ${status.total} exams`))
+          }
+        } catch { /* ignore */ }
+      }, 5000)
     } catch (e: unknown) { setError(String(e)) }
   }
 
@@ -370,6 +386,32 @@ export function ArtifactsTab({ secret, coursesVersion }: { secret: string; cours
           </button>
         </div>
       </div>
+
+      {/* Extraction progress bar */}
+      {extractionProgress && (
+        <div className="rounded-2xl p-4 space-y-2" style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.2)' }}>
+          <div className="flex items-center justify-between text-xs" style={{ color: '#f97316' }}>
+            <span className="flex items-center gap-1.5">
+              {extractionProgress.done < extractionProgress.total
+                ? <Loader2 size={12} className="animate-spin" />
+                : <CheckCircle size={12} />}
+              {extractionProgress.done < extractionProgress.total
+                ? tt(`正在提取真题... ${extractionProgress.done} / ${extractionProgress.total} 份完成`, `Extracting... ${extractionProgress.done} / ${extractionProgress.total} done`)
+                : tt(`✅ 全部提取完成！共 ${extractionProgress.total} 份`, `✅ All ${extractionProgress.total} exams extracted!`)}
+            </span>
+            <span style={{ color: '#888' }}>{Math.round((extractionProgress.done / extractionProgress.total) * 100)}%</span>
+          </div>
+          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+            <div
+              className="h-full rounded-full transition-all duration-700"
+              style={{
+                width: `${(extractionProgress.done / extractionProgress.total) * 100}%`,
+                background: extractionProgress.done >= extractionProgress.total ? '#4ade80' : '#f97316',
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* 缂傚倸鍊烽懗鑸靛垔鐎靛憡顫曢柡鍥ュ灩缁犳牕鈹戦悩鍙夋悙鐎瑰憡绻冩穱濠囶敍濮橆剚鍊紓浣鸿檸閸ㄥ爼寮婚悢鐓庣畳闁圭儤鍨垫慨宥囩磽娴ｈ娈旈柛濠傛贡閳ь剟娼ч妶鎼佸箖閳哄懎绠甸柟鐑橆殕椤斿啴姊绘担鐟邦嚋缂佸鍨块幃褔宕卞☉妯哄亶闂侀潧鐗嗗ú鐘诲磻閹捐绀傚璺猴工閳峰姊虹紒姗嗘畷濠电偛锕顐㈩吋閸涱垱娈曢梺閫炲苯澧撮柟顕€娼ч埥澶愬閻樻鏀ㄩ梻浣规た閸ｎ喖危濮濈湕oved闂?*/}
       <div className="p-4 rounded-2xl space-y-3" style={cardStyle}>
