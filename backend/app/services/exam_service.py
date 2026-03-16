@@ -32,8 +32,10 @@ _VISION_SYSTEM = (
     "  3. For MCQ: list options as plain text (no \"A.\" prefix), set correct_answer to the letter if answer key visible, else null.\n"
     "  4. For short_answer: set correct_answer to a concise reference answer if clearly shown, else null.\n"
     "  5. If this page has NO questions (cover page, instructions only), return an empty array [].\n"
-    "  6. For each question, estimate its vertical position on the page as y_start_pct and y_end_pct (0–100, percentage from top).\n"
-    "     Include any figure/diagram/table that belongs to the question in the range.\n"
+    "  6. For each question, estimate its vertical position as y_start_pct and y_end_pct (0–100, percentage from top).\n"
+    "     IMPORTANT: Make the range generous — extend y_start_pct 3–5% ABOVE the question text,\n"
+    "     and y_end_pct 3–5% BELOW the last associated element (diagram/table/options).\n"
+    "     The goal is to include every figure, diagram, table, or equation that belongs to this question.\n"
     "     Only set has_visual=true for a question if it has a diagram, figure, graph, table, or equation IMAGE that is essential to answer it.\n\n"
     "Field 2 — \"page_has_visual\": boolean — true if the page contains ANY visual element (figure/diagram/table/equation image).\n\n"
     "Return ONLY a raw JSON object — no markdown fences, no extra text.\n"
@@ -122,18 +124,21 @@ def _extract_questions_vision(data: bytes, openai_key: str, supabase: Client, ar
             page_has_visual = False
             page_qs = []
 
-        img_h = pix.height
+        page_rect = page.rect  # page size in points
+        page_h_pt = page_rect.height
+        page_w_pt = page_rect.width
+        # padding: 4% of page height in points, minimum 20 pt
+        pad_pt = max(20.0, page_h_pt * 0.04)
         for q in page_qs:
             if not q.get("question_text"):
                 continue
             q_image_url: str | None = None
             if q.get("has_visual") and page_has_visual:
-                y_start = max(0, int(q.get("y_start_pct", 0) / 100 * img_h) - 10)
-                y_end = min(img_h, int(q.get("y_end_pct", 100) / 100 * img_h) + 10)
-                stride = pix.width * pix.n
-                crop_samples = bytes(pix.samples[y_start * stride:y_end * stride])
-                crop_pix = fitz.Pixmap(pix.colorspace, pix.width, y_end - y_start, crop_samples, pix.alpha)
-                crop_jpeg = crop_pix.tobytes("jpeg", 85)
+                y_start_pt = max(0.0, q.get("y_start_pct", 0) / 100.0 * page_h_pt - pad_pt)
+                y_end_pt = min(page_h_pt, q.get("y_end_pct", 100) / 100.0 * page_h_pt + pad_pt)
+                clip = fitz.Rect(0, y_start_pt, page_w_pt, y_end_pt)
+                crop_pix = page.get_pixmap(matrix=mat, clip=clip)
+                crop_jpeg = crop_pix.tobytes("jpeg", 88)
                 q_image_url = _upload_page_image(supabase, crop_jpeg, artifact_id, page_num, global_index)
             q["question_index"] = global_index
             q["page_image_url"] = q_image_url

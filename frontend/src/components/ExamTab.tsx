@@ -562,22 +562,49 @@ function QuestionCard({
   onToggleFav: () => void
 }) {
   const { lang } = useLang()
+  const [lightbox, setLightbox] = useState(false)
 
   return (
     <div
       className="rounded-[24px] p-5 space-y-4"
       style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
     >
-      {/* Page image (only when page has diagrams/figures) */}
+      {/* Question image (per-question crop, click to zoom) */}
       {q.page_image_url && (
-        <div className="rounded-[16px] overflow-hidden border" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
-          <img
-            src={q.page_image_url}
-            alt="Exam page"
-            className="w-full object-contain"
-            style={{ maxHeight: 480, background: '#fff' }}
-          />
-        </div>
+        <>
+          <div
+            className="rounded-[16px] overflow-hidden border cursor-zoom-in"
+            style={{ borderColor: 'rgba(255,255,255,0.08)' }}
+            onClick={() => setLightbox(true)}
+            title={lang === 'zh' ? '点击放大' : 'Click to enlarge'}
+          >
+            <img
+              src={q.page_image_url}
+              alt="Exam figure"
+              className="w-full object-contain"
+              style={{ maxHeight: 400, background: '#fff' }}
+            />
+          </div>
+          {lightbox && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center cursor-zoom-out"
+              style={{ background: 'rgba(0,0,0,0.85)' }}
+              onClick={() => setLightbox(false)}
+            >
+              <img
+                src={q.page_image_url}
+                alt="Exam figure"
+                className="rounded-xl shadow-2xl"
+                style={{ maxWidth: '95vw', maxHeight: '92vh', objectFit: 'contain', background: '#fff' }}
+                onClick={e => e.stopPropagation()}
+              />
+              <button
+                className="absolute top-4 right-4 text-white text-2xl font-bold opacity-70 hover:opacity-100"
+                onClick={() => setLightbox(false)}
+              >✕</button>
+            </div>
+          )}
+        </>
       )}
 
       {/* Question header */}
