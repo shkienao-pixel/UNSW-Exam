@@ -24,26 +24,45 @@ _MIN_TEXT_LEN = 100  # below this, treat PDF as scanned and use Vision
 
 _VISION_SYSTEM = (
     "You are an expert university exam paper parser.\n"
-    "Extract ALL exam questions from this page image.\n\n"
-    "Rules:\n"
-    "1. Extract questions exactly as written — do NOT rephrase.\n"
-    "2. Classify each as \"mcq\" (has A/B/C/D options) or \"short_answer\" (everything else).\n"
-    "3. For MCQ: list options as plain text (no \"A.\" prefix), set correct_answer to the letter (A/B/C/D) if an answer key is visible, else null.\n"
-    "4. For short_answer: set correct_answer to a concise reference answer if clearly shown, else null.\n"
-    "5. If this page has NO questions (e.g. cover page, instructions only), return an empty array [].\n"
-    "6. Return ONLY a raw JSON array — no markdown fences, no extra text.\n\n"
-    "Output format:\n"
-    "[{\"question_index\":1,\"question_type\":\"mcq\","
+    "Analyze this exam page image and return a JSON object with two fields.\n\n"
+    "Field 1 — \"has_visual\": boolean.\n"
+    "  Set true if the page contains diagrams, figures, graphs, equations, tables, or any visual element\n"
+    "  that is NECESSARY to understand or answer the questions on this page.\n"
+    "  Set false if the page is pure text (no visuals needed to answer).\n\n"
+    "Field 2 — \"questions\": array of question objects extracted from this page.\n"
+    "  Rules for extraction:\n"
+    "  1. Extract questions exactly as written — do NOT rephrase.\n"
+    "  2. Classify each as \"mcq\" (has A/B/C/D options) or \"short_answer\" (everything else).\n"
+    "  3. For MCQ: list options as plain text (no \"A.\" prefix), set correct_answer to the letter if answer key visible, else null.\n"
+    "  4. For short_answer: set correct_answer to a concise reference answer if clearly shown, else null.\n"
+    "  5. If this page has NO questions (cover page, instructions only), return an empty array [].\n\n"
+    "Return ONLY a raw JSON object — no markdown fences, no extra text.\n"
+    "Format: {\"has_visual\": true/false, \"questions\": [{\"question_index\":1,\"question_type\":\"mcq\","
     "\"question_text\":\"...\",\"options\":[\"opt\",\"opt\",\"opt\",\"opt\"],"
-    "\"correct_answer\":\"A\",\"explanation\":null},"
-    "{\"question_index\":2,\"question_type\":\"short_answer\","
-    "\"question_text\":\"...\",\"options\":null,"
-    "\"correct_answer\":\"reference answer or null\",\"explanation\":null}]"
+    "\"correct_answer\":\"A\",\"explanation\":null}, ...]}"
 )
 
 
-def _extract_questions_vision(data: bytes, openai_key: str) -> list[dict]:
-    """Convert each PDF page to an image, send to gpt-5.4 Vision, directly extract questions JSON."""
+def _upload_page_image(supabase: Client, img_bytes: bytes, artifact_id: int, page_num: int) -> str | None:
+    """Upload a page screenshot to Supabase Storage and return its public URL."""
+    try:
+        path = f"exam_pages/{artifact_id}/page_{page_num + 1}.png"
+        supabase.storage.from_("artifacts").upload(
+            path, img_bytes, {"content-type": "image/png", "upsert": "true"}
+        )
+        res = supabase.storage.from_("artifacts").get_public_url(path)
+        return res
+    except Exception as exc:
+        logger.warning("_upload_page_image: failed for artifact %s page %d: %s", artifact_id, page_num + 1, exc)
+        return None
+
+
+def _extract_questions_vision(data: bytes, openai_key: str, supabase: Client, artifact_id: int) -> list[dict]:
+    """Convert each PDF page to image, send to gpt-5.4 Vision.
+
+    gpt-5.4 returns has_visual + questions per page.
+    If has_visual=True, upload the page screenshot and attach its URL to all questions on that page.
+    """
     import base64
     import fitz  # pymupdf
 
@@ -73,23 +92,34 @@ def _extract_questions_vision(data: bytes, openai_key: str) -> list[dict]:
                 max_tokens=4096,
                 temperature=0.1,
             )
-            raw = resp.choices[0].message.content or "[]"
+            raw = resp.choices[0].message.content or "{}"
             raw = _extract_json(raw)
-            page_qs = json.loads(raw) if raw else []
+            parsed = json.loads(raw) if raw else {}
+            has_visual: bool = bool(parsed.get("has_visual", False))
+            page_qs: list = parsed.get("questions", [])
             if not isinstance(page_qs, list):
                 page_qs = []
         except Exception as exc:
             logger.warning("_extract_questions_vision: page %d failed: %s", page_num + 1, exc)
+            has_visual = False
             page_qs = []
 
-        # Re-index questions globally across all pages
+        # Upload page screenshot only when gpt-5.4 says there are visuals
+        page_image_url: str | None = None
+        if has_visual and page_qs:
+            page_image_url = _upload_page_image(supabase, img_bytes, artifact_id, page_num)
+
         for q in page_qs:
             if q.get("question_text"):
                 q["question_index"] = global_index
+                q["page_image_url"] = page_image_url
                 all_questions.append(q)
                 global_index += 1
 
-        logger.info("_extract_questions_vision: page %d -> %d questions", page_num + 1, len(page_qs))
+        logger.info(
+            "_extract_questions_vision: page %d -> %d questions, has_visual=%s",
+            page_num + 1, len(page_qs), has_visual,
+        )
 
     doc.close()
     return all_questions
@@ -162,7 +192,7 @@ def extract_questions_from_artifact(
                 artifact_id, len(text.strip()),
             )
             try:
-                questions = _extract_questions_vision(data, openai_key)
+                questions = _extract_questions_vision(data, openai_key, supabase, artifact_id)
             except Exception as exc:
                 logger.error("extract_questions: Vision failed for artifact %s: %s", artifact_id, exc)
                 return []
@@ -175,16 +205,17 @@ def extract_questions_from_artifact(
                 if not q.get("question_text"):
                     continue
                 rows_to_insert.append({
-                    "course_id":      course_id,
-                    "artifact_id":    artifact_id,
-                    "source_type":    "past_exam",
-                    "question_type":  q.get("question_type", "short_answer"),
-                    "question_index": int(q.get("question_index", 0)),
-                    "question_text":  str(q.get("question_text", "")),
-                    "options":        q.get("options") if q.get("question_type") == "mcq" else None,
-                    "correct_answer": q.get("correct_answer"),
-                    "explanation":    q.get("explanation"),
+                    "course_id":       course_id,
+                    "artifact_id":     artifact_id,
+                    "source_type":     "past_exam",
+                    "question_type":   q.get("question_type", "short_answer"),
+                    "question_index":  int(q.get("question_index", 0)),
+                    "question_text":   str(q.get("question_text", "")),
+                    "options":         q.get("options") if q.get("question_type") == "mcq" else None,
+                    "correct_answer":  q.get("correct_answer"),
+                    "explanation":     q.get("explanation"),
                     "mock_session_id": None,
+                    "page_image_url":  q.get("page_image_url"),
                 })
             if not rows_to_insert:
                 return []

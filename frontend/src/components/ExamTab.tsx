@@ -568,6 +568,18 @@ function QuestionCard({
       className="rounded-[24px] p-5 space-y-4"
       style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
     >
+      {/* Page image (only when page has diagrams/figures) */}
+      {q.page_image_url && (
+        <div className="rounded-[16px] overflow-hidden border" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+          <img
+            src={q.page_image_url}
+            alt="Exam page"
+            className="w-full object-contain"
+            style={{ maxHeight: 480, background: '#fff' }}
+          />
+        </div>
+      )}
+
       {/* Question header */}
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm font-medium text-white leading-relaxed flex-1">

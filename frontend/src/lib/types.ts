@@ -274,6 +274,7 @@ export interface ExamQuestion {
   explanation: string | null
   mock_session_id: string | null
   created_at: string
+  page_image_url?: string | null
   // injected by GET /exam/questions
   is_favorite?: boolean
   prev_answer?: string | null
