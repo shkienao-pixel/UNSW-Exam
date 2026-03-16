@@ -148,7 +148,7 @@ export function ArtifactsTab({ secret, coursesVersion }: { secret: string; cours
       `Re-extract all past exam questions for "${selectedCourse.code}"?\n\nThis will clear and re-extract all past_exam files in the background.`
     ))) return
     try {
-      const res = await adminReq(secret, `/admin/courses/${selectedCourse.id}/extract-all-questions`, { method: 'POST' })
+      const res = await adminReq(secret, `/admin/courses/${selectedCourse.id}/extract-all-questions`, { method: 'POST' }) as { count: number }
       showToast(tt(`已启动 ${res.count} 个文件的题目提取`, `Started extraction for ${res.count} files`))
     } catch (e: unknown) { setError(String(e)) }
   }
