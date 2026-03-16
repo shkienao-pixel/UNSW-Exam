@@ -292,36 +292,48 @@ export default function FloatingAskWindow() {
 
   // ── Render: FAB (closed or minimized) ───────────────────────────────────────
   if (!isOpen || isMinimized) {
-    if (pos.x === -1) return null  // wait for position init
+    if (pos.x === -1) return null
     return (
       <div
         onMouseDown={handleFabMouseDown}
         onMouseUp={handleFabMouseUp}
-        title="AI 问答（可拖动）"
+        title="AI 问答（可拖动，点击打开）"
         className="fixed z-50 flex items-center justify-center rounded-full shadow-2xl select-none"
         style={{
           left: pos.x,
           top: pos.y,
           width: 52,
           height: 52,
-          background: 'rgba(20,22,30,0.92)',
-          border: '1px solid rgba(255,215,0,0.35)',
+          background: isLoading ? 'rgba(255,215,0,0.18)' : 'rgba(20,22,30,0.92)',
+          border: `1px solid ${isLoading ? 'rgba(255,215,0,0.6)' : 'rgba(255,215,0,0.35)'}`,
           color: '#FFD700',
           backdropFilter: 'blur(14px)',
           WebkitBackdropFilter: 'blur(14px)',
-          cursor: isDragging.current ? 'grabbing' : 'grab',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+          cursor: 'grab',
+          boxShadow: isLoading ? '0 0 18px rgba(255,215,0,0.25)' : '0 8px 32px rgba(0,0,0,0.45)',
         }}
       >
-        <MessageCircleMore size={22} />
-        {unreadCount > 0 && (
+        {isLoading
+          ? <Loader2 size={22} className="animate-spin" />
+          : <MessageCircleMore size={22} />
+        }
+        {/* Stop button when loading */}
+        {isLoading && (
+          <button
+            onMouseDown={e => e.stopPropagation()}
+            onMouseUp={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); stopGeneration() }}
+            title="停止生成"
+            className="absolute -bottom-1 -right-1 flex items-center justify-center rounded-full"
+            style={{ width: 20, height: 20, background: '#ef4444', color: '#fff', border: '2px solid rgba(20,22,30,0.9)' }}
+          >
+            <Square size={9} />
+          </button>
+        )}
+        {!isLoading && unreadCount > 0 && (
           <span
             className="absolute -top-1 -right-1 flex items-center justify-center rounded-full font-bold"
-            style={{
-              width: 18, height: 18,
-              background: '#ef4444', color: '#fff',
-              fontSize: 10, lineHeight: '18px',
-            }}
+            style={{ width: 18, height: 18, background: '#ef4444', color: '#fff', fontSize: 10, lineHeight: '18px' }}
           >
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
@@ -348,7 +360,17 @@ export default function FloatingAskWindow() {
           <span className="text-sm font-semibold flex-1" style={{ color: '#E5E5E5' }}>
             AI 问答
           </span>
-          {messages.length > 0 && (
+          {isLoading && (
+            <button
+              onClick={stopGeneration}
+              title="停止生成"
+              className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors"
+              style={{ background: 'rgba(239,68,68,0.15)', color: '#F87171', border: '1px solid rgba(239,68,68,0.3)' }}
+            >
+              <Square size={10} /> 停止
+            </button>
+          )}
+          {messages.length > 0 && !isLoading && (
             <button
               onClick={clearMessages}
               title="清空对话"
@@ -368,7 +390,7 @@ export default function FloatingAskWindow() {
           </button>
           <button
             onClick={closeWindow}
-            title="关闭"
+            title="收起（生成不中断）"
             className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
             style={{ color: '#444' }}
           >

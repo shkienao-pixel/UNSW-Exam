@@ -141,8 +141,8 @@ def _extract_questions_vision(data: bytes, openai_key: str, supabase: Client, ar
 
             q["question_index"] = global_index
             q["page_image_url"] = q_image_url
-                all_questions.append(q)
-                global_index += 1
+            all_questions.append(q)
+            global_index += 1
 
         logger.info(
             "_extract_questions_vision: page %d -> %d questions, has_visual=%s",

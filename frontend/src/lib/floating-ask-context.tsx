@@ -143,7 +143,6 @@ export function FloatingAskProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const closeWindow = useCallback(() => {
-    abortRef.current?.abort()
     setIsOpen(false)
     setIsMinimized(false)
   }, [])
