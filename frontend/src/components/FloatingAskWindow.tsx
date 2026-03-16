@@ -10,8 +10,10 @@ import rehypeHighlight from 'rehype-highlight'
 import 'highlight.js/styles/github-dark.css'
 import { useFloatingAsk } from '@/lib/floating-ask-context'
 
-const WINDOW_W = 420
-const WINDOW_H = 560
+const MIN_W = 320
+const MIN_H = 380
+const DEFAULT_W = 420
+const DEFAULT_H = 560
 
 // ── Lightbox ─────────────────────────────────────────────────────────────────
 
@@ -56,7 +58,21 @@ export default function FloatingAskWindow() {
   } = useFloatingAsk()
 
   // ── Window position ─────────────────────────────────────────────────────────
-  const POS_KEY = 'floating_ask_pos'
+  const POS_KEY  = 'floating_ask_pos'
+  const SIZE_KEY = 'floating_ask_size'
+
+  function loadSize(): { w: number; h: number } {
+    if (typeof window === 'undefined') return { w: DEFAULT_W, h: DEFAULT_H }
+    try {
+      const raw = localStorage.getItem(SIZE_KEY)
+      if (!raw) return { w: DEFAULT_W, h: DEFAULT_H }
+      const s = JSON.parse(raw) as { w: number; h: number }
+      return {
+        w: Math.max(MIN_W, Math.min(window.innerWidth  - 40, s.w)),
+        h: Math.max(MIN_H, Math.min(window.innerHeight - 40, s.h)),
+      }
+    } catch { return { w: DEFAULT_W, h: DEFAULT_H } }
+  }
 
   function loadPos(): { x: number; y: number } | null {
     if (typeof window === 'undefined') return null
@@ -66,25 +82,32 @@ export default function FloatingAskWindow() {
       const p = JSON.parse(raw) as { x: number; y: number }
       // Clamp to current viewport in case user resized window
       return {
-        x: Math.max(0, Math.min(window.innerWidth  - WINDOW_W, p.x)),
-        y: Math.max(0, Math.min(window.innerHeight - 60,        p.y)),
+        x: Math.max(0, Math.min(window.innerWidth  - 60, p.x)),
+        y: Math.max(0, Math.min(window.innerHeight - 60, p.y)),
       }
     } catch { return null }
   }
 
-  const [pos, setPos] = useState({ x: -1, y: -1 })
+  const [pos, setPos]   = useState({ x: -1, y: -1 })
+  const [size, setSize] = useState<{ w: number; h: number }>(() =>
+    typeof window !== 'undefined' ? loadSize() : { w: DEFAULT_W, h: DEFAULT_H }
+  )
   const isDragging    = useRef(false)
   const dragOffset    = useRef({ x: 0, y: 0 })
   const currentPos    = useRef({ x: 0, y: 0 })
-  const dragStartPos  = useRef({ x: 0, y: 0 })  // for click vs drag on FAB
+  const dragStartPos  = useRef({ x: 0, y: 0 })
+
+  type ResizeDir = 'e' | 's' | 'se'
+  const isResizing    = useRef<ResizeDir | null>(null)
+  const resizeStart   = useRef({ mouseX: 0, mouseY: 0, w: 0, h: 0 })
 
   // Initialize position on mount: saved pos → default bottom-right
   useEffect(() => {
     if (pos.x === -1 && typeof window !== 'undefined') {
       const saved = loadPos()
-      const FAB_SIZE = 52
-      const x = saved?.x ?? Math.max(20, window.innerWidth  - FAB_SIZE - 28)
-      const y = saved?.y ?? Math.max(20, window.innerHeight - FAB_SIZE - 28)
+      const FAB = 52
+      const x = saved?.x ?? Math.max(20, window.innerWidth  - FAB - 28)
+      const y = saved?.y ?? Math.max(20, window.innerHeight - FAB - 28)
       setPos({ x, y })
       currentPos.current = { x, y }
     }
@@ -94,13 +117,33 @@ export default function FloatingAskWindow() {
   // Global mousemove / mouseup for dragging
   useEffect(() => {
     function onMove(e: MouseEvent) {
+      if (isResizing.current) {
+        const dir = isResizing.current
+        const { mouseX, mouseY, w, h } = resizeStart.current
+        const dx = e.clientX - mouseX
+        const dy = e.clientY - mouseY
+        const newW = dir === 's' ? w : Math.max(MIN_W, Math.min(window.innerWidth  - currentPos.current.x - 8, w + dx))
+        const newH = dir === 'e' ? h : Math.max(MIN_H, Math.min(window.innerHeight - currentPos.current.y - 8, h + dy))
+        setSize({ w: newW, h: newH })
+        return
+      }
       if (!isDragging.current) return
-      const newX = Math.max(0, Math.min(window.innerWidth - WINDOW_W, e.clientX - dragOffset.current.x))
+      const newX = Math.max(0, Math.min(window.innerWidth - 60, e.clientX - dragOffset.current.x))
       const newY = Math.max(0, Math.min(window.innerHeight - 60, e.clientY - dragOffset.current.y))
       currentPos.current = { x: newX, y: newY }
       setPos({ x: newX, y: newY })
     }
     function onUp() {
+      if (isResizing.current) {
+        isResizing.current = null
+        try { localStorage.setItem(SIZE_KEY, JSON.stringify({ w: 0, h: 0 })) } catch { /* ignore */ }
+        // save actual size via setSize callback below — use ref instead
+        setSize(s => {
+          try { localStorage.setItem(SIZE_KEY, JSON.stringify(s)) } catch { /* ignore */ }
+          return s
+        })
+        return
+      }
       if (isDragging.current) {
         isDragging.current = false
         try { localStorage.setItem(POS_KEY, JSON.stringify(currentPos.current)) } catch { /* ignore */ }
@@ -189,6 +232,13 @@ export default function FloatingAskWindow() {
     if (Math.sqrt(dx * dx + dy * dy) < 6) {
       openWindow()
     }
+  }
+
+  function handleResizeMouseDown(e: React.MouseEvent, dir: ResizeDir) {
+    e.preventDefault()
+    e.stopPropagation()
+    isResizing.current = dir
+    resizeStart.current = { mouseX: e.clientX, mouseY: e.clientY, w: size.w, h: size.h }
   }
 
   function handleTitleMouseDown(e: React.MouseEvent) {
@@ -702,25 +752,50 @@ export default function FloatingAskWindow() {
           </div>
         </>
       ) : (
-        /* ── Desktop: draggable floating window ── */
+        /* ── Desktop: draggable + resizable floating window ── */
         <div
-          className="fixed z-50 flex flex-col rounded-2xl overflow-hidden"
+          className="fixed z-50 flex flex-col rounded-2xl"
           style={{
             left: pos.x < 0 ? 'auto' : pos.x,
             right: pos.x < 0 ? 20 : undefined,
             top: pos.y < 0 ? 'auto' : pos.y,
             bottom: pos.y < 0 ? 20 : undefined,
-            width: WINDOW_W,
-            height: WINDOW_H,
+            width: size.w,
+            height: size.h,
+            minWidth: MIN_W,
+            minHeight: MIN_H,
             background: 'rgba(7,8,15,0.97)',
             border: '1px solid rgba(255,255,255,0.1)',
             backdropFilter: 'blur(24px)',
             WebkitBackdropFilter: 'blur(24px)',
             boxShadow: '0 32px 80px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.04)',
             userSelect: 'none',
+            overflow: 'hidden',
           }}
         >
           {innerContent}
+
+          {/* Resize handles */}
+          {/* Right edge */}
+          <div
+            onMouseDown={e => handleResizeMouseDown(e, 'e')}
+            style={{ position: 'absolute', top: 0, right: 0, width: 5, height: '100%', cursor: 'ew-resize', zIndex: 10 }}
+          />
+          {/* Bottom edge */}
+          <div
+            onMouseDown={e => handleResizeMouseDown(e, 's')}
+            style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: 5, cursor: 'ns-resize', zIndex: 10 }}
+          />
+          {/* Bottom-right corner */}
+          <div
+            onMouseDown={e => handleResizeMouseDown(e, 'se')}
+            style={{
+              position: 'absolute', bottom: 0, right: 0, width: 16, height: 16,
+              cursor: 'nwse-resize', zIndex: 11,
+              background: 'linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.12) 50%)',
+              borderRadius: '0 0 16px 0',
+            }}
+          />
         </div>
       )}
     </>
