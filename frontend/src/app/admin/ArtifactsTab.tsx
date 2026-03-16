@@ -621,7 +621,8 @@ export function ArtifactsTab({ secret, coursesVersion }: { secret: string; cours
         return (
         <div className="space-y-2">
           {displayedArtifacts.map(a => (
-            <div key={a.id} className="flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200"
+            <div key={a.id}>
+            <div className="flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200"
               style={rowStyle}
               onMouseEnter={e => {
                 (e.currentTarget as HTMLElement).style.background = 'rgba(255,215,0,0.03)'
@@ -797,6 +798,7 @@ export function ArtifactsTab({ secret, coursesVersion }: { secret: string; cours
               <DeleteBtn onClick={() => deleteArtifact(a.id, a.file_name)} />
             </div>
             {/* Questions preview panel */}
+
             {a.status === 'approved' && a.doc_type === 'past_exam' && previewArtifactId === a.id && (
               <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(167,139,250,0.2)', background: 'rgba(167,139,250,0.04)' }}>
                 {previewLoading ? (
@@ -831,6 +833,7 @@ export function ArtifactsTab({ secret, coursesVersion }: { secret: string; cours
                 )}
               </div>
             )}
+            </div>
           ))}
           {displayedArtifacts.length === 0 && (
             <Empty text={
