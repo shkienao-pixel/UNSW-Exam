@@ -224,6 +224,36 @@ def extract_questions_for_artifact(
     return {"ok": True, "artifact_id": artifact_id, "message": "Question extraction started in background"}
 
 
+@router.post("/courses/{course_id}/extract-all-questions")
+def extract_all_questions_for_course(
+    course_id: str,
+    background_tasks: BackgroundTasks,
+    _: None = Depends(_require_admin),
+    supabase: Client = Depends(get_db),
+) -> dict[str, Any]:
+    """Re-extract questions from ALL approved past_exam artifacts in a course."""
+    arts = (
+        supabase.table("artifacts")
+        .select("*")
+        .eq("course_id", course_id)
+        .eq("doc_type", "past_exam")
+        .eq("status", "approved")
+        .execute()
+        .data or []
+    )
+    if not arts:
+        raise HTTPException(status_code=404, detail="No approved past_exam artifacts found in this course")
+
+    # Clear all existing questions for these artifacts
+    artifact_ids = [a["id"] for a in arts]
+    supabase.table("exam_questions").delete().in_("artifact_id", artifact_ids).execute()
+
+    for art in arts:
+        background_tasks.add_task(_bg_extract_questions, supabase, art)
+
+    return {"ok": True, "count": len(arts), "message": f"Started extraction for {len(arts)} artifacts"}
+
+
 @router.patch("/artifacts/{artifact_id}/doc-type", response_model=ArtifactOut)
 def update_artifact_doc_type(
     artifact_id: int,

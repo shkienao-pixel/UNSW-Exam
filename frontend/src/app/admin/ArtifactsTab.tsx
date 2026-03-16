@@ -141,6 +141,18 @@ export function ArtifactsTab({ secret, coursesVersion }: { secret: string; cours
     finally { setExtracting(null) }
   }
 
+  async function extractAllQuestions() {
+    if (!selectedCourse) return
+    if (!confirm(tt(
+      `一键重新提取「${selectedCourse.code}」所有往年真题？\n\n将清空并重新提取所有 past_exam 文件的题目，后台运行需要几分钟。`,
+      `Re-extract all past exam questions for "${selectedCourse.code}"?\n\nThis will clear and re-extract all past_exam files in the background.`
+    ))) return
+    try {
+      const res = await adminReq(secret, `/admin/courses/${selectedCourse.id}/extract-all-questions`, { method: 'POST' })
+      showToast(tt(`已启动 ${res.count} 个文件的题目提取`, `Started extraction for ${res.count} files`))
+    } catch (e: unknown) { setError(String(e)) }
+  }
+
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(''), 2500)
@@ -345,6 +357,16 @@ export function ArtifactsTab({ secret, coursesVersion }: { secret: string; cours
             onMouseLeave={e => { if (!reindexing) (e.currentTarget as HTMLElement).style.background = 'rgba(255,215,0,0.1)' }}>
             {reindexing ? <Loader2 size={12} className="animate-spin" /> : <DatabaseZap size={12} />}
             {reindexing ? tt('\u7d22\u5f15\u4e2d...', 'Reindexing...') : tt('\u91cd\u65b0\u7d22\u5f15', 'Reindex')}
+          </button>
+          <button
+            onClick={extractAllQuestions}
+            title={tt('一键重新提取所有往年真题', 'Re-extract all past exam questions')}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all duration-150"
+            style={{ background: 'rgba(249,115,22,0.1)', color: '#f97316', border: '1px solid rgba(249,115,22,0.3)' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(249,115,22,0.18)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(249,115,22,0.1)' }}>
+            <FileSearch size={12} />
+            {tt('更新真题', 'Update Questions')}
           </button>
         </div>
       </div>
