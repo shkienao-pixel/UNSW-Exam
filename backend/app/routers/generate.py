@@ -351,37 +351,16 @@ def ask_question_stream(
         art_ids = accessible if accessible else None
 
     from app.services.llm_key_service import get_api_key
-    openai_key: str  = get_api_key("openai", supabase) or get_settings().openai_api_key
     gemini_key: Optional[str] = get_api_key("gemini", supabase)
 
-    from app.services.gemini_service import (
-        gpt_filter_chunks,
-        gemini_generate_answer_stream,
-    )
-    from app.services.rag_service import search_chunks
+    from app.services.gemini_service import gemini_generate_answer_stream
     from app.services.credit_service import spend, earn, COSTS
     from app.core.exceptions import InsufficientCreditsError
-
-    chunks = search_chunks(supabase, course_id, body.question, top_k=8, artifact_ids=art_ids)
-
-    sources: list[dict] = []
-    if chunks:
-        seen: set[int] = set()
-        for c in chunks:
-            aid = c["artifact_id"]
-            if aid not in seen:
-                seen.add(aid)
-                sources.append({
-                    "artifact_id": aid,
-                    "file_name":   c.get("file_name", ""),
-                    "storage_url": c.get("storage_url", ""),
-                })
 
     def _sse(data: dict) -> str:
         return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
     def event_stream():
-        # 先扣积分，失败直接返回错误（不能在已发送 SSE 数据后再返回 402）
         cost = COSTS.get("gen_ask", 3)
         try:
             spend(supabase, current_user["id"], cost, "gen_ask")
@@ -392,73 +371,28 @@ def ask_question_stream(
             yield _sse({"type": "error", "message": str(e)})
             return
 
-        # Stage 1: GPT filter
-        yield _sse({"type": "status", "phase": "filtering"})
-
-        if chunks:
-            filtered_context = gpt_filter_chunks(body.question, chunks, openai_key)
-        else:
-            ctx, _ = generate_service._fallback_extract(
-                supabase, current_user["id"], course_id, art_ids, max_chars=60_000
-            )
-            if not ctx.strip():
-                # 无内容 → 退款
-                try:
-                    earn(supabase, current_user["id"], cost, "refund", note="gen_ask 退款 - 无课程资料")
-                except Exception:
-                    pass
-                yield _sse({
-                    "type": "done",
-                    "answer": "No course material is available yet. Please wait for file approval/indexing.",
-                    "sources": [],
-                    "image_url": None,
-                    "model_used": "none",
-                })
-                return
-            filtered_context = ctx
-
         yield _sse({"type": "status", "phase": "generating"})
 
         history = [{"role": m.role, "content": m.content} for m in (body.history or [])]
         full_answer = ""
-        model_used  = "gpt-5.4"
 
         try:
-            if gemini_key:
-                for token in gemini_generate_answer_stream(body.question, filtered_context, gemini_key, history=history):
-                    full_answer += token
-                    yield _sse({"type": "token", "text": token})
-                if full_answer:
-                    model_used = "gemini-3.1-pro-preview"
+            if not gemini_key:
+                raise RuntimeError("Gemini API key not configured")
 
-            if not full_answer:
-                # GPT-4o 兜底（整块输出）
-                system = (
-                    "You are a knowledgeable course tutor. "
-                    "Answer the student's question based the course material excerpts provided. "
-                    "Be clear and educational. Synthesize information across multiple sources. "
-                    "Respond in the same language as the question. "
-                    "Do NOT add a sources section."
-                )
-                context_msg = (
-                    f"Course material:\n\n{filtered_context}\n\n---\n\nQuestion: {body.question}"
-                    if filtered_context.strip()
-                    else body.question
-                )
-                full_answer = generate_service._chat(system, context_msg, openai_key)
-                yield _sse({"type": "token", "text": full_answer})
-                model_used = "gpt-5.4"
+            for token in gemini_generate_answer_stream(body.question, "", gemini_key, history=history):
+                full_answer += token
+                yield _sse({"type": "token", "text": token})
 
             yield _sse({
                 "type":       "done",
                 "answer":     full_answer,
-                "sources":    sources,
+                "sources":    [],
                 "image_url":  None,
-                "model_used": model_used,
+                "model_used": "gemini-3.1-pro-preview",
             })
 
         except Exception as e:
-            # 生成失败 → 自动退款
             try:
                 earn(supabase, current_user["id"], cost, "refund", note="gen_ask 失败退款")
             except Exception as refund_err:
