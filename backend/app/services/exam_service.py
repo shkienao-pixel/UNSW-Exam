@@ -183,14 +183,24 @@ def extract_questions_from_artifact(
         logger.error("extract_questions: download failed for artifact %s: %s", artifact_id, exc)
         return []
 
-    # For PDF: try text extraction first; if too short (scanned), use gpt-5.4 Vision directly
+    # For PDF: try text extraction first; use Vision if scanned OR has embedded images (figures/diagrams)
     if ft == "pdf":
         text = _raw_extract(ft, data)
-        if len(text.strip()) < _MIN_TEXT_LEN:
-            logger.info(
-                "extract_questions: artifact %s is scanned PDF (%d chars), using gpt-5.4 Vision",
-                artifact_id, len(text.strip()),
-            )
+        use_vision = len(text.strip()) < _MIN_TEXT_LEN
+        if not use_vision:
+            try:
+                import fitz as _fitz
+                _doc = _fitz.open(stream=data, filetype="pdf")
+                use_vision = any(bool(_p.get_images()) for _p in _doc)
+                _doc.close()
+                if use_vision:
+                    logger.info(
+                        "extract_questions: artifact %s has embedded images, using gpt-5.4 Vision",
+                        artifact_id,
+                    )
+            except Exception:
+                pass
+        if use_vision:
             try:
                 questions = _extract_questions_vision(data, openai_key, supabase, artifact_id)
             except Exception as exc:
