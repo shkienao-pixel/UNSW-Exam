@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 _MAX_PDF_CHARS = 80_000
 _MIN_TEXT_LEN = 100  # below this, treat PDF as scanned and use Vision
+_SIGNIFICANT_IMAGE_PX = 100  # images smaller than this in either dimension are ignored (logos/icons)
 
 _VISION_SYSTEM = (
     "You are an expert university exam paper parser.\n"
@@ -48,6 +49,49 @@ _VISION_SYSTEM = (
 
 _EXAM_PAGES_BUCKET = "exam-pages"
 _BUCKET_CREATED = False
+
+
+def _has_significant_images(doc) -> bool:
+    """Return True if any page contains an embedded image larger than _SIGNIFICANT_IMAGE_PX × _SIGNIFICANT_IMAGE_PX.
+
+    Filters out page decorations (logos, watermarks, icons) which are typically <100×100 px.
+    """
+    for page in doc:
+        for img in page.get_images(full=True):
+            w, h = img[2], img[3]  # pixel dimensions of the stored image
+            if w > _SIGNIFICANT_IMAGE_PX and h > _SIGNIFICANT_IMAGE_PX:
+                return True
+    return False
+
+
+def _insert_past_exam_questions(supabase: Client, questions: list[dict], course_id: str, artifact_id: int) -> list[dict]:
+    """Build rows and insert past_exam questions into exam_questions table."""
+    rows = []
+    for q in questions:
+        if not q.get("question_text"):
+            continue
+        rows.append({
+            "course_id":       course_id,
+            "artifact_id":     artifact_id,
+            "source_type":     "past_exam",
+            "question_type":   q.get("question_type", "short_answer"),
+            "question_index":  int(q.get("question_index", 0)),
+            "question_text":   str(q.get("question_text", "")),
+            "options":         q.get("options") if q.get("question_type") == "mcq" else None,
+            "correct_answer":  q.get("correct_answer"),
+            "explanation":     q.get("explanation"),
+            "mock_session_id": None,
+            "page_image_url":  q.get("page_image_url"),
+        })
+    if not rows:
+        return []
+    try:
+        result = supabase.table("exam_questions").insert(rows).execute()
+        logger.info("_insert_past_exam_questions: inserted %d for artifact %s", len(result.data or []), artifact_id)
+        return result.data or []
+    except Exception as exc:
+        logger.error("_insert_past_exam_questions: DB insert failed for artifact %s: %s", artifact_id, exc)
+        return []
 
 
 def _ensure_exam_pages_bucket(supabase: Client) -> None:
@@ -95,10 +139,8 @@ def _extract_questions_vision(data: bytes, openai_key: str, supabase: Client, ar
 
     for page_num in range(len(doc)):
         page = doc[page_num]
-        mat = fitz.Matrix(2.0, 2.0)
+        mat = fitz.Matrix(1.5, 1.5)  # 108 DPI — sufficient for Vision, 40% smaller than 2x
         pix = page.get_pixmap(matrix=mat)
-        # Generate JPEG for upload (smaller); keep PNG for base64 to preserve quality
-        jpeg_bytes = pix.tobytes("jpeg", 85)
         b64 = base64.b64encode(pix.tobytes("png")).decode()
 
         try:
@@ -136,9 +178,11 @@ def _extract_questions_vision(data: bytes, openai_key: str, supabase: Client, ar
             if q.get("has_visual") and page_has_visual:
                 v_start = q.get("visual_y_start_pct")
                 v_end = q.get("visual_y_end_pct")
-                if v_start is None or v_end is None:
-                    # fallback: skip image if coordinates missing
-                    logger.debug("has_visual=True but no visual coords for q%d, skipping", global_index)
+                if v_start is None or v_end is None or float(v_start) >= float(v_end):
+                    logger.debug(
+                        "has_visual=True but coords invalid for q%d (v_start=%s v_end=%s), skipping",
+                        global_index, v_start, v_end,
+                    )
                 else:
                     y_start_pt = max(0.0, float(v_start) / 100.0 * page_h_pt - pad_pt)
                     y_end_pt = min(page_h_pt, float(v_end) / 100.0 * page_h_pt + pad_pt)
@@ -225,11 +269,11 @@ def extract_questions_from_artifact(
             try:
                 import fitz as _fitz
                 _doc = _fitz.open(stream=data, filetype="pdf")
-                use_vision = any(bool(_p.get_images()) for _p in _doc)
+                use_vision = _has_significant_images(_doc)
                 _doc.close()
                 if use_vision:
                     logger.info(
-                        "extract_questions: artifact %s has embedded images, using gpt-5.4 Vision",
+                        "extract_questions: artifact %s has significant embedded images, using gpt-5.4 Vision",
                         artifact_id,
                     )
             except Exception:
@@ -243,33 +287,7 @@ def extract_questions_from_artifact(
             if not questions:
                 logger.warning("extract_questions: no questions from Vision for artifact %s", artifact_id)
                 return []
-            # Skip to insert
-            rows_to_insert = []
-            for q in questions:
-                if not q.get("question_text"):
-                    continue
-                rows_to_insert.append({
-                    "course_id":       course_id,
-                    "artifact_id":     artifact_id,
-                    "source_type":     "past_exam",
-                    "question_type":   q.get("question_type", "short_answer"),
-                    "question_index":  int(q.get("question_index", 0)),
-                    "question_text":   str(q.get("question_text", "")),
-                    "options":         q.get("options") if q.get("question_type") == "mcq" else None,
-                    "correct_answer":  q.get("correct_answer"),
-                    "explanation":     q.get("explanation"),
-                    "mock_session_id": None,
-                    "page_image_url":  q.get("page_image_url"),
-                })
-            if not rows_to_insert:
-                return []
-            try:
-                result = supabase.table("exam_questions").insert(rows_to_insert).execute()
-                logger.info("extract_questions(vision): inserted %d for artifact %s", len(result.data or []), artifact_id)
-                return result.data or []
-            except Exception as exc:
-                logger.error("extract_questions(vision): DB insert failed for artifact %s: %s", artifact_id, exc)
-                return []
+            return _insert_past_exam_questions(supabase, questions, course_id, artifact_id)
     else:
         text = _raw_extract(ft, data)
 
@@ -317,36 +335,7 @@ def extract_questions_from_artifact(
         logger.warning("extract_questions: no questions parsed for artifact %s", artifact_id)
         return []
 
-    rows_to_insert = []
-    for q in questions:
-        if not q.get("question_text"):
-            continue
-        rows_to_insert.append({
-            "course_id":      course_id,
-            "artifact_id":    artifact_id,
-            "source_type":    "past_exam",
-            "question_type":  q.get("question_type", "short_answer"),
-            "question_index": int(q.get("question_index", 0)),
-            "question_text":  str(q.get("question_text", "")),
-            "options":        q.get("options") if q.get("question_type") == "mcq" else None,
-            "correct_answer": q.get("correct_answer"),
-            "explanation":    q.get("explanation"),
-            "mock_session_id": None,
-        })
-
-    if not rows_to_insert:
-        return []
-
-    try:
-        result = supabase.table("exam_questions").insert(rows_to_insert).execute()
-        logger.info(
-            "extract_questions: inserted %d questions for artifact %s",
-            len(result.data or []), artifact_id,
-        )
-        return result.data or []
-    except Exception as exc:
-        logger.error("extract_questions: DB insert failed for artifact %s: %s", artifact_id, exc)
-        return []
+    return _insert_past_exam_questions(supabase, questions, course_id, artifact_id)
 
 
 # ── Generate mock questions (called by generation worker) ─────────────────────

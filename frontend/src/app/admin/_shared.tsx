@@ -81,6 +81,7 @@ export interface Artifact {
   id: number; course_id: string; file_name: string; file_type: string
   status: string; created_at: string; reject_reason: string | null; uploaded_by: string | null
   storage_url?: string; doc_type?: DocType; week?: number | null
+  extraction_status?: 'extracting' | 'done' | 'failed' | null
 }
 export interface User {
   id: string; email: string; created_at: string; last_sign_in_at: string | null; email_confirmed: boolean

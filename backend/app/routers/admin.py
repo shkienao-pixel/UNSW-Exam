@@ -105,7 +105,7 @@ def _require_admin(
 def _bg_extract_questions(supabase: Client, artifact: dict) -> None:
     """Background task: extract exam questions from past_exam type artifacts.
 
-    Only runs for doc_type='past_exam'. Idempotent — skips if already extracted.
+    Sets extraction_status = 'extracting' at start, 'done' or 'failed' at end.
     Must be a sync function (not async) so FastAPI runs it in a thread pool.
     """
     if artifact.get("doc_type") != "past_exam":
@@ -114,6 +114,13 @@ def _bg_extract_questions(supabase: Client, artifact: dict) -> None:
     ft = artifact.get("file_type", "pdf")
     if not sp or ft not in ("pdf", "word", "text"):
         return
+
+    artifact_id = artifact["id"]
+    try:
+        supabase.table("artifacts").update({"extraction_status": "extracting"}).eq("id", artifact_id).execute()
+    except Exception:
+        pass  # status tracking is best-effort
+
     try:
         from app.services.exam_service import extract_questions_from_artifact
         from app.services.llm_key_service import get_api_key
@@ -121,18 +128,22 @@ def _bg_extract_questions(supabase: Client, artifact: dict) -> None:
         openai_key = get_api_key("openai", supabase) or get_settings().openai_api_key
         questions = extract_questions_from_artifact(
             supabase,
-            artifact["id"],
+            artifact_id,
             artifact["course_id"],
             openai_key,
         )
+        final_status = "done" if questions else "failed"
         logger.info(
-            "_bg_extract_questions: extracted %d questions for artifact %s",
-            len(questions), artifact.get("id"),
+            "_bg_extract_questions: extracted %d questions for artifact %s → %s",
+            len(questions), artifact_id, final_status,
         )
+        supabase.table("artifacts").update({"extraction_status": final_status}).eq("id", artifact_id).execute()
     except Exception as exc:
-        logger.warning(
-            "_bg_extract_questions failed for artifact %s: %s", artifact.get("id"), exc
-        )
+        logger.warning("_bg_extract_questions failed for artifact %s: %s", artifact_id, exc)
+        try:
+            supabase.table("artifacts").update({"extraction_status": "failed"}).eq("id", artifact_id).execute()
+        except Exception:
+            pass
 
 
 def _bg_process(supabase: Client, artifact: dict) -> None:
@@ -216,6 +227,8 @@ def extract_questions_for_artifact(
     art = art_rows[0]
     if art.get("doc_type") != "past_exam":
         raise HTTPException(status_code=400, detail="Only past_exam artifacts support question extraction")
+    if art.get("extraction_status") == "extracting":
+        raise HTTPException(status_code=409, detail="Extraction already in progress for this artifact")
 
     # Delete existing questions so re-extraction runs fresh
     supabase.table("exam_questions").delete().eq("artifact_id", artifact_id).execute()
@@ -263,7 +276,7 @@ def get_extraction_status(
     """Return extraction progress: how many past_exam artifacts have questions extracted."""
     arts = (
         supabase.table("artifacts")
-        .select("id")
+        .select("id, extraction_status")
         .eq("course_id", course_id)
         .eq("doc_type", "past_exam")
         .eq("status", "approved")
@@ -272,19 +285,12 @@ def get_extraction_status(
     )
     total = len(arts)
     if total == 0:
-        return {"total": 0, "done": 0}
+        return {"total": 0, "done": 0, "failed": 0, "extracting": 0}
 
-    artifact_ids = [a["id"] for a in arts]
-    done_rows = (
-        supabase.table("exam_questions")
-        .select("artifact_id")
-        .in_("artifact_id", artifact_ids)
-        .eq("source_type", "past_exam")
-        .execute()
-        .data or []
-    )
-    done = len({r["artifact_id"] for r in done_rows})
-    return {"total": total, "done": done}
+    done = sum(1 for a in arts if a.get("extraction_status") == "done")
+    failed = sum(1 for a in arts if a.get("extraction_status") == "failed")
+    extracting = sum(1 for a in arts if a.get("extraction_status") == "extracting")
+    return {"total": total, "done": done, "failed": failed, "extracting": extracting}
 
 
 @router.patch("/artifacts/{artifact_id}/doc-type", response_model=ArtifactOut)
