@@ -774,8 +774,8 @@ def list_favorites(
 
 # ── List helpers ──────────────────────────────────────────────────────────────
 
-def get_past_exam_list(supabase: Client, course_id: str) -> list[dict]:
-    """List past exam artifacts that have extracted questions, with question counts."""
+def get_past_exam_list(supabase: Client, course_id: str, user_id: str | None = None) -> list[dict]:
+    """List past exam artifacts that have extracted questions, with question counts and unlock status."""
     rows = (
         supabase.table("exam_questions")
         .select("artifact_id")
@@ -802,15 +802,55 @@ def get_past_exam_list(supabase: Client, course_id: str) -> list[dict]:
         .data
     ) or []
 
+    # Fetch which artifacts this user has already unlocked
+    unlocked_ids: set[int] = set()
+    if user_id:
+        unlock_rows = (
+            supabase.table("exam_unlocks")
+            .select("artifact_id")
+            .eq("user_id", user_id)
+            .in_("artifact_id", list(counts.keys()))
+            .execute()
+            .data
+        ) or []
+        unlocked_ids = {r["artifact_id"] for r in unlock_rows}
+
     return [
         {
             "artifact_id":    a["id"],
             "file_name":      a["file_name"],
             "question_count": counts.get(a["id"], 0),
             "created_at":     a["created_at"],
+            "is_unlocked":    a["id"] in unlocked_ids,
         }
         for a in arts
     ]
+
+
+def unlock_past_exam(supabase: Client, user_id: str, artifact_id: int) -> bool:
+    """Check if already unlocked. If not, charge credits and record unlock.
+
+    Returns True if newly unlocked, False if already unlocked.
+    Raises InsufficientCreditsError if balance too low.
+    """
+    from app.services.credit_service import spend, COSTS
+
+    # Check already unlocked
+    existing = (
+        supabase.table("exam_unlocks")
+        .select("artifact_id")
+        .eq("user_id", user_id)
+        .eq("artifact_id", artifact_id)
+        .limit(1)
+        .execute()
+        .data
+    )
+    if existing:
+        return False  # already unlocked, no charge
+
+    spend(supabase, user_id, COSTS["exam_past_unlock"], "exam_past_unlock", str(artifact_id))
+    supabase.table("exam_unlocks").insert({"user_id": user_id, "artifact_id": artifact_id}).execute()
+    return True
 
 
 def get_mock_sessions(supabase: Client, course_id: str) -> list[dict]:

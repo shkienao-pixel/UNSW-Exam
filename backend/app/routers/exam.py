@@ -49,8 +49,26 @@ def list_past_exams(
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_db),
 ) -> list[dict[str, Any]]:
-    """List past exam files that have already had questions extracted."""
-    return exam_service.get_past_exam_list(supabase, course_id)
+    """List past exam files with unlock status for the current user."""
+    return exam_service.get_past_exam_list(supabase, course_id, user_id=current_user["id"])
+
+
+@router.post("/exam/past/{artifact_id}/unlock")
+def unlock_past_exam(
+    course_id: str,
+    artifact_id: int,
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_db),
+) -> dict[str, Any]:
+    """Unlock a past exam paper for the current user (costs 150 credits, one-time)."""
+    if current_user.get("is_guest"):
+        raise HTTPException(status_code=403, detail="演示账号不支持该功能，请注册正式账号")
+    from app.services.credit_service import InsufficientCreditsError
+    try:
+        newly_unlocked = exam_service.unlock_past_exam(supabase, current_user["id"], artifact_id)
+        return {"ok": True, "newly_unlocked": newly_unlocked}
+    except InsufficientCreditsError as e:
+        raise HTTPException(status_code=402, detail=f"积分不足：当前 {e.balance} 积分，需要 {e.required} 积分")
 
 
 # ── Questions ─────────────────────────────────────────────────────────────────
@@ -69,6 +87,20 @@ def get_questions(
     """
     if artifact_id is None and mock_session_id is None:
         raise HTTPException(status_code=422, detail="Provide artifact_id or mock_session_id")
+
+    if artifact_id is not None:
+        # Verify the user has unlocked this past exam
+        unlock_row = (
+            supabase.table("exam_unlocks")
+            .select("artifact_id")
+            .eq("user_id", current_user["id"])
+            .eq("artifact_id", artifact_id)
+            .limit(1)
+            .execute()
+            .data
+        )
+        if not unlock_row:
+            raise HTTPException(status_code=403, detail="请先解锁该试卷（150积分）")
 
     q = supabase.table("exam_questions").select("*").eq("course_id", course_id)
     if artifact_id is not None:

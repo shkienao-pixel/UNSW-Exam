@@ -32,7 +32,7 @@ _JOB_CREDIT_TYPE: dict[str, str] = {
     "quiz":       "gen_quiz",
     "outline":    "gen_outline",
     "flashcards": "gen_flashcards",
-    # exam_mock 暂时免费（不在 COSTS 中）
+    "exam_mock":  "gen_exam_mock",
 }
 
 

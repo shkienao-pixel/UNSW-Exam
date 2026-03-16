@@ -28,6 +28,10 @@ COSTS: dict[str, int] = {
     # 单文件深度解析（解锁 + 考点提取）
     "unlock_upload":   50,
     "enroll_course":   100,
+    # 真题解锁（一次性，永久访问）
+    "exam_past_unlock": 150,
+    # 模拟题生成
+    "gen_exam_mock":   100,
 }
 
 

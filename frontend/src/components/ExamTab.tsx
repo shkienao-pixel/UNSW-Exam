@@ -131,13 +131,29 @@ function PastExamList({
   const [files, setFiles] = useState<PastExamFile[]>([])
   const [loading, setLoading] = useState(true)
   const [starting, setStarting] = useState<number | null>(null)
+  const [unlocking, setUnlocking] = useState<number | null>(null)
   const { lang } = useLang()
 
-  useEffect(() => {
+  const loadFiles = useCallback(() => {
     api.exam.listPastExams(courseId)
       .then(setFiles)
       .finally(() => setLoading(false))
   }, [courseId])
+
+  useEffect(() => { loadFiles() }, [loadFiles])
+
+  async function handleUnlock(artifactId: number) {
+    setUnlocking(artifactId)
+    try {
+      await api.exam.unlockPastExam(courseId, artifactId)
+      loadFiles()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      alert(msg)
+    } finally {
+      setUnlocking(null)
+    }
+  }
 
   async function handleStart(artifactId: number) {
     setStarting(artifactId)
@@ -189,17 +205,31 @@ function PastExamList({
               </p>
             </div>
           </div>
-          <button
-            onClick={() => handleStart(f.artifact_id)}
-            disabled={starting === f.artifact_id}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium flex-shrink-0 transition-all disabled:opacity-60"
-            style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.3)' }}
-          >
-            {starting === f.artifact_id
-              ? <Loader2 size={14} className="animate-spin" />
-              : <Target size={14} />}
-            {lang === 'zh' ? '开始做题' : 'Start'}
-          </button>
+          {f.is_unlocked ? (
+            <button
+              onClick={() => handleStart(f.artifact_id)}
+              disabled={starting === f.artifact_id}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium flex-shrink-0 transition-all disabled:opacity-60"
+              style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.3)' }}
+            >
+              {starting === f.artifact_id
+                ? <Loader2 size={14} className="animate-spin" />
+                : <Target size={14} />}
+              {lang === 'zh' ? '开始做题' : 'Start'}
+            </button>
+          ) : (
+            <button
+              onClick={() => handleUnlock(f.artifact_id)}
+              disabled={unlocking === f.artifact_id}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium flex-shrink-0 transition-all disabled:opacity-60"
+              style={{ background: 'rgba(255,255,255,0.06)', color: '#aaa', border: '1px solid rgba(255,255,255,0.12)' }}
+            >
+              {unlocking === f.artifact_id
+                ? <Loader2 size={14} className="animate-spin" />
+                : <span style={{ fontSize: 14 }}>🔒</span>}
+              {lang === 'zh' ? '解锁 150积分' : 'Unlock 150cr'}
+            </button>
+          )}
         </div>
       ))}
     </div>
@@ -301,7 +331,7 @@ function MockSessionList({
           {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
           {generating
             ? (lang === 'zh' ? '生成中，请稍候...' : 'Generating...')
-            : (lang === 'zh' ? '开始生成' : 'Generate')}
+            : (lang === 'zh' ? '开始生成 · 100积分' : 'Generate · 100cr')}
         </button>
       </div>
 

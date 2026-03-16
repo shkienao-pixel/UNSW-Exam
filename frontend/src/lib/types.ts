@@ -288,6 +288,7 @@ export interface PastExamFile {
   file_name: string
   question_count: number
   created_at: string
+  is_unlocked: boolean
 }
 
 export interface MockSession {

@@ -422,6 +422,12 @@ export const api = {
     listPastExams: (courseId: string) =>
       req<PastExamFile[]>(`/courses/${courseId}/exam/past-exams`),
 
+    unlockPastExam: (courseId: string, artifactId: number) =>
+      req<{ ok: boolean; newly_unlocked: boolean }>(
+        `/courses/${courseId}/exam/past/${artifactId}/unlock`,
+        { method: 'POST' },
+      ),
+
     getQuestions: (courseId: string, params: { artifact_id?: number; mock_session_id?: string }) => {
       const qs = new URLSearchParams()
       if (params.artifact_id != null) qs.set('artifact_id', String(params.artifact_id))
