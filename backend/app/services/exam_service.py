@@ -123,30 +123,25 @@ def _extract_questions_vision(data: bytes, openai_key: str, supabase: Client, ar
             page_qs = []
 
         img_h = pix.height
-
         for q in page_qs:
             if not q.get("question_text"):
                 continue
-
             q_image_url: str | None = None
             if q.get("has_visual") and page_has_visual:
-                # Crop just this question's vertical region from the page image
                 y_start = max(0, int(q.get("y_start_pct", 0) / 100 * img_h) - 10)
-                y_end   = min(img_h, int(q.get("y_end_pct", 100) / 100 * img_h) + 10)
+                y_end = min(img_h, int(q.get("y_end_pct", 100) / 100 * img_h) + 10)
                 stride = pix.width * pix.n
-                crop_samples = bytes(pix.samples[y_start * stride : y_end * stride])
+                crop_samples = bytes(pix.samples[y_start * stride:y_end * stride])
                 crop_pix = fitz.Pixmap(pix.colorspace, pix.width, y_end - y_start, crop_samples, pix.alpha)
                 crop_jpeg = crop_pix.tobytes("jpeg", 85)
                 q_image_url = _upload_page_image(supabase, crop_jpeg, artifact_id, page_num, global_index)
-
             q["question_index"] = global_index
             q["page_image_url"] = q_image_url
             all_questions.append(q)
             global_index += 1
-
         logger.info(
-            "_extract_questions_vision: page %d -> %d questions, has_visual=%s",
-            page_num + 1, len(page_qs), has_visual,
+            "_extract_questions_vision: page %d -> %d questions, page_has_visual=%s",
+            page_num + 1, len(page_qs), page_has_visual,
         )
 
     doc.close()
