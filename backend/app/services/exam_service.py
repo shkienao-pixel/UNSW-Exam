@@ -30,8 +30,8 @@ _VISION_SYSTEM = (
     "Field 1 — \"questions\": array of question objects on this page.\n"
     "  Rules:\n"
     "  1. Extract questions exactly as written — do NOT rephrase.\n"
-    "  2. Classify each as \"mcq\" (has A/B/C/D options) or \"short_answer\" (everything else).\n"
-    "  3. For MCQ: list options as plain text (no \"A.\" prefix), set correct_answer to the letter if answer key visible, else null.\n"
+    "  2. Classify each as \"mcq\" (has multiple-choice options labeled A/B/C/D, (A)/(B)/(C)/(D), or similar) or \"short_answer\" (everything else).\n"
+    "  3. For MCQ: list options as plain text (strip any leading label like \"A.\", \"(A)\", \"A)\" etc.), set correct_answer to the letter if answer key visible, else null.\n"
     "  4. For short_answer: set correct_answer to a concise reference answer if clearly shown, else null.\n"
     "  5. If this page has NO questions (cover page, instructions only), return an empty array [].\n"
     "  6. MULTI-PART QUESTIONS: If a question has sub-parts labeled (a)(b)(c) or (i)(ii)(iii) or similar,\n"
@@ -122,6 +122,11 @@ def _merge_cross_page_questions(questions: list[dict]) -> list[dict]:
                 q["page_image_url"] = nxt["page_image_url"]
             if not q.get("has_visual") and nxt.get("has_visual"):
                 q["has_visual"] = True
+            # If continuation part is MCQ, promote type and inherit options
+            if nxt.get("question_type") == "mcq":
+                q["question_type"] = "mcq"
+                if not q.get("options") and nxt.get("options"):
+                    q["options"] = nxt["options"]
             # Merge correct_answer if absent on the first part
             if not q.get("correct_answer") and nxt.get("correct_answer"):
                 q["correct_answer"] = nxt["correct_answer"]
@@ -421,9 +426,9 @@ def extract_questions_from_artifact(
         "You are an expert exam paper parser. Extract ALL questions from the provided past exam paper.\n\n"
         "Rules:\n"
         "1. Extract questions exactly as written — do NOT rephrase or simplify.\n"
-        "2. Classify each question as \"mcq\" (multiple choice with clear A/B/C/D options) "
+        "2. Classify each question as \"mcq\" (has multiple-choice options labeled A/B/C/D, (A)/(B)/(C)/(D), or similar) "
         "or \"short_answer\" (any other type: written answer, calculation, essay, etc.).\n"
-        "3. For MCQ: extract all options as plain text (no \"A.\" prefix), "
+        "3. For MCQ: extract all options as plain text (strip leading labels like \"A.\", \"(A)\", \"A)\" etc.), "
         "identify correct answer letter if answer key is present in the paper.\n"
         "4. For short_answer: provide a concise reference answer if clearly inferable from context; otherwise null.\n"
         "5. Preserve original question ordering with question_index starting at 1.\n"
