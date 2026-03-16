@@ -20,8 +20,9 @@ from app.services.generate_service import _chat, _extract_json, _raw_extract
 logger = logging.getLogger(__name__)
 
 _MAX_PDF_CHARS = 80_000
-_MIN_TEXT_LEN = 100  # below this, treat PDF as scanned and use Vision
+_MIN_TEXT_LEN = 100       # below this, treat PDF as scanned and use Vision
 _SIGNIFICANT_IMAGE_PX = 100  # images smaller than this in either dimension are ignored (logos/icons)
+_MAX_VISION_PAGES = 50    # safety cap — prevents runaway API cost on very long PDFs
 
 _VISION_SYSTEM = (
     "You are an expert university exam paper parser.\n"
@@ -33,9 +34,17 @@ _VISION_SYSTEM = (
     "  3. For MCQ: list options as plain text (no \"A.\" prefix), set correct_answer to the letter if answer key visible, else null.\n"
     "  4. For short_answer: set correct_answer to a concise reference answer if clearly shown, else null.\n"
     "  5. If this page has NO questions (cover page, instructions only), return an empty array [].\n"
-    "  6. Set has_visual=true ONLY if the question contains a diagram, figure, graph, table, or equation image that is ESSENTIAL to answer it.\n"
-    "  7. When has_visual=true, provide visual_y_start_pct and visual_y_end_pct (0–100, % from top of page):\n"
-    "     - These coordinates must cover ONLY the visual element(s) (diagram/figure/table/equation image), NOT the question text.\n"
+    "  6. MULTI-PART QUESTIONS: If a question has sub-parts labeled (a)(b)(c) or (i)(ii)(iii) or similar,\n"
+    "     treat the ENTIRE question including ALL sub-parts as ONE question object.\n"
+    "     Include every sub-part verbatim in question_text. Do NOT split sub-parts into separate questions.\n"
+    "  7. CROSS-PAGE QUESTIONS:\n"
+    "     - Set continues_from_prev=true if this question is a continuation from the previous page\n"
+    "       (i.e. its numbering or text implies it started on the prior page).\n"
+    "     - Set continues_to_next=true if this question is clearly not finished\n"
+    "       (text is cut off, or sub-parts continue beyond this page).\n"
+    "  8. Set has_visual=true ONLY if the question contains a diagram, figure, graph, table, or equation image that is ESSENTIAL to answer it.\n"
+    "  9. When has_visual=true, provide visual_y_start_pct and visual_y_end_pct (0–100, % from top of page):\n"
+    "     - Cover ONLY the visual element(s), NOT the question text.\n"
     "     - Extend 2–3% above and below the visual element to avoid clipping.\n"
     "     - If multiple visuals belong to one question, span all of them in a single range.\n\n"
     "Field 2 — \"page_has_visual\": boolean — true if the page contains ANY visual element.\n\n"
@@ -43,12 +52,33 @@ _VISION_SYSTEM = (
     "Format: {\"page_has_visual\": true/false, \"questions\": [{\"question_index\":1,\"question_type\":\"mcq\","
     "\"question_text\":\"...\",\"options\":[\"opt\",\"opt\",\"opt\",\"opt\"],"
     "\"correct_answer\":\"A\",\"explanation\":null,\"has_visual\":false,"
-    "\"visual_y_start_pct\":null,\"visual_y_end_pct\":null}, ...]}"
+    "\"visual_y_start_pct\":null,\"visual_y_end_pct\":null,"
+    "\"continues_from_prev\":false,\"continues_to_next\":false}, ...]}"
 )
 
 
 _EXAM_PAGES_BUCKET = "exam-pages"
 _BUCKET_CREATED = False
+
+
+def purge_artifact_page_images(supabase: Client, artifact_id: int) -> None:
+    """Delete all crop images for an artifact from Supabase Storage (exam-pages bucket).
+
+    Called before re-extraction so stale images don't accumulate.
+    Best-effort: logs warnings on failure but never raises.
+    """
+    try:
+        _ensure_exam_pages_bucket(supabase)
+        prefix = f"{artifact_id}/"
+        listed = supabase.storage.from_(_EXAM_PAGES_BUCKET).list(path=str(artifact_id))
+        if not listed:
+            return
+        paths = [f"{prefix}{item['name']}" for item in listed if item.get("name")]
+        if paths:
+            supabase.storage.from_(_EXAM_PAGES_BUCKET).remove(paths)
+            logger.info("purge_artifact_page_images: deleted %d files for artifact %s", len(paths), artifact_id)
+    except Exception as exc:
+        logger.warning("purge_artifact_page_images: failed for artifact %s: %s", artifact_id, exc)
 
 
 def _has_significant_images(doc) -> bool:
@@ -62,6 +92,47 @@ def _has_significant_images(doc) -> bool:
             if w > _SIGNIFICANT_IMAGE_PX and h > _SIGNIFICANT_IMAGE_PX:
                 return True
     return False
+
+
+def _merge_cross_page_questions(questions: list[dict]) -> list[dict]:
+    """Merge questions that GPT flagged as cross-page continuations.
+
+    When q[i].continues_to_next=True and q[i+1].continues_from_prev=True,
+    append q[i+1]'s text to q[i] and drop q[i+1].
+    Re-sequence question_index after merging.
+    """
+    if not questions:
+        return questions
+
+    merged: list[dict] = []
+    i = 0
+    while i < len(questions):
+        q = questions[i]
+        # While current question says it continues AND next says it's a continuation — merge
+        while (
+            q.get("continues_to_next")
+            and i + 1 < len(questions)
+            and questions[i + 1].get("continues_from_prev")
+        ):
+            i += 1
+            nxt = questions[i]
+            q["question_text"] = q["question_text"].rstrip() + "\n" + nxt["question_text"].lstrip()
+            # Prefer the visual from whichever half has one
+            if not q.get("page_image_url") and nxt.get("page_image_url"):
+                q["page_image_url"] = nxt["page_image_url"]
+            if not q.get("has_visual") and nxt.get("has_visual"):
+                q["has_visual"] = True
+            # Merge correct_answer if absent on the first part
+            if not q.get("correct_answer") and nxt.get("correct_answer"):
+                q["correct_answer"] = nxt["correct_answer"]
+            logger.debug("_merge_cross_page_questions: merged q%d with continuation", q.get("question_index"))
+        merged.append(q)
+        i += 1
+
+    # Re-sequence question_index starting at 1
+    for idx, q in enumerate(merged, 1):
+        q["question_index"] = idx
+    return merged
 
 
 def _insert_past_exam_questions(supabase: Client, questions: list[dict], course_id: str, artifact_id: int) -> list[dict]:
@@ -131,13 +202,20 @@ def _extract_questions_vision(data: bytes, openai_key: str, supabase: Client, ar
     import fitz  # pymupdf
 
     doc = fitz.open(stream=data, filetype="pdf")
+    total_pages = len(doc)
+    if total_pages > _MAX_VISION_PAGES:
+        logger.warning(
+            "_extract_questions_vision: artifact %s has %d pages, capping at %d",
+            artifact_id, total_pages, _MAX_VISION_PAGES,
+        )
+        total_pages = _MAX_VISION_PAGES
     all_questions: list[dict] = []
     global_index = 1
 
     from openai import OpenAI
     client = OpenAI(api_key=openai_key, timeout=180.0)
 
-    for page_num in range(len(doc)):
+    for page_num in range(total_pages):
         page = doc[page_num]
         mat = fitz.Matrix(1.5, 1.5)  # 108 DPI — sufficient for Vision, 40% smaller than 2x
         pix = page.get_pixmap(matrix=mat)
@@ -200,7 +278,7 @@ def _extract_questions_vision(data: bytes, openai_key: str, supabase: Client, ar
         )
 
     doc.close()
-    return all_questions
+    return _merge_cross_page_questions(all_questions)
 
 
 # ── Extract questions from past exam PDF ──────────────────────────────────────

@@ -230,8 +230,10 @@ def extract_questions_for_artifact(
     if art.get("extraction_status") == "extracting":
         raise HTTPException(status_code=409, detail="Extraction already in progress for this artifact")
 
-    # Delete existing questions so re-extraction runs fresh
+    # Delete existing questions and stale crop images before re-extraction
     supabase.table("exam_questions").delete().eq("artifact_id", artifact_id).execute()
+    from app.services.exam_service import purge_artifact_page_images
+    purge_artifact_page_images(supabase, artifact_id)
 
     background_tasks.add_task(_bg_extract_questions, supabase, art)
     return {"ok": True, "artifact_id": artifact_id, "message": "Question extraction started in background"}
@@ -257,9 +259,12 @@ def extract_all_questions_for_course(
     if not arts:
         raise HTTPException(status_code=404, detail="No approved past_exam artifacts found in this course")
 
-    # Clear all existing questions for these artifacts
+    # Clear all existing questions and stale crop images
     artifact_ids = [a["id"] for a in arts]
     supabase.table("exam_questions").delete().in_("artifact_id", artifact_ids).execute()
+    from app.services.exam_service import purge_artifact_page_images
+    for aid in artifact_ids:
+        purge_artifact_page_images(supabase, aid)
 
     for art in arts:
         background_tasks.add_task(_bg_extract_questions, supabase, art)
