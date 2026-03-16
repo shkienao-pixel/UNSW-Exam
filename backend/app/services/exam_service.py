@@ -89,7 +89,7 @@ def _extract_questions_vision(data: bytes, openai_key: str, supabase: Client, ar
                         {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}", "detail": "high"}},
                     ]},
                 ],
-                max_tokens=4096,
+                max_completion_tokens=4096,
                 temperature=0.1,
             )
             raw = resp.choices[0].message.content or "{}"
