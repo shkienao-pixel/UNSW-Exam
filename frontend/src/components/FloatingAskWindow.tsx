@@ -73,16 +73,18 @@ export default function FloatingAskWindow() {
   }
 
   const [pos, setPos] = useState({ x: -1, y: -1 })
-  const isDragging  = useRef(false)
-  const dragOffset  = useRef({ x: 0, y: 0 })
-  const currentPos  = useRef({ x: 0, y: 0 })
+  const isDragging    = useRef(false)
+  const dragOffset    = useRef({ x: 0, y: 0 })
+  const currentPos    = useRef({ x: 0, y: 0 })
+  const dragStartPos  = useRef({ x: 0, y: 0 })  // for click vs drag on FAB
 
   // Initialize position on mount: saved pos → default bottom-right
   useEffect(() => {
     if (pos.x === -1 && typeof window !== 'undefined') {
       const saved = loadPos()
-      const x = saved?.x ?? Math.max(20, window.innerWidth  - WINDOW_W - 20)
-      const y = saved?.y ?? Math.max(20, window.innerHeight - WINDOW_H - 20)
+      const FAB_SIZE = 52
+      const x = saved?.x ?? Math.max(20, window.innerWidth  - FAB_SIZE - 28)
+      const y = saved?.y ?? Math.max(20, window.innerHeight - FAB_SIZE - 28)
       setPos({ x, y })
       currentPos.current = { x, y }
     }
@@ -170,6 +172,25 @@ export default function FloatingAskWindow() {
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
+  // FAB drag/click: if moved < 6px → treat as click (openWindow)
+  function handleFabMouseDown(e: React.MouseEvent) {
+    e.preventDefault()
+    dragStartPos.current = { x: e.clientX, y: e.clientY }
+    isDragging.current = true
+    dragOffset.current = {
+      x: e.clientX - currentPos.current.x,
+      y: e.clientY - currentPos.current.y,
+    }
+  }
+
+  function handleFabMouseUp(e: React.MouseEvent) {
+    const dx = e.clientX - dragStartPos.current.x
+    const dy = e.clientY - dragStartPos.current.y
+    if (Math.sqrt(dx * dx + dy * dy) < 6) {
+      openWindow()
+    }
+  }
+
   function handleTitleMouseDown(e: React.MouseEvent) {
     if ((e.target as HTMLElement).closest('button')) return
     e.preventDefault()
@@ -219,26 +240,27 @@ export default function FloatingAskWindow() {
   // Detect mobile (≤768px) — evaluated each render, SSR-safe
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768
 
-  // ── Render: not open ────────────────────────────────────────────────────────
-  if (!isOpen) return null
-
-  // ── Render: minimized FAB ───────────────────────────────────────────────────
-  if (isMinimized) {
+  // ── Render: FAB (closed or minimized) ───────────────────────────────────────
+  if (!isOpen || isMinimized) {
+    if (pos.x === -1) return null  // wait for position init
     return (
-      <button
-        onClick={openWindow}
-        title="AI 问答"
-        className="fixed z-50 flex items-center justify-center rounded-full shadow-2xl transition-transform hover:scale-105"
+      <div
+        onMouseDown={handleFabMouseDown}
+        onMouseUp={handleFabMouseUp}
+        title="AI 问答（可拖动）"
+        className="fixed z-50 flex items-center justify-center rounded-full shadow-2xl select-none"
         style={{
-          bottom: 28,
-          right: 52,
+          left: pos.x,
+          top: pos.y,
           width: 52,
           height: 52,
-          background: 'rgba(255,215,0,0.14)',
-          border: '1px solid rgba(255,215,0,0.32)',
+          background: 'rgba(20,22,30,0.92)',
+          border: '1px solid rgba(255,215,0,0.35)',
           color: '#FFD700',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
+          backdropFilter: 'blur(14px)',
+          WebkitBackdropFilter: 'blur(14px)',
+          cursor: isDragging.current ? 'grabbing' : 'grab',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
         }}
       >
         <MessageCircleMore size={22} />
@@ -254,7 +276,7 @@ export default function FloatingAskWindow() {
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
-      </button>
+      </div>
     )
   }
 
