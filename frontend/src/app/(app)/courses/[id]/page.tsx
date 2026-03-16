@@ -10,6 +10,12 @@ import { useLang } from '@/lib/i18n'
 import { useGeneration } from '@/lib/generation-context'
 import type { Course, Artifact, ScopeSet, Output, DocType } from '@/lib/types'
 import { DOC_TYPE_LABELS, DOC_TYPE_COLORS } from '@/lib/types'
+import { biText, extractToc, extractTocFromHtml, parseContentJson } from '@/lib/utils'
+import type { BiMode, ContentFormat } from '@/lib/utils'
+import { useCourseData } from '@/hooks/useCourseData'
+import { useEnrollment } from '@/hooks/useEnrollment'
+import { useCredits } from '@/hooks/useCredits'
+import { useTranslation } from '@/hooks/useTranslation'
 import {
   FileText, Upload, Loader2, Zap, History,
   ChevronDown, ChevronRight, BookOpen, RotateCcw,
@@ -37,54 +43,20 @@ function CoursePageInner() {
   const searchParams = useSearchParams()
   const view = searchParams.get('view') || 'flashcards'
 
-  const [course, setCourse] = useState<Course | null>(null)
-  const [artifacts, setArtifacts] = useState<Artifact[]>([])
-  const [scopeSets, setScopeSets] = useState<ScopeSet[]>([])
-  const [outputs, setOutputs] = useState<Output[]>([])
-  const [loading, setLoading] = useState(true)
-  const [isEnrolled, setIsEnrolled] = useState<boolean | null>(null)
-  const [enrollTerm, setEnrollTerm] = useState<string>('T1')
-  const [enrollCost, setEnrollCost] = useState<number>(100)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { t } = useLang()
   const { role, user } = useAuth()
-  const [creditBalance, setCreditBalance] = useState(0)
   const { setCourseContext } = useFloatingAsk()
 
-  const load = useCallback(async () => {
-    try {
-      const c = await api.courses.get(courseId)
-      setCourse(c)
-      // Load artifacts, scope-sets, credits, enrollment independently
-      const [arts, scopes, bal, enrollCheck, enrollStatus] = await Promise.allSettled([
-        api.artifacts.list(courseId),
-        api.scopeSets.list(courseId),
-        api.credits.balance(),
-        api.enrollments.check(courseId),
-        api.enrollments.status(),
-      ])
-      if (arts.status === 'fulfilled') setArtifacts(arts.value)
-      if (scopes.status === 'fulfilled') setScopeSets(scopes.value)
-      if (bal.status === 'fulfilled') setCreditBalance(bal.value.balance)
-      if (enrollCheck.status === 'fulfilled') setIsEnrolled(enrollCheck.value.enrolled)
-      if (enrollStatus.status === 'fulfilled') {
-        setEnrollTerm(enrollStatus.value.current_term)
-        setEnrollCost(enrollStatus.value.enrollment_cost)
-      }
-    } catch (e) {
-      console.warn('[load] failed to load course data:', e)
-    } finally {
-      setLoading(false)
-    }
-  }, [courseId])
+  const { course, artifacts, setArtifacts, scopeSets, loading, reload: reloadCourse } = useCourseData(courseId)
+  const { isEnrolled, setIsEnrolled, term: enrollTerm, cost: enrollCost } = useEnrollment(courseId, role)
+  const { balance: creditBalance, deduct: spendCredits } = useCredits(!!role && role !== 'guest')
 
-  useEffect(() => { load() }, [load])
+  const [outputs, setOutputs] = useState<Output[]>([])
 
   // Keep floating AI window in sync with this course's data
   useEffect(() => {
-    if (courseId && artifacts.length >= 0 && scopeSets.length >= 0) {
-      setCourseContext(courseId, scopeSets, artifacts)
-    }
+    if (courseId) setCourseContext(courseId, scopeSets, artifacts)
   }, [courseId, artifacts, scopeSets, setCourseContext])
 
   if (loading) return (
@@ -103,7 +75,7 @@ function CoursePageInner() {
         courseCode={course.code}
         term={enrollTerm}
         cost={enrollCost}
-        onEnrolled={load}
+        onEnrolled={() => { setIsEnrolled(true); reloadCourse() }}
       />
     )
   }
@@ -153,8 +125,8 @@ function CoursePageInner() {
             setArtifacts={setArtifacts}
             fileInputRef={fileInputRef}
             currentUserId={user?.id ?? ''}
-            creditBalance={creditBalance}
-            onCreditSpent={amount => setCreditBalance(prev => prev - amount)}
+            creditBalance={creditBalance ?? 0}
+            onCreditSpent={spendCredits}
           />
         )
       )}
@@ -176,15 +148,6 @@ export default function CoursePage() {
 }
 
 // ── Bilingual helpers ─────────────────────────────────────────────────────────
-
-type BiMode = 'full' | 'zh' | 'en'
-
-function biText(text: string, mode: BiMode): string {
-  if (mode === 'full') return text
-  const parts = text.split(' / ')
-  if (parts.length < 2) return text
-  return mode === 'zh' ? parts[0].trim() : parts.slice(1).join(' / ').trim()
-}
 
 function BilingualToggle({ mode, onChange }: { mode: BiMode; onChange: (m: BiMode) => void }) {
   const options: { key: BiMode; label: string }[] = [
@@ -232,34 +195,14 @@ interface TranslatablePanelProps {
 }
 
 function TranslatablePanel({ texts, courseId }: TranslatablePanelProps) {
-  const [visible, setVisible] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [translated, setTranslated] = useState<string[] | null>(null)
-  const [error, setError] = useState(false)
   const { lang } = useLang()
-
   // Bug 6 fix: 题目来自英文课程材料，中文界面应翻译 EN→ZH，而非 ZH→EN
-  // 按当前 UI 语言决定目标语言：中文 UI → 译成中文；英文 UI → 译成中文（供参考）
   const targetLang: 'en' | 'zh' = lang === 'zh' ? 'zh' : 'zh'
-
-  async function toggle() {
-    if (visible) { setVisible(false); return }
-    setVisible(true)
-    if (translated) return
-    setLoading(true); setError(false)
-    try {
-      const res = await api.generate.translate(courseId, texts, targetLang)
-      setTranslated(res.translations)
-    } catch {
-      setError(true)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const { visible, translated, loading, error, toggle } = useTranslation(courseId, targetLang)
 
   return (
     <div>
-      <button onClick={toggle}
+      <button onClick={() => toggle(texts)}
         className="flex items-center gap-1.5 text-xs mt-2 transition-opacity hover:opacity-100"
         style={{ color: '#555', opacity: 0.8 }}>
         <Languages size={12} />
@@ -291,26 +234,13 @@ function TranslatablePanel({ texts, courseId }: TranslatablePanelProps) {
 // ── Full-content translation panel (for summary / outline) ───────────────────
 
 function ContentTranslationPanel({ content, courseId }: { content: string; courseId: string }) {
-  const [show, setShow] = useState(false)
-  const [translated, setTranslated] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(false)
   const { lang } = useLang()
+  const { visible: show, translated: translatedLines, loading, error, toggle } = useTranslation(courseId, 'en')
+  const translated = translatedLines ? translatedLines.join('\n\n') : null
 
-  async function toggle() {
-    if (show) { setShow(false); return }
-    setShow(true)
-    if (translated) return
-    setLoading(true); setError(false)
-    try {
-      const paragraphs = content.split('\n\n').filter(p => p.trim())
-      const res = await api.generate.translate(courseId, paragraphs, 'en')
-      setTranslated(res.translations.join('\n\n'))
-    } catch {
-      setError(true)
-    } finally {
-      setLoading(false)
-    }
+  function handleToggle() {
+    const paragraphs = content.split('\n\n').filter(p => p.trim())
+    toggle(paragraphs)
   }
 
   return (
@@ -320,7 +250,7 @@ function ContentTranslationPanel({ content, courseId }: { content: string; cours
         <ReactMarkdown>{content}</ReactMarkdown>
       </div>
 
-      <button onClick={toggle}
+      <button onClick={handleToggle}
         className="flex items-center gap-1.5 text-xs transition-opacity hover:opacity-100"
         style={{ color: '#555', opacity: 0.8 }}>
         <Languages size={13} />
@@ -415,71 +345,6 @@ function TypedOutputsView({
 }
 
 // ── Summary Tab ───────────────────────────────────────────────────────────────
-
-/** 从 Markdown 文本提取 TOC */
-function extractToc(markdown: string): { id: string; title: string; level: number }[] {
-  const toc: { id: string; title: string; level: number }[] = []
-  for (const line of markdown.split('\n')) {
-    const m = line.match(/^(#{1,3})\s+(.+)/)
-    if (m) {
-      const level = m[1].length
-      const title = m[2].trim()
-      const id = title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w\u4e00-\u9fff-]/g, '')
-      toc.push({ id, title, level })
-    }
-  }
-  return toc
-}
-
-/** 从 HTML 文本提取 TOC */
-function extractTocFromHtml(html: string): { id: string; title: string; level: number }[] {
-  const toc: { id: string; title: string; level: number }[] = []
-  const re = /<h([1-3])[^>]*>([\s\S]*?)<\/h[1-3]>/gi
-  let m: RegExpExecArray | null
-  while ((m = re.exec(html)) !== null) {
-    const level = parseInt(m[1], 10)
-    const title = m[2].replace(/<[^>]+>/g, '').trim()
-    const id = title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w\u4e00-\u9fff-]/g, '')
-    toc.push({ id, title, level })
-  }
-  return toc
-}
-
-type ContentFormat = 'markdown' | 'html' | 'json' | 'summary_v1'
-
-/** 解析 content_json，返回统一的 { format, content, schema, rawJson } */
-function parseContentJson(json: Record<string, unknown>): {
-  format: ContentFormat
-  content: string
-  schema: SummarySchemaV1 | null
-  rawJson: unknown
-} {
-  // 结构化 Schema V1
-  if (json.format === 'summary_v1') {
-    return { format: 'summary_v1', content: '', schema: json as unknown as SummarySchemaV1, rawJson: null }
-  }
-  // 通用 format+content 结构（管理员通过后台上传的 JSON 会包在这里）
-  if (json.format && json.content) {
-    const fmt = json.format as ContentFormat
-    // JSON 格式：content 是字符串化的 JSON，解出来交给 KnowledgeSummaryRenderer
-    if (fmt === 'json') {
-      let parsed: unknown = null
-      try { parsed = JSON.parse(json.content as string) } catch {}
-      // 如果内层 JSON 本身就带 weeks / sections 等结构，直接用内层
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        return { format: 'json', content: json.content as string, schema: null, rawJson: parsed }
-      }
-    }
-    return { format: fmt, content: json.content as string, schema: null, rawJson: null }
-  }
-  // 旧版 { markdown }
-  if (json.markdown) return { format: 'markdown', content: json.markdown as string, schema: null, rawJson: null }
-  // 顶层直接是 JSON 结构（没有 format 包装）→ 交给 KnowledgeSummaryRenderer
-  if (json.weeks || json.sections || json.chapters || json.modules || json.topics) {
-    return { format: 'json', content: '', schema: null, rawJson: json }
-  }
-  return { format: 'markdown', content: '', schema: null, rawJson: null }
-}
 
 /** Markdown 渲染（带 TOC anchor） */
 function MarkdownContent({ content, contentRef }: { content: string; contentRef: React.RefObject<HTMLDivElement | null> }) {

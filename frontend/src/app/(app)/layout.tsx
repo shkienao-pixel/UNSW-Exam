@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, Suspense } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
@@ -9,6 +9,8 @@ import { api } from '@/lib/api'
 import type { Course } from '@/lib/types'
 import { useLang } from '@/lib/i18n'
 import { GenerationProvider } from '@/lib/generation-context'
+import { useCredits } from '@/hooks/useCredits'
+import { useCourseList } from '@/hooks/useCourseList'
 import { FloatingAskProvider } from '@/lib/floating-ask-context'
 import FloatingAskWindow from '@/components/FloatingAskWindow'
 import FloatingProgress from '@/components/FloatingProgress'
@@ -447,32 +449,16 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const { user, loading, logout, role } = useAuth()
-  const [courses, setCourses]   = useState<Course[]>([])
   const [collapsed, setCollapsed] = useState(false)
-  const [credits, setCredits] = useState<number | null>(null)
   // Mobile drawer state
   const [drawerOpen, setDrawerOpen] = useState(false)
+
+  const { courses }                         = useCourseList(!!user)
+  const { balance: credits, refresh: refreshCredits } = useCredits(!!user && role !== 'guest')
 
   useEffect(() => {
     if (!loading && !user) router.replace('/')
   }, [user, loading, router])
-
-  const refreshCredits = useCallback(async () => {
-    if (role === 'guest') return
-    try {
-      const r = await api.credits.balance()
-      setCredits(r.balance)
-    } catch {}
-  }, [role])
-
-  useEffect(() => {
-    if (user) {
-      api.courses.list().then(setCourses).catch(() => {})
-      if (role !== 'guest') {
-        api.credits.balance().then(r => setCredits(r.balance)).catch(() => {})
-      }
-    }
-  }, [user, role])
 
   // Close drawer on route change
   useEffect(() => { setDrawerOpen(false) }, [pathname])
