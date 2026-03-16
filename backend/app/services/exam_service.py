@@ -53,13 +53,10 @@ def _ensure_exam_pages_bucket(supabase: Client) -> None:
     if _BUCKET_CREATED:
         return
     try:
-        supabase.storage.create_bucket(
-            _EXAM_PAGES_BUCKET,
-            {"public": True, "allowedMimeTypes": ["image/jpeg", "image/png", "image/webp"]},
-        )
+        supabase.storage.create_bucket(_EXAM_PAGES_BUCKET, options={"public": True})
         logger.info("Created Supabase bucket: %s", _EXAM_PAGES_BUCKET)
     except Exception:
-        pass  # Bucket already exists or creation failed — proceed anyway
+        pass  # Bucket already exists — proceed anyway
     _BUCKET_CREATED = True
 
 
