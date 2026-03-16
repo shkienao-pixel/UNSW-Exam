@@ -22,52 +22,77 @@ logger = logging.getLogger(__name__)
 _MAX_PDF_CHARS = 80_000
 _MIN_TEXT_LEN = 100  # below this, treat PDF as scanned and use Vision
 
+_VISION_SYSTEM = (
+    "You are an expert university exam paper parser.\n"
+    "Extract ALL exam questions from this page image.\n\n"
+    "Rules:\n"
+    "1. Extract questions exactly as written — do NOT rephrase.\n"
+    "2. Classify each as \"mcq\" (has A/B/C/D options) or \"short_answer\" (everything else).\n"
+    "3. For MCQ: list options as plain text (no \"A.\" prefix), set correct_answer to the letter (A/B/C/D) if an answer key is visible, else null.\n"
+    "4. For short_answer: set correct_answer to a concise reference answer if clearly shown, else null.\n"
+    "5. If this page has NO questions (e.g. cover page, instructions only), return an empty array [].\n"
+    "6. Return ONLY a raw JSON array — no markdown fences, no extra text.\n\n"
+    "Output format:\n"
+    "[{\"question_index\":1,\"question_type\":\"mcq\","
+    "\"question_text\":\"...\",\"options\":[\"opt\",\"opt\",\"opt\",\"opt\"],"
+    "\"correct_answer\":\"A\",\"explanation\":null},"
+    "{\"question_index\":2,\"question_type\":\"short_answer\","
+    "\"question_text\":\"...\",\"options\":null,"
+    "\"correct_answer\":\"reference answer or null\",\"explanation\":null}]"
+)
 
-def _extract_text_vision(data: bytes, openai_key: str) -> str:
-    """Convert each PDF page to an image and use GPT-4o Vision to OCR the content."""
+
+def _extract_questions_vision(data: bytes, openai_key: str) -> list[dict]:
+    """Convert each PDF page to an image, send to gpt-5.4 Vision, directly extract questions JSON."""
     import base64
-    import io
     import fitz  # pymupdf
 
     doc = fitz.open(stream=data, filetype="pdf")
-    all_text: list[str] = []
+    all_questions: list[dict] = []
+    global_index = 1
 
     from openai import OpenAI
-    client = OpenAI(api_key=openai_key, timeout=120.0)
+    client = OpenAI(api_key=openai_key, timeout=180.0)
 
     for page_num in range(len(doc)):
         page = doc[page_num]
-        mat = fitz.Matrix(2.0, 2.0)  # 2x zoom for better resolution
+        mat = fitz.Matrix(2.0, 2.0)
         pix = page.get_pixmap(matrix=mat)
         img_bytes = pix.tobytes("png")
         b64 = base64.b64encode(img_bytes).decode()
 
         try:
             resp = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "This is a page from a university exam paper. Extract ALL text exactly as written, preserving question numbers, options (A/B/C/D), and structure. Output plain text only.",
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{b64}", "detail": "high"},
-                        },
-                    ],
-                }],
+                model="gpt-5.4",
+                messages=[
+                    {"role": "system", "content": _VISION_SYSTEM},
+                    {"role": "user", "content": [
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}", "detail": "high"}},
+                    ]},
+                ],
                 max_tokens=4096,
+                temperature=0.1,
             )
-            page_text = resp.choices[0].message.content or ""
-            all_text.append(page_text)
-            logger.info("_extract_text_vision: page %d extracted %d chars", page_num + 1, len(page_text))
+            raw = resp.choices[0].message.content or "[]"
+            raw = _extract_json(raw)
+            page_qs = json.loads(raw) if raw else []
+            if not isinstance(page_qs, list):
+                page_qs = []
         except Exception as exc:
-            logger.warning("_extract_text_vision: page %d failed: %s", page_num + 1, exc)
+            logger.warning("_extract_questions_vision: page %d failed: %s", page_num + 1, exc)
+            page_qs = []
+
+        # Re-index questions globally across all pages
+        for q in page_qs:
+            if q.get("question_text"):
+                q["question_index"] = global_index
+                all_questions.append(q)
+                global_index += 1
+
+        logger.info("_extract_questions_vision: page %d -> %d questions", page_num + 1, len(page_qs))
 
     doc.close()
-    return "\n\n".join(all_text)
+    return all_questions
 
 
 # ── Extract questions from past exam PDF ──────────────────────────────────────
@@ -124,24 +149,54 @@ def extract_questions_from_artifact(
     from app.services.artifact_service import download_artifact_bytes
     try:
         data = download_artifact_bytes(supabase, sp)
-        text = _raw_extract(ft, data)
     except Exception as exc:
-        logger.error(
-            "extract_questions: text extraction failed for artifact %s: %s", artifact_id, exc
-        )
+        logger.error("extract_questions: download failed for artifact %s: %s", artifact_id, exc)
         return []
 
-    # Scanned PDF fallback: if text is too short, use GPT-4o Vision OCR
-    if ft == "pdf" and len(text.strip()) < _MIN_TEXT_LEN:
-        logger.info(
-            "extract_questions: artifact %s looks like scanned PDF (%d chars), trying Vision OCR",
-            artifact_id, len(text.strip()),
-        )
-        try:
-            text = _extract_text_vision(data, openai_key)
-        except Exception as exc:
-            logger.error("extract_questions: Vision OCR failed for artifact %s: %s", artifact_id, exc)
-            return []
+    # For PDF: try text extraction first; if too short (scanned), use gpt-5.4 Vision directly
+    if ft == "pdf":
+        text = _raw_extract(ft, data)
+        if len(text.strip()) < _MIN_TEXT_LEN:
+            logger.info(
+                "extract_questions: artifact %s is scanned PDF (%d chars), using gpt-5.4 Vision",
+                artifact_id, len(text.strip()),
+            )
+            try:
+                questions = _extract_questions_vision(data, openai_key)
+            except Exception as exc:
+                logger.error("extract_questions: Vision failed for artifact %s: %s", artifact_id, exc)
+                return []
+            if not questions:
+                logger.warning("extract_questions: no questions from Vision for artifact %s", artifact_id)
+                return []
+            # Skip to insert
+            rows_to_insert = []
+            for q in questions:
+                if not q.get("question_text"):
+                    continue
+                rows_to_insert.append({
+                    "course_id":      course_id,
+                    "artifact_id":    artifact_id,
+                    "source_type":    "past_exam",
+                    "question_type":  q.get("question_type", "short_answer"),
+                    "question_index": int(q.get("question_index", 0)),
+                    "question_text":  str(q.get("question_text", "")),
+                    "options":        q.get("options") if q.get("question_type") == "mcq" else None,
+                    "correct_answer": q.get("correct_answer"),
+                    "explanation":    q.get("explanation"),
+                    "mock_session_id": None,
+                })
+            if not rows_to_insert:
+                return []
+            try:
+                result = supabase.table("exam_questions").insert(rows_to_insert).execute()
+                logger.info("extract_questions(vision): inserted %d for artifact %s", len(result.data or []), artifact_id)
+                return result.data or []
+            except Exception as exc:
+                logger.error("extract_questions(vision): DB insert failed for artifact %s: %s", artifact_id, exc)
+                return []
+    else:
+        text = _raw_extract(ft, data)
 
     if not text.strip():
         return []
