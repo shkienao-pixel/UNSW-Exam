@@ -43,15 +43,46 @@ _VISION_SYSTEM = (
 )
 
 
-def _upload_page_image(supabase: Client, img_bytes: bytes, artifact_id: int, page_num: int) -> str | None:
-    """Upload a page screenshot to Supabase Storage and return its public URL."""
+_EXAM_PAGES_BUCKET = "exam-pages"
+_BUCKET_CREATED = False
+
+
+def _ensure_exam_pages_bucket(supabase: Client) -> None:
+    """Create exam-pages bucket once per process if it doesn't exist."""
+    global _BUCKET_CREATED
+    if _BUCKET_CREATED:
+        return
     try:
-        path = f"exam_pages/{artifact_id}/page_{page_num + 1}.png"
-        supabase.storage.from_("artifacts").upload(
-            path, img_bytes, {"content-type": "image/png", "upsert": "true"}
+        supabase.storage.create_bucket(
+            _EXAM_PAGES_BUCKET,
+            {"public": True, "allowedMimeTypes": ["image/jpeg", "image/png", "image/webp"]},
         )
-        res = supabase.storage.from_("artifacts").get_public_url(path)
-        return res
+        logger.info("Created Supabase bucket: %s", _EXAM_PAGES_BUCKET)
+    except Exception:
+        pass  # Bucket already exists or creation failed — proceed anyway
+    _BUCKET_CREATED = True
+
+
+def _upload_page_image(supabase: Client, img_bytes: bytes, artifact_id: int, page_num: int) -> str | None:
+    """Upload a page screenshot to Supabase Storage and return its public URL.
+
+    Uses a dedicated 'exam-pages' bucket (public, image/* allowed).
+    Converts to JPEG for smaller payload.
+    """
+    try:
+        import fitz as _fitz
+        _ensure_exam_pages_bucket(supabase)
+        # Convert PNG bytes → JPEG to reduce size and avoid bucket MIME restrictions
+        _pix = _fitz.Pixmap(stream=img_bytes, filetype="png")
+        if _pix.alpha:
+            _pix = _fitz.Pixmap(_fitz.csRGB, _pix)
+        jpeg_bytes = _pix.tobytes("jpeg", 85)
+
+        path = f"{artifact_id}/page_{page_num + 1}.jpg"
+        supabase.storage.from_(_EXAM_PAGES_BUCKET).upload(
+            path, jpeg_bytes, {"content-type": "image/jpeg", "upsert": "true"}
+        )
+        return supabase.storage.from_(_EXAM_PAGES_BUCKET).get_public_url(path)
     except Exception as exc:
         logger.warning("_upload_page_image: failed for artifact %s page %d: %s", artifact_id, page_num + 1, exc)
         return None
