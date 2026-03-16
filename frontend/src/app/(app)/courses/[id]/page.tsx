@@ -52,10 +52,10 @@ function CoursePageInner() {
 
   const [outputs, setOutputs] = useState<Output[]>([])
 
-  // Keep floating AI window in sync with this course's data
+  // Keep floating AI window in sync with this course
   useEffect(() => {
-    if (courseId) setCourseContext(courseId, scopeSets, artifacts)
-  }, [courseId, artifacts, scopeSets, setCourseContext])
+    if (courseId && course) setCourseContext(courseId, course.name)
+  }, [courseId, course?.name, setCourseContext])
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-screen">

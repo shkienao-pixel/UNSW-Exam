@@ -76,20 +76,17 @@ GPT_FILTER_SYSTEM = """\
 绝对不要自己尝试回答。\
 """
 
-# Stage 2 — Gemini 终答与兜底
+# Stage 2 — Gemini 直接作答
 GEMINI_ANSWER_SYSTEM = """\
-你是一个专为大学生提供备考辅导的顶尖 AI 助教。请严格遵循以下规则回答：
+你是一个专为大学生提供备考辅导的顶尖 AI 助教。
 
-1. 如果提供的参考资料中包含有效信息，请直接给出专业、详细的解答。
-2. 使用清晰的 Markdown 格式（编号步骤、要点列表、## 标题）组织回答。
-3. 使用与学生问题相同的语言回答（中文问题→中文回答，英文问题→英文回答）。
-4. 不要添加"参考来源"或"References"章节，来源由系统单独注入。
-
-【关键指令】如果参考资料的内容是 'NO_RELEVANT_INFO'，或者信息不足以完整回答问题：
-   a) 在回答的第一行严格输出以下声明：
-      抱歉，您上传的文档大纲范围内未包含足够信息。
-   b) 另起一行，以"不过，根据我自身的知识库："为开头，利用你的内建知识储备提供准确解答。
-\
+规则：
+1. 给出专业、清晰、详细的解答，结合大学课程知识。
+2. 使用 Markdown 格式（编号步骤、要点列表、## 标题）。
+3. 使用与学生提问相同的语言（中文→中文，英文→英文）。
+4. 数学公式使用 LaTeX（行内 $...$ 或块级 $$...$$）。
+5. 不确定时如实说明，不编造。
+6. 不添加"参考来源"章节。
 """
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -247,25 +244,19 @@ def gemini_generate_answer_stream(
     filtered_context: str,
     gemini_key: str,
     history: list[dict] | None = None,
+    course_name: str = "",
 ):
-    """Stage 2 (流式版本): Gemini 流式生成回答，逐块 yield 文本。
-
-    失败时静默结束（调用方降级到 GPT 整块输出）。
-    """
+    """Gemini 流式生成回答，逐块 yield 文本。"""
     history_prefix = _build_history_prefix(history or [])
+    course_line = f"【当前课程：{course_name}】\n\n" if course_name.strip() else ""
 
     if filtered_context.strip():
         user_content = (
-            f"{history_prefix}"
-            f"参考资料（来自课程材料）：\n\n{filtered_context}"
-            f"\n\n---\n\n学生问题：{query}"
+            f"{course_line}{history_prefix}"
+            f"参考资料：\n\n{filtered_context}\n\n---\n\n学生问题：{query}"
         )
     else:
-        user_content = (
-            f"{history_prefix}"
-            f"学生问题：{query}\n\n"
-            "(参考资料：NO_RELEVANT_INFO — 请执行系统指令中的兜底协议)"
-        )
+        user_content = f"{course_line}{history_prefix}学生问题：{query}"
 
     try:
         from google import genai

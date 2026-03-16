@@ -239,6 +239,36 @@ def extract_questions_for_artifact(
     return {"ok": True, "artifact_id": artifact_id, "message": "Question extraction started in background"}
 
 
+@router.get("/artifacts/{artifact_id}/questions")
+def list_artifact_questions(
+    artifact_id: int,
+    _: None = Depends(_require_admin),
+    supabase: Client = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """List extracted questions for a past_exam artifact (admin preview)."""
+    rows = (
+        supabase.table("exam_questions")
+        .select("id, question_index, question_type, question_text, options, correct_answer, has_visual, page_image_url")
+        .eq("artifact_id", artifact_id)
+        .eq("source_type", "past_exam")
+        .order("question_index")
+        .execute()
+        .data or []
+    )
+    return rows
+
+
+@router.delete("/questions/{question_id}")
+def delete_question(
+    question_id: int,
+    _: None = Depends(_require_admin),
+    supabase: Client = Depends(get_db),
+) -> dict[str, Any]:
+    """Delete a single extracted question (admin correction)."""
+    supabase.table("exam_questions").delete().eq("id", question_id).execute()
+    return {"ok": True, "deleted_id": question_id}
+
+
 @router.post("/courses/{course_id}/extract-all-questions")
 def extract_all_questions_for_course(
     course_id: str,

@@ -65,8 +65,9 @@ class HistoryMessage(BaseModel):
 class AskRequest(BaseModel):
     question:     str
     scope_set_id: int | None = None
-    context_mode: str = "all"  # "all" | "revision"
-    history:      list[HistoryMessage] = []  # recent conversation turns (max 5)
+    context_mode: str = "all"
+    history:      list[HistoryMessage] = []
+    course_name:  str = ""
 
 
 class TranslateRequest(BaseModel):
@@ -369,7 +370,7 @@ def ask_question_stream(
 
         try:
 
-            for token in gemini_generate_answer_stream(body.question, "", gemini_key, history=history):
+            for token in gemini_generate_answer_stream(body.question, "", gemini_key, history=history, course_name=body.course_name):
                 full_answer += token
                 yield _sse({"type": "token", "text": token})
 

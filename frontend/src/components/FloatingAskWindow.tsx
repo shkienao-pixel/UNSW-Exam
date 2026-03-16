@@ -85,7 +85,7 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
 
 export default function FloatingAskWindow() {
   const {
-    isOpen, isMinimized, messages, courseId,
+    isOpen, isMinimized, messages, courseId, credits,
     unreadCount, isLoading, prefillText,
     minimizeWindow, openWindow, closeWindow, clearMessages, clearPrefill,
     sendMessage, stopGeneration,
@@ -112,6 +112,25 @@ export default function FloatingAskWindow() {
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
   }, [])
+
+  // ── Mobile: track keyboard height via visualViewport ─────────────────────────
+  const [sheetHeight, setSheetHeight] = useState('85dvh')
+  useEffect(() => {
+    if (!isMobile) return
+    const vv = window.visualViewport
+    if (!vv) return
+    const update = () => {
+      // available height = visualViewport height (shrinks when keyboard opens)
+      const available = vv.height
+      const total = window.innerHeight
+      const ratio = available / total
+      // cap between 40dvh and 85dvh so it doesn't collapse too small
+      const pct = Math.min(85, Math.max(40, Math.round(ratio * 85)))
+      setSheetHeight(`${pct}dvh`)
+    }
+    vv.addEventListener('resize', update)
+    return () => vv.removeEventListener('resize', update)
+  }, [isMobile])
 
   // ── Init position on mount ───────────────────────────────────────────────────
   useEffect(() => {
@@ -269,7 +288,7 @@ export default function FloatingAskWindow() {
   function handleSend() {
     const q = input.trim()
     if ((!q && !imageFile) || isLoading || !courseId) return
-    sendMessage(q || '请分析这张图片', imageFile, undefined, 'all')
+    sendMessage(q || '请分析这张图片', imageFile)
     setInput('')
     clearImage()
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
@@ -354,6 +373,22 @@ export default function FloatingAskWindow() {
         <span className="font-semibold flex-1" style={{ color: '#E5E5E5', fontSize: fs.title }}>
           AI 问答
         </span>
+        {credits !== null && (
+          <span
+            title="当前积分余额"
+            style={{
+              fontSize: fs.xs,
+              color: credits < 40 ? '#f87171' : '#666',
+              background: 'rgba(255,255,255,0.04)',
+              border: `1px solid ${credits < 40 ? 'rgba(248,113,113,0.25)' : 'rgba(255,255,255,0.08)'}`,
+              borderRadius: '0.4rem',
+              padding: '1px 6px',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {credits} 分
+          </span>
+        )}
         {isLoading && (
           <button
             onClick={stopGeneration}
@@ -534,7 +569,7 @@ export default function FloatingAskWindow() {
                           onClick={() => {
                             const idx = messages.findIndex(x => x.id === m.id)
                             const userMsg = idx > 0 ? messages.slice(0, idx).reverse().find(x => x.role === 'user') : null
-                            if (userMsg) sendMessage(userMsg.content, null, undefined, 'all')
+                            if (userMsg) sendMessage(userMsg.content, null)
                           }}
                           title="重试"
                           className="flex items-center gap-1 px-2 py-0.5 rounded-md transition-colors hover:bg-white/10"
@@ -677,7 +712,7 @@ export default function FloatingAskWindow() {
             className="fixed z-50 flex flex-col overflow-hidden"
             style={{
               left: 0, right: 0, bottom: 0,
-              height: '85dvh',
+              height: sheetHeight,
               borderRadius: '20px 20px 0 0',
               background: 'rgba(7,8,15,0.99)',
               border: '1px solid rgba(255,255,255,0.1)',

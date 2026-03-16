@@ -390,7 +390,14 @@ function ExamDoingPage({
   onSubmitDone: (results: GradeResult[], finalQs: ExamQuestion[]) => void
 }) {
   const [questions, setQuestions] = useState<ExamQuestion[]>(initialQuestions)
-  const [answers, setAnswers] = useState<Record<number, string>>({})
+  // Pre-fill answers from previous attempts
+  const [answers, setAnswers] = useState<Record<number, string>>(
+    () => Object.fromEntries(
+      initialQuestions
+        .filter(q => q.prev_answer)
+        .map(q => [q.id, q.prev_answer!])
+    )
+  )
   const [currentPage, setCurrentPage] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [favorites, setFavorites] = useState<Record<number, boolean>>(
@@ -569,6 +576,14 @@ function QuestionCard({
       className="rounded-[24px] p-5 space-y-4"
       style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
     >
+      {/* Visual missing warning */}
+      {q.has_visual && !q.page_image_url && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs"
+          style={{ background: 'rgba(250,204,21,0.07)', border: '1px solid rgba(250,204,21,0.2)', color: '#ca8a04' }}>
+          ⚠️ {lang === 'zh' ? '本题含图表，图片未能自动提取，请参考原始试卷' : 'This question contains a figure. Please refer to the original exam paper.'}
+        </div>
+      )}
+
       {/* Question image (per-question crop, click to zoom) */}
       {q.page_image_url && (
         <>
@@ -612,6 +627,18 @@ function QuestionCard({
         <p className="text-sm font-medium text-white leading-relaxed flex-1">
           <span style={{ color: '#FFD700' }}>Q{questionNumber}. </span>
           {q.question_text}
+          {q.prev_correct === true && (
+            <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full align-middle"
+              style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.25)' }}>
+              ✓ {lang === 'zh' ? '上次答对' : 'Prev: correct'}
+            </span>
+          )}
+          {q.prev_correct === false && (
+            <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full align-middle"
+              style={{ background: 'rgba(255,68,68,0.1)', color: '#ff6b6b', border: '1px solid rgba(255,68,68,0.2)' }}>
+              ✗ {lang === 'zh' ? '上次答错' : 'Prev: wrong'}
+            </span>
+          )}
         </p>
         <button
           onClick={onToggleFav}

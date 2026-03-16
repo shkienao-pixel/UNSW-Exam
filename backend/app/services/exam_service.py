@@ -153,6 +153,7 @@ def _insert_past_exam_questions(supabase: Client, questions: list[dict], course_
             "explanation":     q.get("explanation"),
             "mock_session_id": None,
             "page_image_url":  q.get("page_image_url"),
+            "has_visual":      bool(q.get("has_visual", False)),
         })
     if not rows:
         return []
@@ -331,6 +332,47 @@ def extract_questions_from_artifact(
             "extract_questions: unsupported file type %s for artifact %s", ft, artifact_id
         )
         return []
+
+    # Hash cache: if another artifact with the same file_hash already has questions, copy them
+    file_hash = art.get("file_hash")
+    if file_hash:
+        donor_rows = (
+            supabase.table("artifacts")
+            .select("id")
+            .eq("file_hash", file_hash)
+            .eq("doc_type", "past_exam")
+            .neq("id", artifact_id)
+            .execute()
+            .data or []
+        )
+        for donor in donor_rows:
+            donor_id = donor["id"]
+            source_qs = (
+                supabase.table("exam_questions")
+                .select("*")
+                .eq("artifact_id", donor_id)
+                .eq("source_type", "past_exam")
+                .order("question_index")
+                .execute()
+                .data or []
+            )
+            if source_qs:
+                copies = []
+                for q in source_qs:
+                    row = {k: v for k, v in q.items() if k not in ("id", "created_at")}
+                    row["artifact_id"] = artifact_id
+                    row["course_id"] = course_id
+                    copies.append(row)
+                try:
+                    result = supabase.table("exam_questions").insert(copies).execute()
+                    logger.info(
+                        "extract_questions: hash-cache hit — copied %d questions from artifact %s to %s",
+                        len(result.data or []), donor_id, artifact_id,
+                    )
+                    return result.data or []
+                except Exception as exc:
+                    logger.warning("extract_questions: hash-cache copy failed: %s", exc)
+                    # Fall through to normal extraction
 
     from app.services.artifact_service import download_artifact_bytes
     try:

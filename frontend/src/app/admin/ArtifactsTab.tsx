@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import {
-  Loader2, CheckCircle, XCircle, ChevronLeft,
-  DatabaseZap, Upload, RefreshCw, Search, FileSearch,
+  Loader2, CheckCircle, XCircle, ChevronLeft, ChevronDown, ChevronUp,
+  DatabaseZap, Upload, RefreshCw, Search, FileSearch, Trash2,
 } from 'lucide-react'
 import { useLang } from '@/lib/i18n'
 import {
@@ -68,6 +68,9 @@ export function ArtifactsTab({ secret, coursesVersion }: { secret: string; cours
   const [lectureWeekFilter, setLectureWeekFilter] = useState<'all' | LectureWeekBucket>('all')
   const [fileSearch, setFileSearch] = useState('')
   const [extracting, setExtracting] = useState<number | null>(null)
+  const [previewArtifactId, setPreviewArtifactId] = useState<number | null>(null)
+  const [previewQuestions, setPreviewQuestions] = useState<{ id: number; question_index: number; question_type: string; question_text: string; has_visual: boolean; page_image_url: string | null }[]>([])
+  const [previewLoading, setPreviewLoading] = useState(false)
   const [extractionProgress, setExtractionProgress] = useState<{ total: number; done: number; failed: number; extracting: number } | null>(null)
   const extractionPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -131,6 +134,26 @@ export function ArtifactsTab({ secret, coursesVersion }: { secret: string; cours
     try {
       await adminReq(secret, `/admin/artifacts/${id}/approve`, { method: 'PATCH' })
       if (selectedCourse) await loadFiles(selectedCourse.id, statusFilter)
+    } catch (e: unknown) { setError(String(e)) }
+  }
+
+  async function togglePreview(id: number) {
+    if (previewArtifactId === id) { setPreviewArtifactId(null); return }
+    setPreviewArtifactId(id)
+    setPreviewLoading(true)
+    try {
+      const qs = await adminReq<typeof previewQuestions>(secret, `/admin/artifacts/${id}/questions`)
+      setPreviewQuestions(qs)
+    } catch (e: unknown) { setError(String(e)) }
+    finally { setPreviewLoading(false) }
+  }
+
+  async function deleteQuestion(qid: number) {
+    if (!confirm(tt('删除这道题？', 'Delete this question?'))) return
+    try {
+      await adminReq(secret, `/admin/questions/${qid}`, { method: 'DELETE' })
+      setPreviewQuestions(prev => prev.filter(q => q.id !== qid))
+      showToast(tt('题目已删除', 'Question deleted'))
     } catch (e: unknown) { setError(String(e)) }
   }
 
@@ -759,8 +782,55 @@ export function ArtifactsTab({ secret, coursesVersion }: { secret: string; cours
                   </button>
                 </>
               )}
+              {a.status === 'approved' && a.doc_type === 'past_exam' && (
+                <button
+                  onClick={() => togglePreview(a.id)}
+                  className="p-1.5 rounded-lg transition-colors duration-150 flex-shrink-0"
+                  title={tt('预览/编辑题目', 'Preview/edit questions')}
+                  style={{ color: previewArtifactId === a.id ? '#a78bfa' : '#666' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#a78bfa' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = previewArtifactId === a.id ? '#a78bfa' : '#666' }}
+                >
+                  {previewArtifactId === a.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+              )}
               <DeleteBtn onClick={() => deleteArtifact(a.id, a.file_name)} />
             </div>
+            {/* Questions preview panel */}
+            {a.status === 'approved' && a.doc_type === 'past_exam' && previewArtifactId === a.id && (
+              <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(167,139,250,0.2)', background: 'rgba(167,139,250,0.04)' }}>
+                {previewLoading ? (
+                  <div className="flex justify-center py-4"><Loader2 size={16} className="animate-spin" style={{ color: '#a78bfa' }} /></div>
+                ) : previewQuestions.length === 0 ? (
+                  <p className="text-xs text-center py-4" style={{ color: '#555' }}>{tt('暂无提取题目', 'No extracted questions')}</p>
+                ) : (
+                  <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                    {previewQuestions.map((q, i) => (
+                      <div key={q.id} className="flex items-start gap-3 px-4 py-2.5">
+                        <span className="text-xs flex-shrink-0 mt-0.5 font-mono" style={{ color: '#555', minWidth: 24 }}>Q{q.question_index}</span>
+                        <span className="text-xs flex-shrink-0 px-1.5 py-0.5 rounded" style={{
+                          background: q.question_type === 'mcq' ? 'rgba(255,215,0,0.1)' : 'rgba(96,165,250,0.1)',
+                          color: q.question_type === 'mcq' ? '#FFD700' : '#60a5fa',
+                        }}>{q.question_type === 'mcq' ? 'MCQ' : 'SA'}</span>
+                        {q.has_visual && (
+                          <span className="text-xs flex-shrink-0" style={{ color: q.page_image_url ? '#4ade80' : '#facc15' }} title={q.page_image_url ? 'Image extracted' : 'Image missing'}>
+                            {q.page_image_url ? '🖼' : '⚠️'}
+                          </span>
+                        )}
+                        <p className="text-xs flex-1 leading-relaxed" style={{ color: '#bbb' }}>
+                          {q.question_text.length > 120 ? q.question_text.slice(0, 120) + '…' : q.question_text}
+                        </p>
+                        <button onClick={() => deleteQuestion(q.id)} className="flex-shrink-0 p-1 rounded hover:bg-red-900/20 transition-colors" style={{ color: '#555' }}
+                          onMouseEnter={e => (e.currentTarget.style.color = '#ff7070')}
+                          onMouseLeave={e => (e.currentTarget.style.color = '#555')}>
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           ))}
           {displayedArtifacts.length === 0 && (
             <Empty text={

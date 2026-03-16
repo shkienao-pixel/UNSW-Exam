@@ -1,10 +1,9 @@
 'use client'
 
 import { createContext, useContext, useState, useRef, useCallback, useEffect, type ReactNode } from 'react'
-import type { ScopeSet, Artifact } from './types'
 import { api } from './api'
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 type AskSource = { artifact_id: number; file_name: string; storage_url: string }
 
@@ -13,10 +12,10 @@ export type FloatingMessage = {
   role: 'user' | 'assistant'
   content: string
   sources?: AskSource[]
-  imagePreview?: string        // data URL or object URL for user-uploaded image
+  imagePreview?: string
   streaming?: boolean
-  streamStatus?: 'filtering' | 'generating' | 'slow'
-  pending?: boolean            // image VQA fetch in-flight
+  streamStatus?: 'generating' | 'slow'
+  pending?: boolean
   failed?: boolean
 }
 
@@ -25,31 +24,23 @@ interface FloatingAskContextValue {
   isMinimized: boolean
   messages: FloatingMessage[]
   courseId: string | null
-  scopeSets: ScopeSet[]
-  artifacts: Artifact[]
+  courseName: string
+  credits: number | null
   unreadCount: number
   isLoading: boolean
   prefillText: string
-  /** Called by course page whenever data is loaded / refreshed */
-  setCourseContext: (courseId: string, scopeSets: ScopeSet[], artifacts: Artifact[]) => void
-  /** Open and un-minimize the window */
+  setCourseContext: (courseId: string, courseName: string) => void
   openWindow: () => void
-  /** Open window with a pre-filled question */
   openWindowWithPrefill: (question: string) => void
   closeWindow: () => void
   minimizeWindow: () => void
   clearMessages: () => void
   clearPrefill: () => void
-  sendMessage: (
-    question: string,
-    imageFile: File | null,
-    scopeSetId: number | undefined,
-    contextMode: 'all' | 'revision',
-  ) => void
+  sendMessage: (question: string, imageFile: File | null) => void
   stopGeneration: () => void
 }
 
-// ── Context ──────────────────────────────────────────────────────────────────
+// ── Context ───────────────────────────────────────────────────────────────────
 
 const Ctx = createContext<FloatingAskContextValue | null>(null)
 
@@ -59,23 +50,25 @@ export function useFloatingAsk(): FloatingAskContextValue {
   return ctx
 }
 
-// ── ID generator ─────────────────────────────────────────────────────────────
+// ── ID generator ──────────────────────────────────────────────────────────────
 
 let _msgCounter = 0
 function nextId(): string { return String(++_msgCounter) }
 
-// ── localStorage helpers ──────────────────────────────────────────────────────
+// ── Per-course localStorage helpers ──────────────────────────────────────────
 
-const STORAGE_KEY = 'floating_ask_messages'
-const MAX_STORED  = 60   // 最多保留 60 条，防止 localStorage 撑爆
+const MAX_STORED = 60
 
-function loadMessages(): FloatingMessage[] {
+function storageKey(courseId: string) {
+  return `floating_ask_messages_${courseId}`
+}
+
+function loadMessages(courseId: string): FloatingMessage[] {
   if (typeof window === 'undefined') return []
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(storageKey(courseId))
     if (!raw) return []
     const parsed: FloatingMessage[] = JSON.parse(raw)
-    // 过滤掉 objectURL（刷新后失效）和进行中状态
     return parsed
       .filter(m => !m.streaming && !m.pending)
       .map(m => ({
@@ -88,7 +81,7 @@ function loadMessages(): FloatingMessage[] {
   }
 }
 
-function saveMessages(msgs: FloatingMessage[]) {
+function saveMessages(courseId: string, msgs: FloatingMessage[]) {
   try {
     const toSave = msgs
       .filter(m => !m.streaming && !m.pending)
@@ -97,40 +90,60 @@ function saveMessages(msgs: FloatingMessage[]) {
         imagePreview: m.imagePreview?.startsWith('blob:') ? undefined : m.imagePreview,
       }))
       .slice(-MAX_STORED)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave))
-  } catch { /* quota exceeded — silently skip */ }
+    localStorage.setItem(storageKey(courseId), JSON.stringify(toSave))
+  } catch { /* quota exceeded */ }
 }
 
-// ── Provider ─────────────────────────────────────────────────────────────────
+// ── Provider ──────────────────────────────────────────────────────────────────
 
 export function FloatingAskProvider({ children }: { children: ReactNode }) {
-  const [isOpen, setIsOpen]             = useState(false)
-  const [isMinimized, setIsMinimized]   = useState(false)
-  const [messages, setMessages]         = useState<FloatingMessage[]>(() => loadMessages())
-  const [courseId, setCourseId]         = useState<string | null>(null)
-  const [scopeSets, setScopeSets]       = useState<ScopeSet[]>([])
-  const [artifacts, setArtifacts]       = useState<Artifact[]>([])
-  const [unreadCount, setUnreadCount]   = useState(0)
-  const [isLoading, setIsLoading]       = useState(false)
-  const [prefillText, setPrefillText]   = useState('')
-  const abortRef                        = useRef<AbortController | null>(null)
-  const messagesRef                     = useRef<FloatingMessage[]>([])
+  const [isOpen,       setIsOpen]       = useState(false)
+  const [isMinimized,  setIsMinimized]  = useState(false)
+  const [messages,     setMessages]     = useState<FloatingMessage[]>([])
+  const [courseId,     setCourseId]     = useState<string | null>(null)
+  const [courseName,   setCourseName]   = useState('')
+  const [credits,      setCredits]      = useState<number | null>(null)
+  const [unreadCount,  setUnreadCount]  = useState(0)
+  const [isLoading,    setIsLoading]    = useState(false)
+  const [prefillText,  setPrefillText]  = useState('')
+  const abortRef      = useRef<AbortController | null>(null)
+  const messagesRef   = useRef<FloatingMessage[]>([])
+  const courseIdRef   = useRef<string | null>(null)
+  const courseNameRef = useRef<string>('')
 
-  // Keep messagesRef in sync so sendMessage always reads latest messages without re-creating
-  useEffect(() => { messagesRef.current = messages }, [messages])
+  // Keep refs in sync
+  useEffect(() => { messagesRef.current   = messages   }, [messages])
+  useEffect(() => { courseIdRef.current   = courseId   }, [courseId])
+  useEffect(() => { courseNameRef.current = courseName }, [courseName])
 
-  // Persist messages to localStorage whenever they change (skip in-flight messages)
+  // Load per-course messages when courseId changes
   useEffect(() => {
-    const stable = messages.filter(m => !m.streaming && !m.pending)
-    if (stable.length === messages.length) {
-      saveMessages(messages)
-    }
-  }, [messages])
+    if (!courseId) return
+    setMessages(loadMessages(courseId))
+  }, [courseId])
 
-  const setCourseContext = useCallback((cid: string, ss: ScopeSet[], arts: Artifact[]) => {
+  // Persist stable messages to localStorage
+  useEffect(() => {
+    if (!courseId) return
+    const stable = messages.filter(m => !m.streaming && !m.pending)
+    if (stable.length === messages.length) saveMessages(courseId, messages)
+  }, [messages, courseId])
+
+  // Fetch credit balance on course entry and after messages settle
+  const refreshCredits = useCallback(async () => {
+    try {
+      const res = await api.credits.balance()
+      setCredits(res.balance)
+    } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => {
+    if (courseId) refreshCredits()
+  }, [courseId, refreshCredits])
+
+  const setCourseContext = useCallback((cid: string, name: string) => {
     setCourseId(cid)
-    setScopeSets(ss)
-    setArtifacts(arts)
+    setCourseName(name)
   }, [])
 
   const openWindow = useCallback(() => {
@@ -151,42 +164,33 @@ export function FloatingAskProvider({ children }: { children: ReactNode }) {
     setIsMinimized(false)
   }, [])
 
-  const minimizeWindow = useCallback(() => {
-    setIsMinimized(true)
-  }, [])
+  const minimizeWindow = useCallback(() => setIsMinimized(true), [])
 
   const clearMessages = useCallback(() => {
     abortRef.current?.abort()
     setMessages([])
     setIsLoading(false)
-    try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
+    if (courseIdRef.current) {
+      try { localStorage.removeItem(storageKey(courseIdRef.current)) } catch { /* ignore */ }
+    }
   }, [])
 
-  const clearPrefill = useCallback(() => {
-    setPrefillText('')
-  }, [])
+  const clearPrefill = useCallback(() => setPrefillText(''), [])
 
-  const stopGeneration = useCallback(() => {
-    abortRef.current?.abort()
-  }, [])
+  const stopGeneration = useCallback(() => { abortRef.current?.abort() }, [])
 
-  const sendMessage = useCallback((
-    question: string,
-    imageFile: File | null,
-    scopeSetId: number | undefined,
-    contextMode: 'all' | 'revision',
-  ) => {
-    if (!courseId || isLoading) return
+  const sendMessage = useCallback((question: string, imageFile: File | null) => {
+    const cid = courseIdRef.current
+    if (!cid || isLoading) return
 
     const asstMsgId = nextId()
 
-    // Build conversation history from ref (always latest, no stale closure)
+    // Build history from ref (always fresh, no stale closure)
     const historySnapshot = messagesRef.current
       .filter(m => !m.streaming && !m.pending && !m.failed && m.content)
-      .slice(-10)
+      .slice(-20)
       .map(m => ({ role: m.role, content: m.content }))
 
-    // Add user message immediately
     setMessages(prev => [...prev, {
       id: nextId(),
       role: 'user',
@@ -195,72 +199,54 @@ export function FloatingAskProvider({ children }: { children: ReactNode }) {
     }])
     setIsLoading(true)
 
-    // ── Image VQA: regular async fetch ────────────────────────────────────────
+    // ── Image VQA ─────────────────────────────────────────────────────────────
     if (imageFile) {
-      setMessages(prev => [...prev, {
-        id: asstMsgId,
-        role: 'assistant',
-        content: '',
-        pending: true,
-      }])
+      setMessages(prev => [...prev, { id: asstMsgId, role: 'assistant', content: '', pending: true }])
 
-      api.generate.ask(courseId, question, scopeSetId, imageFile, contextMode)
+      api.generate.ask(cid, question, undefined, imageFile, 'all')
         .then(res => {
-          setMessages(prev => prev.map(m => m.id === asstMsgId ? {
-            ...m,
-            content: res.answer,
-            sources: res.sources,
-            pending: false,
-          } : m))
-          // Increment unread badge if minimized
-          setIsMinimized(min => {
-            if (min) setUnreadCount(n => n + 1)
-            return min
-          })
+          setMessages(prev => prev.map(m => m.id === asstMsgId
+            ? { ...m, content: res.answer, sources: res.sources, pending: false }
+            : m
+          ))
+          setIsMinimized(min => { if (min) setUnreadCount(n => n + 1); return min })
+          refreshCredits()
         })
         .catch(err => {
-          setMessages(prev => prev.map(m => m.id === asstMsgId ? {
-            ...m,
-            content: err instanceof Error ? err.message : '请求失败，请重试',
-            pending: false,
-            failed: true,
-          } : m))
+          setMessages(prev => prev.map(m => m.id === asstMsgId
+            ? { ...m, content: err instanceof Error ? err.message : '请求失败，请重试', pending: false, failed: true }
+            : m
+          ))
         })
         .finally(() => setIsLoading(false))
       return
     }
 
-    // ── Text query: streaming SSE ─────────────────────────────────────────────
+    // ── Text streaming ────────────────────────────────────────────────────────
     const abort = new AbortController()
     abortRef.current = abort
 
     setMessages(prev => [...prev, {
-      id: asstMsgId,
-      role: 'assistant',
-      content: '',
-      streaming: true,
-      streamStatus: 'filtering',
+      id: asstMsgId, role: 'assistant', content: '', streaming: true, streamStatus: 'generating',
     }])
 
-    // Slow indicator after 1.5s
+    // Slow indicator after 4s
     const slowTimer = setTimeout(() => {
       setMessages(prev => prev.map(m =>
         m.id === asstMsgId && m.streaming ? { ...m, streamStatus: 'slow' } : m
       ))
-    }, 1500)
+    }, 4000)
 
     let gotFirstToken = false
 
     ;(async () => {
       try {
-        for await (const event of api.generate.askStream(courseId, question, scopeSetId, contextMode, abort.signal, historySnapshot)) {
+        for await (const event of api.generate.askStream(
+          cid, question, undefined, 'all', abort.signal, historySnapshot, courseNameRef.current,
+        )) {
           if (abort.signal.aborted) break
 
-          if (event.type === 'status') {
-            setMessages(prev => prev.map(m =>
-              m.id === asstMsgId && m.streaming ? { ...m, streamStatus: event.phase } : m
-            ))
-          } else if (event.type === 'token') {
+          if (event.type === 'token') {
             if (!gotFirstToken) { gotFirstToken = true; clearTimeout(slowTimer) }
             setMessages(prev => prev.map(m =>
               m.id === asstMsgId && m.streaming
@@ -270,28 +256,18 @@ export function FloatingAskProvider({ children }: { children: ReactNode }) {
           } else if (event.type === 'done') {
             clearTimeout(slowTimer)
             setMessages(prev => prev.map(m =>
-              m.id === asstMsgId ? {
-                ...m,
-                streaming: false,
-                streamStatus: undefined,
-                content: event.answer,
-                sources: event.sources,
-              } : m
+              m.id === asstMsgId
+                ? { ...m, streaming: false, streamStatus: undefined, content: event.answer, sources: event.sources }
+                : m
             ))
-            setIsMinimized(min => {
-              if (min) setUnreadCount(n => n + 1)
-              return min
-            })
+            setIsMinimized(min => { if (min) setUnreadCount(n => n + 1); return min })
+            refreshCredits()
           } else if (event.type === 'error') {
             clearTimeout(slowTimer)
             setMessages(prev => prev.map(m =>
-              m.id === asstMsgId ? {
-                ...m,
-                streaming: false,
-                streamStatus: undefined,
-                content: event.message,
-                failed: event.code !== 'ABORT',
-              } : m
+              m.id === asstMsgId
+                ? { ...m, streaming: false, streamStatus: undefined, content: event.message, failed: event.code !== 'ABORT' }
+                : m
             ))
           }
         }
@@ -312,11 +288,11 @@ export function FloatingAskProvider({ children }: { children: ReactNode }) {
         setIsLoading(false)
       }
     })()
-  }, [courseId, isLoading])
+  }, [isLoading, refreshCredits])
 
   return (
     <Ctx.Provider value={{
-      isOpen, isMinimized, messages, courseId, scopeSets, artifacts,
+      isOpen, isMinimized, messages, courseId, courseName, credits,
       unreadCount, isLoading, prefillText,
       setCourseContext, openWindow, openWindowWithPrefill,
       closeWindow, minimizeWindow, clearMessages, clearPrefill,

@@ -256,6 +256,7 @@ export const api = {
       contextMode: 'all' | 'revision' = 'all',
       signal?: AbortSignal,
       history?: Array<{ role: string; content: string }>,
+      courseName?: string,
     ): AsyncGenerator<StreamEvent> {
       const token = getToken()
       const res = await fetch(`${API_URL}/courses/${courseId}/generate/ask/stream`, {
@@ -264,7 +265,13 @@ export const api = {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ question, scope_set_id, context_mode: contextMode, history: history ?? [] }),
+        body: JSON.stringify({
+          question,
+          scope_set_id,
+          context_mode: contextMode,
+          history: history ?? [],
+          course_name: courseName ?? '',
+        }),
         signal,
       })
 
