@@ -32,16 +32,17 @@ _VISION_SYSTEM = (
     "  3. For MCQ: list options as plain text (no \"A.\" prefix), set correct_answer to the letter if answer key visible, else null.\n"
     "  4. For short_answer: set correct_answer to a concise reference answer if clearly shown, else null.\n"
     "  5. If this page has NO questions (cover page, instructions only), return an empty array [].\n"
-    "  6. For each question, estimate its vertical position as y_start_pct and y_end_pct (0–100, percentage from top).\n"
-    "     IMPORTANT: Make the range generous — extend y_start_pct 3–5% ABOVE the question text,\n"
-    "     and y_end_pct 3–5% BELOW the last associated element (diagram/table/options).\n"
-    "     The goal is to include every figure, diagram, table, or equation that belongs to this question.\n"
-    "     Only set has_visual=true for a question if it has a diagram, figure, graph, table, or equation IMAGE that is essential to answer it.\n\n"
-    "Field 2 — \"page_has_visual\": boolean — true if the page contains ANY visual element (figure/diagram/table/equation image).\n\n"
+    "  6. Set has_visual=true ONLY if the question contains a diagram, figure, graph, table, or equation image that is ESSENTIAL to answer it.\n"
+    "  7. When has_visual=true, provide visual_y_start_pct and visual_y_end_pct (0–100, % from top of page):\n"
+    "     - These coordinates must cover ONLY the visual element(s) (diagram/figure/table/equation image), NOT the question text.\n"
+    "     - Extend 2–3% above and below the visual element to avoid clipping.\n"
+    "     - If multiple visuals belong to one question, span all of them in a single range.\n\n"
+    "Field 2 — \"page_has_visual\": boolean — true if the page contains ANY visual element.\n\n"
     "Return ONLY a raw JSON object — no markdown fences, no extra text.\n"
     "Format: {\"page_has_visual\": true/false, \"questions\": [{\"question_index\":1,\"question_type\":\"mcq\","
     "\"question_text\":\"...\",\"options\":[\"opt\",\"opt\",\"opt\",\"opt\"],"
-    "\"correct_answer\":\"A\",\"explanation\":null,\"has_visual\":false,\"y_start_pct\":10,\"y_end_pct\":35}, ...]}"
+    "\"correct_answer\":\"A\",\"explanation\":null,\"has_visual\":false,"
+    "\"visual_y_start_pct\":null,\"visual_y_end_pct\":null}, ...]}"
 )
 
 
@@ -127,19 +128,24 @@ def _extract_questions_vision(data: bytes, openai_key: str, supabase: Client, ar
         page_rect = page.rect  # page size in points
         page_h_pt = page_rect.height
         page_w_pt = page_rect.width
-        # padding: 4% of page height in points, minimum 20 pt
-        pad_pt = max(20.0, page_h_pt * 0.04)
+        pad_pt = 10.0  # small padding around the visual element only
         for q in page_qs:
             if not q.get("question_text"):
                 continue
             q_image_url: str | None = None
             if q.get("has_visual") and page_has_visual:
-                y_start_pt = max(0.0, q.get("y_start_pct", 0) / 100.0 * page_h_pt - pad_pt)
-                y_end_pt = min(page_h_pt, q.get("y_end_pct", 100) / 100.0 * page_h_pt + pad_pt)
-                clip = fitz.Rect(0, y_start_pt, page_w_pt, y_end_pt)
-                crop_pix = page.get_pixmap(matrix=mat, clip=clip)
-                crop_jpeg = crop_pix.tobytes("jpeg", 88)
-                q_image_url = _upload_page_image(supabase, crop_jpeg, artifact_id, page_num, global_index)
+                v_start = q.get("visual_y_start_pct")
+                v_end = q.get("visual_y_end_pct")
+                if v_start is None or v_end is None:
+                    # fallback: skip image if coordinates missing
+                    logger.debug("has_visual=True but no visual coords for q%d, skipping", global_index)
+                else:
+                    y_start_pt = max(0.0, float(v_start) / 100.0 * page_h_pt - pad_pt)
+                    y_end_pt = min(page_h_pt, float(v_end) / 100.0 * page_h_pt + pad_pt)
+                    clip = fitz.Rect(0, y_start_pt, page_w_pt, y_end_pt)
+                    crop_pix = page.get_pixmap(matrix=mat, clip=clip)
+                    crop_jpeg = crop_pix.tobytes("jpeg", 88)
+                    q_image_url = _upload_page_image(supabase, crop_jpeg, artifact_id, page_num, global_index)
             q["question_index"] = global_index
             q["page_image_url"] = q_image_url
             all_questions.append(q)
