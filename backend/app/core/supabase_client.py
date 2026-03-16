@@ -46,19 +46,26 @@ def get_supabase() -> Client:
 
 
 def restore_service_role_auth() -> None:
-    """Reset PostgREST auth header back to the service-role key.
+    """Reset PostgREST AND Storage auth headers back to the service-role key.
 
-    supabase-py v2 listens to auth state changes and replaces the PostgREST
-    Authorization header with the newly signed-in user's JWT whenever
+    supabase-py v2 listens to auth state changes and replaces both the PostgREST
+    and Storage Authorization headers with the newly signed-in user's JWT whenever
     auth.sign_up() / auth.verify_otp() is called on the shared singleton client.
-    This causes subsequent admin table operations to run under the user's JWT,
-    which triggers RLS violations even though RLS is meant to be bypassed by
-    the service-role key.
+    This causes subsequent operations to run under the user's JWT, which triggers
+    RLS violations for both DB and Storage even though service-role bypasses RLS.
 
-    Call this immediately after any supabase.auth.sign_up() / verify_otp() call.
+    Call this immediately after any supabase.auth.sign_up() / verify_otp() call,
+    and at the start of background tasks that do Storage operations.
     """
     global _client
     if _client is not None:
         cfg = get_settings()
+        bearer = f"Bearer {cfg.supabase_service_role_key}"
+        # Restore PostgREST
         _client.postgrest.auth(cfg.supabase_service_role_key)
-        logger.debug("PostgREST auth restored to service-role key")
+        # Restore Storage client auth header (supabase-py v2)
+        try:
+            _client.storage._client.headers["Authorization"] = bearer
+        except Exception:
+            pass
+        logger.debug("PostgREST + Storage auth restored to service-role key")

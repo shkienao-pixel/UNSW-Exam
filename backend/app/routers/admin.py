@@ -116,6 +116,13 @@ def _bg_extract_questions(supabase: Client, artifact: dict) -> None:
         return
 
     artifact_id = artifact["id"]
+
+    # Reset Storage + PostgREST auth to service-role key.
+    # auth.sign_up/verify_otp contaminates the shared client's auth headers,
+    # causing Storage uploads to get 403 "new row violates row-level security".
+    from app.core.supabase_client import restore_service_role_auth
+    restore_service_role_auth()
+
     try:
         supabase.table("artifacts").update({"extraction_status": "extracting"}).eq("id", artifact_id).execute()
     except Exception:
