@@ -3,17 +3,51 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   MessageCircleMore, X, Minus, Send, ImagePlus, Square,
-  Loader2, Sparkles, ExternalLink, Trash2, BookOpen, Copy, Check, RefreshCw,
+  Loader2, Sparkles, Copy, Check, RefreshCw, Trash2,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
 import 'highlight.js/styles/github-dark.css'
 import { useFloatingAsk } from '@/lib/floating-ask-context'
 
-const MIN_W = 320
-const MIN_H = 380
-const DEFAULT_W = 420
-const DEFAULT_H = 560
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const MIN_W     = 360
+const MIN_H     = 440
+const DEFAULT_W = 480
+const DEFAULT_H = 620
+const POS_KEY   = 'floating_ask_pos'
+const SIZE_KEY  = 'floating_ask_size'
+
+type ResizeDir = 'e' | 's' | 'se'
+
+// ── localStorage helpers (module-level) ───────────────────────────────────────
+
+function loadSize(): { w: number; h: number } {
+  if (typeof window === 'undefined') return { w: DEFAULT_W, h: DEFAULT_H }
+  try {
+    const raw = localStorage.getItem(SIZE_KEY)
+    if (!raw) return { w: DEFAULT_W, h: DEFAULT_H }
+    const s = JSON.parse(raw) as { w: number; h: number }
+    return {
+      w: Math.max(MIN_W, Math.min(window.innerWidth  - 40, s.w)),
+      h: Math.max(MIN_H, Math.min(window.innerHeight - 40, s.h)),
+    }
+  } catch { return { w: DEFAULT_W, h: DEFAULT_H } }
+}
+
+function loadPos(): { x: number; y: number } | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(POS_KEY)
+    if (!raw) return null
+    const p = JSON.parse(raw) as { x: number; y: number }
+    return {
+      x: Math.max(0, Math.min(window.innerWidth  - 60, p.x)),
+      y: Math.max(0, Math.min(window.innerHeight - 60, p.y)),
+    }
+  } catch { return null }
+}
 
 // ── Lightbox ─────────────────────────────────────────────────────────────────
 
@@ -51,57 +85,35 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
 
 export default function FloatingAskWindow() {
   const {
-    isOpen, isMinimized, messages, courseId, scopeSets, artifacts,
+    isOpen, isMinimized, messages, courseId,
     unreadCount, isLoading, prefillText,
     minimizeWindow, openWindow, closeWindow, clearMessages, clearPrefill,
     sendMessage, stopGeneration,
   } = useFloatingAsk()
 
-  // ── Window position ─────────────────────────────────────────────────────────
-  const POS_KEY  = 'floating_ask_pos'
-  const SIZE_KEY = 'floating_ask_size'
-
-  function loadSize(): { w: number; h: number } {
-    if (typeof window === 'undefined') return { w: DEFAULT_W, h: DEFAULT_H }
-    try {
-      const raw = localStorage.getItem(SIZE_KEY)
-      if (!raw) return { w: DEFAULT_W, h: DEFAULT_H }
-      const s = JSON.parse(raw) as { w: number; h: number }
-      return {
-        w: Math.max(MIN_W, Math.min(window.innerWidth  - 40, s.w)),
-        h: Math.max(MIN_H, Math.min(window.innerHeight - 40, s.h)),
-      }
-    } catch { return { w: DEFAULT_W, h: DEFAULT_H } }
-  }
-
-  function loadPos(): { x: number; y: number } | null {
-    if (typeof window === 'undefined') return null
-    try {
-      const raw = localStorage.getItem(POS_KEY)
-      if (!raw) return null
-      const p = JSON.parse(raw) as { x: number; y: number }
-      // Clamp to current viewport in case user resized window
-      return {
-        x: Math.max(0, Math.min(window.innerWidth  - 60, p.x)),
-        y: Math.max(0, Math.min(window.innerHeight - 60, p.y)),
-      }
-    } catch { return null }
-  }
-
-  const [pos, setPos]   = useState({ x: -1, y: -1 })
+  // ── Position & size ──────────────────────────────────────────────────────────
+  const [pos,  setPos]  = useState({ x: -1, y: -1 })
   const [size, setSize] = useState<{ w: number; h: number }>(() =>
     typeof window !== 'undefined' ? loadSize() : { w: DEFAULT_W, h: DEFAULT_H }
   )
-  const isDragging    = useRef(false)
-  const dragOffset    = useRef({ x: 0, y: 0 })
-  const currentPos    = useRef({ x: 0, y: 0 })
-  const dragStartPos  = useRef({ x: 0, y: 0 })
 
-  type ResizeDir = 'e' | 's' | 'se'
-  const isResizing    = useRef<ResizeDir | null>(null)
-  const resizeStart   = useRef({ mouseX: 0, mouseY: 0, w: 0, h: 0 })
+  const isDragging   = useRef(false)
+  const dragOffset   = useRef({ x: 0, y: 0 })
+  const currentPos   = useRef({ x: 0, y: 0 })
+  const dragStartPos = useRef({ x: 0, y: 0 })
+  const isResizing   = useRef<ResizeDir | null>(null)
+  const resizeStart  = useRef({ mouseX: 0, mouseY: 0, w: 0, h: 0 })
 
-  // Initialize position on mount: saved pos → default bottom-right
+  // ── Responsive: mobile detection (updates on resize) ─────────────────────────
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
+  // ── Init position on mount ───────────────────────────────────────────────────
   useEffect(() => {
     if (pos.x === -1 && typeof window !== 'undefined') {
       const saved = loadPos()
@@ -114,7 +126,7 @@ export default function FloatingAskWindow() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Global mousemove / mouseup for dragging
+  // ── Global mousemove / mouseup ───────────────────────────────────────────────
   useEffect(() => {
     function onMove(e: MouseEvent) {
       if (isResizing.current) {
@@ -128,7 +140,7 @@ export default function FloatingAskWindow() {
         return
       }
       if (!isDragging.current) return
-      const newX = Math.max(0, Math.min(window.innerWidth - 60, e.clientX - dragOffset.current.x))
+      const newX = Math.max(0, Math.min(window.innerWidth  - 60, e.clientX - dragOffset.current.x))
       const newY = Math.max(0, Math.min(window.innerHeight - 60, e.clientY - dragOffset.current.y))
       currentPos.current = { x: newX, y: newY }
       setPos({ x: newX, y: newY })
@@ -136,8 +148,6 @@ export default function FloatingAskWindow() {
     function onUp() {
       if (isResizing.current) {
         isResizing.current = null
-        try { localStorage.setItem(SIZE_KEY, JSON.stringify({ w: 0, h: 0 })) } catch { /* ignore */ }
-        // save actual size via setSize callback below — use ref instead
         setSize(s => {
           try { localStorage.setItem(SIZE_KEY, JSON.stringify(s)) } catch { /* ignore */ }
           return s
@@ -150,32 +160,25 @@ export default function FloatingAskWindow() {
       }
     }
     document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
+    document.addEventListener('mouseup',   onUp)
     return () => {
       document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
+      document.removeEventListener('mouseup',   onUp)
     }
   }, [])
 
-  // ── Input state ─────────────────────────────────────────────────────────────
-  const [input, setInput]               = useState('')
-  const [copiedId, setCopiedId]         = useState<string | null>(null)
-  const [imageFile, setImageFile]       = useState<File | null>(null)
+  // ── Input state ──────────────────────────────────────────────────────────────
+  const [input,        setInput]        = useState('')
+  const [copiedId,     setCopiedId]     = useState<string | null>(null)
+  const [imageFile,    setImageFile]    = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
-  const [scopeSetId, setScopeSetId]     = useState<number | undefined>()
-  const [contextMode, setContextMode]   = useState<'all' | 'revision'>('all')
-  const [lightboxSrc, setLightboxSrc]   = useState<string | null>(null)
+  const [lightboxSrc,  setLightboxSrc]  = useState<string | null>(null)
 
   const bottomRef     = useRef<HTMLDivElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const textareaRef   = useRef<HTMLTextAreaElement>(null)
 
-  // Sync scopeSetId when scopeSets arrive
-  useEffect(() => {
-    if (scopeSets.length > 0 && !scopeSetId) setScopeSetId(scopeSets[0].id)
-  }, [scopeSets, scopeSetId])
-
-  // Consume prefillText from context
+  // ── Consume prefillText ──────────────────────────────────────────────────────
   useEffect(() => {
     if (prefillText) {
       setInput(prefillText)
@@ -184,14 +187,14 @@ export default function FloatingAskWindow() {
     }
   }, [prefillText, clearPrefill])
 
-  // Scroll to bottom on new messages
+  // ── Scroll to bottom on new messages ────────────────────────────────────────
   useEffect(() => {
     if (isOpen && !isMinimized) {
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
     }
   }, [messages, isOpen, isMinimized])
 
-  // Paste image from clipboard (Ctrl+V)
+  // ── Paste image from clipboard ───────────────────────────────────────────────
   useEffect(() => {
     if (!isOpen || isMinimized) return
     function onPaste(e: ClipboardEvent) {
@@ -213,9 +216,8 @@ export default function FloatingAskWindow() {
     return () => document.removeEventListener('paste', onPaste)
   }, [isOpen, isMinimized])
 
-  // ── Handlers ────────────────────────────────────────────────────────────────
+  // ── Handlers ─────────────────────────────────────────────────────────────────
 
-  // FAB drag/click: if moved < 6px → treat as click (openWindow)
   function handleFabMouseDown(e: React.MouseEvent) {
     e.preventDefault()
     dragStartPos.current = { x: e.clientX, y: e.clientY }
@@ -229,9 +231,7 @@ export default function FloatingAskWindow() {
   function handleFabMouseUp(e: React.MouseEvent) {
     const dx = e.clientX - dragStartPos.current.x
     const dy = e.clientY - dragStartPos.current.y
-    if (Math.sqrt(dx * dx + dy * dy) < 6) {
-      openWindow()
-    }
+    if (Math.sqrt(dx * dx + dy * dy) < 6) openWindow()
   }
 
   function handleResizeMouseDown(e: React.MouseEvent, dir: ResizeDir) {
@@ -269,28 +269,25 @@ export default function FloatingAskWindow() {
   function handleSend() {
     const q = input.trim()
     if ((!q && !imageFile) || isLoading || !courseId) return
-    sendMessage(q || '请分析这张图片', imageFile, scopeSetId, contextMode)
+    sendMessage(q || '请分析这张图片', imageFile, undefined, 'all')
     setInput('')
     clearImage()
-    // Reset textarea height
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-    }
+    if (textareaRef.current) textareaRef.current.style.height = 'auto'
   }
 
   function handleTextareaChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setInput(e.target.value)
     const ta = e.target
     ta.style.height = 'auto'
-    ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'
+    ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'
   }
 
-  const revisionCount = artifacts.filter(a => a.status === 'approved' && a.doc_type === 'revision').length
+  // ── Typography scale: larger on desktop ──────────────────────────────────────
+  const fs = isMobile
+    ? { base: '13px', sm: '12px', xs: '11px', title: '14px' }
+    : { base: '15px', sm: '13px', xs: '12px', title: '15px' }
 
-  // Detect mobile (≤768px) — evaluated each render, SSR-safe
-  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768
-
-  // ── Render: FAB (closed or minimized) ───────────────────────────────────────
+  // ── FAB (closed or minimized) ────────────────────────────────────────────────
   if (!isOpen || isMinimized) {
     if (pos.x === -1) return null
     return (
@@ -300,10 +297,8 @@ export default function FloatingAskWindow() {
         title="AI 问答（可拖动，点击打开）"
         className="fixed z-50 flex items-center justify-center rounded-full shadow-2xl select-none"
         style={{
-          left: pos.x,
-          top: pos.y,
-          width: 52,
-          height: 52,
+          left: pos.x, top: pos.y,
+          width: 52, height: 52,
           background: isLoading ? 'rgba(255,215,0,0.18)' : 'rgba(20,22,30,0.92)',
           border: `1px solid ${isLoading ? 'rgba(255,215,0,0.6)' : 'rgba(255,215,0,0.35)'}`,
           color: '#FFD700',
@@ -317,7 +312,6 @@ export default function FloatingAskWindow() {
           ? <Loader2 size={22} className="animate-spin" />
           : <MessageCircleMore size={22} />
         }
-        {/* Stop button when loading */}
         {isLoading && (
           <button
             onMouseDown={e => e.stopPropagation()}
@@ -342,7 +336,7 @@ export default function FloatingAskWindow() {
     )
   }
 
-  // ── Shared: inner content (title + messages + input) ────────────────────────
+  // ── Inner content (shared between mobile/desktop) ────────────────────────────
   const innerContent = (
     <>
       {/* Title bar */}
@@ -351,402 +345,329 @@ export default function FloatingAskWindow() {
         style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}
         onMouseDown={isMobile ? undefined : handleTitleMouseDown}
       >
-          <div
-            className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
-            style={{ background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.2)' }}
-          >
-            <Sparkles size={12} style={{ color: '#FFD700' }} />
-          </div>
-          <span className="text-sm font-semibold flex-1" style={{ color: '#E5E5E5' }}>
-            AI 问答
-          </span>
-          {isLoading && (
-            <button
-              onClick={stopGeneration}
-              title="停止生成"
-              className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors"
-              style={{ background: 'rgba(239,68,68,0.15)', color: '#F87171', border: '1px solid rgba(239,68,68,0.3)' }}
-            >
-              <Square size={10} /> 停止
-            </button>
-          )}
-          {messages.length > 0 && !isLoading && (
-            <button
-              onClick={clearMessages}
-              title="清空对话"
-              className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
-              style={{ color: '#444' }}
-            >
-              <Trash2 size={13} />
-            </button>
-          )}
-          <button
-            onClick={minimizeWindow}
-            title="最小化"
-            className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
-            style={{ color: '#444' }}
-          >
-            <Minus size={13} />
-          </button>
-          <button
-            onClick={closeWindow}
-            title="收起（生成不中断）"
-            className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
-            style={{ color: '#444' }}
-          >
-            <X size={13} />
-          </button>
+        <div
+          className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+          style={{ background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.2)' }}
+        >
+          <Sparkles size={12} style={{ color: '#FFD700' }} />
         </div>
+        <span className="font-semibold flex-1" style={{ color: '#E5E5E5', fontSize: fs.title }}>
+          AI 问答
+        </span>
+        {isLoading && (
+          <button
+            onClick={stopGeneration}
+            title="停止生成"
+            className="flex items-center gap-1 px-2 py-1 rounded-lg font-medium transition-colors"
+            style={{ fontSize: fs.xs, background: 'rgba(239,68,68,0.15)', color: '#F87171', border: '1px solid rgba(239,68,68,0.3)' }}
+          >
+            <Square size={10} /> 停止
+          </button>
+        )}
+        {messages.length > 0 && !isLoading && (
+          <button
+            onClick={clearMessages}
+            title="清空对话"
+            className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+            style={{ color: '#444' }}
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
+        <button
+          onClick={minimizeWindow}
+          title="最小化"
+          className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+          style={{ color: '#444' }}
+        >
+          <Minus size={14} />
+        </button>
+        <button
+          onClick={closeWindow}
+          title="收起（生成不中断）"
+          className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+          style={{ color: '#444' }}
+        >
+          <X size={14} />
+        </button>
+      </div>
 
-        {/* ── Message list ── */}
-        <div className="flex-1 overflow-y-auto min-h-0 px-4 py-4 space-y-4">
-          {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full gap-3 pb-8">
-              <div
-                className="w-11 h-11 rounded-full flex items-center justify-center"
-                style={{ background: 'rgba(255,215,0,0.08)', border: '1px solid rgba(255,215,0,0.15)' }}
-              >
-                <MessageCircleMore size={20} style={{ color: '#FFD700', opacity: 0.6 }} />
-              </div>
-              <p className="text-sm text-center" style={{ color: '#444' }}>
-                {courseId ? '有什么不懂的？直接问 AI' : '请先进入课程页面'}
-              </p>
-              {courseId && (
-                <p className="text-xs px-3 py-1 rounded-lg" style={{ color: '#333', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                  支持 Ctrl+V 粘贴截图 · 截图后直接发
-                </p>
-              )}
+      {/* Message list */}
+      <div className="flex-1 overflow-y-auto min-h-0 px-4 py-4 space-y-5">
+        {messages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full gap-3 pb-8">
+            <div
+              className="w-12 h-12 rounded-full flex items-center justify-center"
+              style={{ background: 'rgba(255,215,0,0.08)', border: '1px solid rgba(255,215,0,0.15)' }}
+            >
+              <MessageCircleMore size={22} style={{ color: '#FFD700', opacity: 0.6 }} />
             </div>
-          )}
+            <p style={{ color: '#444', fontSize: fs.base, textAlign: 'center' }}>
+              {courseId ? '有什么不懂的？直接问 AI' : '请先进入课程页面'}
+            </p>
+            {courseId && (
+              <p className="px-3 py-1.5 rounded-lg" style={{ color: '#333', fontSize: fs.sm, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                支持 Ctrl+V 粘贴截图 · 截图后直接发
+              </p>
+            )}
+          </div>
+        )}
 
-          {messages.map(m => (
-            <div key={m.id}>
-              {m.role === 'user' ? (
-                /* ── User bubble ── */
-                <div className="flex flex-col items-end gap-1.5">
-                  {m.imagePreview && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={m.imagePreview}
-                      alt="截图"
-                      className="max-w-[220px] max-h-[160px] rounded-xl object-cover cursor-zoom-in"
-                      style={{ border: '1px solid rgba(255,255,255,0.1)' }}
-                      onClick={() => setLightboxSrc(m.imagePreview!)}
-                    />
-                  )}
-                  {m.content && (
+        {messages.map(m => (
+          <div key={m.id}>
+            {m.role === 'user' ? (
+              /* User bubble */
+              <div className="flex flex-col items-end gap-1.5">
+                {m.imagePreview && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={m.imagePreview}
+                    alt="截图"
+                    className="max-w-[240px] max-h-[180px] rounded-xl object-cover cursor-zoom-in"
+                    style={{ border: '1px solid rgba(255,255,255,0.1)' }}
+                    onClick={() => setLightboxSrc(m.imagePreview!)}
+                  />
+                )}
+                {m.content && (
+                  <div
+                    className="px-3.5 py-2.5 rounded-2xl max-w-[88%] whitespace-pre-wrap"
+                    style={{
+                      fontSize: fs.base,
+                      background: 'rgba(255,255,255,0.08)',
+                      color: '#E5E5E5',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      lineHeight: '1.65',
+                    }}
+                  >
+                    {m.content}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Assistant bubble */
+              <div className="flex gap-3">
+                <div
+                  className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center mt-0.5"
+                  style={{ background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.2)' }}
+                >
+                  <Sparkles size={12} style={{ color: '#FFD700' }} />
+                </div>
+
+                <div className="flex-1 min-w-0 space-y-2">
+                  {m.pending ? (
+                    <div className="flex items-center gap-2 py-1" style={{ color: '#555' }}>
+                      <Loader2 size={14} className="animate-spin flex-shrink-0" />
+                      <span style={{ fontSize: fs.base }}>正在分析图片，可最小化去做题…</span>
+                    </div>
+                  ) : m.streaming && !m.content ? (
+                    <div className="flex items-center gap-2 py-1" style={{ color: '#555' }}>
+                      <Loader2 size={14} className="animate-spin flex-shrink-0" />
+                      <span style={{ fontSize: fs.base }}>
+                        {m.streamStatus === 'generating' ? '生成回答…' : '思考中…'}
+                      </span>
+                    </div>
+                  ) : m.failed && !m.content ? (
+                    <p style={{ fontSize: fs.base, color: '#f87171' }}>请求失败，请重试</p>
+                  ) : (
                     <div
-                      className="px-3 py-2.5 rounded-2xl text-sm max-w-[85%] whitespace-pre-wrap"
+                      className="prose prose-invert max-w-none"
                       style={{
-                        background: 'rgba(255,255,255,0.08)',
-                        color: '#E5E5E5',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        lineHeight: '1.6',
+                        color: '#D1D5DB',
+                        lineHeight: '1.8',
+                        fontSize: fs.base,
                       }}
                     >
-                      {m.content}
+                      <ReactMarkdown
+                        rehypePlugins={[rehypeHighlight]}
+                        components={{
+                          // Override prose default sizes to match our fs scale
+                          p: ({ children }) => (
+                            <p style={{ fontSize: fs.base, marginTop: '0.6em', marginBottom: '0.6em' }}>{children}</p>
+                          ),
+                          li: ({ children }) => (
+                            <li style={{ fontSize: fs.base }}>{children}</li>
+                          ),
+                          img: ({ src, alt }) => {
+                            const s = typeof src === 'string' ? src : ''
+                            return (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={s} alt={alt ?? 'AI 图'}
+                                style={{ maxWidth: '100%', borderRadius: '0.5rem', cursor: s ? 'zoom-in' : undefined, marginTop: '0.5rem' }}
+                                onClick={() => s && setLightboxSrc(s)}
+                              />
+                            )
+                          },
+                        }}
+                      >
+                        {m.content}
+                      </ReactMarkdown>
+                      {m.streaming && (
+                        <span
+                          className="inline-block w-0.5 h-4 ml-0.5 align-middle animate-pulse"
+                          style={{ background: '#FFD700', borderRadius: '1px' }}
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  {/* Action row */}
+                  {!m.streaming && !m.pending && (
+                    <div className="flex items-center gap-1 pt-0.5">
+                      {m.content && (
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(m.content).catch(() => {})
+                            setCopiedId(m.id)
+                            setTimeout(() => setCopiedId(null), 2000)
+                          }}
+                          title="复制"
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-md transition-colors hover:bg-white/10"
+                          style={{ fontSize: fs.xs, color: copiedId === m.id ? '#4ade80' : '#444' }}
+                        >
+                          {copiedId === m.id ? <Check size={11} /> : <Copy size={11} />}
+                          {copiedId === m.id ? '已复制' : '复制'}
+                        </button>
+                      )}
+                      {m.failed && (
+                        <button
+                          onClick={() => {
+                            const idx = messages.findIndex(x => x.id === m.id)
+                            const userMsg = idx > 0 ? messages.slice(0, idx).reverse().find(x => x.role === 'user') : null
+                            if (userMsg) sendMessage(userMsg.content, null, undefined, 'all')
+                          }}
+                          title="重试"
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-md transition-colors hover:bg-white/10"
+                          style={{ fontSize: fs.xs, color: '#f87171' }}
+                        >
+                          <RefreshCw size={11} />重试
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
-              ) : (
-                /* ── Assistant bubble ── */
-                <div className="flex gap-2.5">
-                  <div
-                    className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mt-0.5"
-                    style={{ background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.2)' }}
-                  >
-                    <Sparkles size={11} style={{ color: '#FFD700' }} />
-                  </div>
-
-                  <div className="flex-1 min-w-0 space-y-2">
-                    {m.pending ? (
-                      <div className="flex items-center gap-2 py-1" style={{ color: '#555' }}>
-                        <Loader2 size={13} className="animate-spin flex-shrink-0" />
-                        <span className="text-sm">正在分析图片，可最小化去做题…</span>
-                      </div>
-                    ) : m.streaming && !m.content ? (
-                      <div className="flex items-center gap-2 py-1" style={{ color: '#555' }}>
-                        <Loader2 size={13} className="animate-spin flex-shrink-0" />
-                        <span className="text-sm">
-                          {m.streamStatus === 'filtering'  ? '搜索相关资料…'      :
-                           m.streamStatus === 'generating' ? '生成回答…'          :
-                           m.streamStatus === 'slow'       ? '深度思考中，稍等…'  :
-                           '思考中…'}
-                        </span>
-                      </div>
-                    ) : m.failed && !m.content ? (
-                      <p className="text-sm" style={{ color: '#f87171' }}>请求失败，请重试</p>
-                    ) : (
-                      <div
-                        className="prose prose-invert prose-sm max-w-none"
-                        style={{ color: '#D1D5DB', lineHeight: '1.75' }}
-                      >
-                        <ReactMarkdown
-                          rehypePlugins={[rehypeHighlight]}
-                          components={{
-                            img: ({ src, alt }) => {
-                              const s = typeof src === 'string' ? src : ''
-                              return (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={s} alt={alt ?? 'AI 图'}
-                                  style={{
-                                    maxWidth: '100%', borderRadius: '0.5rem',
-                                    cursor: s ? 'zoom-in' : undefined,
-                                    marginTop: '0.5rem',
-                                  }}
-                                  onClick={() => s && setLightboxSrc(s)}
-                                />
-                              )
-                            },
-                          }}
-                        >
-                          {m.content}
-                        </ReactMarkdown>
-                        {m.streaming && (
-                          <span
-                            className="inline-block w-0.5 h-3.5 ml-0.5 align-middle animate-pulse"
-                            style={{ background: '#FFD700', borderRadius: '1px' }}
-                          />
-                        )}
-                      </div>
-                    )}
-
-                    {/* Sources */}
-                    {m.sources && m.sources.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {m.sources.map(s =>
-                          s.storage_url ? (
-                            <a
-                              key={s.artifact_id}
-                              href={s.storage_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-md transition-opacity hover:opacity-100"
-                              style={{
-                                background: 'rgba(255,215,0,0.06)',
-                                color: '#FFD700', opacity: 0.65,
-                                border: '1px solid rgba(255,215,0,0.12)',
-                              }}
-                            >
-                              <ExternalLink size={8} />{s.file_name}
-                            </a>
-                          ) : null
-                        )}
-                      </div>
-                    )}
-
-                    {/* Action row: copy + retry */}
-                    {!m.streaming && !m.pending && (
-                      <div className="flex items-center gap-1 pt-0.5">
-                        {m.content && (
-                          <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(m.content).catch(() => {})
-                              setCopiedId(m.id)
-                              setTimeout(() => setCopiedId(null), 2000)
-                            }}
-                            title="复制"
-                            className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-md transition-colors hover:bg-white/10"
-                            style={{ color: copiedId === m.id ? '#4ade80' : '#444' }}
-                          >
-                            {copiedId === m.id ? <Check size={11} /> : <Copy size={11} />}
-                            {copiedId === m.id ? '已复制' : '复制'}
-                          </button>
-                        )}
-                        {m.failed && (
-                          <button
-                            onClick={() => {
-                              // Find the preceding user message and resend
-                              const msgs = messages
-                              const idx = msgs.findIndex(x => x.id === m.id)
-                              const userMsg = idx > 0 ? msgs.slice(0, idx).reverse().find(x => x.role === 'user') : null
-                              if (userMsg) sendMessage(userMsg.content, null, scopeSetId, contextMode)
-                            }}
-                            title="重试"
-                            className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-md transition-colors hover:bg-white/10"
-                            style={{ color: '#f87171' }}
-                          >
-                            <RefreshCw size={11} />重试
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-
-          <div ref={bottomRef} />
-        </div>
-
-        {/* ── Input area ── */}
-        <div
-          className="flex-shrink-0 px-3 pb-3 space-y-2"
-          style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 10 }}
-        >
-          {/* Scope + context mode row */}
-          {scopeSets.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <select
-                className="text-xs py-0.5 px-2 rounded-lg outline-none cursor-pointer"
-                style={{
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  color: '#777',
-                }}
-                value={scopeSetId ?? ''}
-                onChange={e => setScopeSetId(Number(e.target.value) || undefined)}
-              >
-                {scopeSets.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}{s.is_default ? ' (全部)' : ''}</option>
-                ))}
-              </select>
-
-              {(['all', 'revision'] as const).map(mode => {
-                const disabled = mode === 'revision' && revisionCount === 0
-                const active = contextMode === mode
-                return (
-                  <button
-                    key={mode}
-                    disabled={disabled}
-                    onClick={() => setContextMode(mode)}
-                    className="text-xs px-2 py-0.5 rounded-full transition-all"
-                    style={{
-                      background: active
-                        ? (mode === 'revision' ? 'rgba(99,102,241,0.18)' : 'rgba(255,215,0,0.12)')
-                        : 'transparent',
-                      border: `1px solid ${active
-                        ? (mode === 'revision' ? 'rgba(99,102,241,0.35)' : 'rgba(255,215,0,0.28)')
-                        : 'rgba(255,255,255,0.07)'}`,
-                      color: active ? (mode === 'revision' ? '#a5b4fc' : '#FFD700') : '#555',
-                      opacity: disabled ? 0.3 : 1,
-                      cursor: disabled ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {mode === 'all' ? '全库' : (
-                      <span className="flex items-center gap-1">
-                        <BookOpen size={9} />仅复习
-                      </span>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-
-          {/* Image preview strip */}
-          {imagePreview && (
-            <div
-              className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl"
-              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={imagePreview} alt=""
-                className="h-8 w-8 rounded-lg object-cover flex-shrink-0 cursor-zoom-in"
-                onClick={() => setLightboxSrc(imagePreview)}
-              />
-              <span className="text-xs flex-1 truncate" style={{ color: '#666' }}>
-                {imageFile?.name ?? '截图'}
-              </span>
-              <button
-                onClick={clearImage}
-                className="p-0.5 rounded hover:bg-white/10 flex-shrink-0"
-                style={{ color: '#555' }}
-              >
-                <X size={12} />
-              </button>
-            </div>
-          )}
-
-          {/* Textarea + action buttons */}
-          <div
-            className="relative rounded-xl"
-            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
-          >
-            <input
-              ref={imageInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleImageSelect}
-            />
-
-            <textarea
-              ref={textareaRef}
-              rows={1}
-              disabled={!courseId}
-              className="w-full bg-transparent text-sm resize-none outline-none"
-              style={{
-                color: '#E5E5E5',
-                padding: '10px 44px 10px 40px',
-                lineHeight: '1.55',
-                maxHeight: 140,
-                overflowY: 'auto',
-              }}
-              placeholder={
-                !courseId ? '请先进入课程页面'
-                : isLoading ? '生成中，可最小化继续做题…'
-                : '提问，或 Ctrl+V 粘贴截图'
-              }
-              value={input}
-              onChange={handleTextareaChange}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
-              }}
-            />
-
-            {/* Upload image button */}
-            <button
-              onClick={() => imageInputRef.current?.click()}
-              disabled={isLoading || !courseId}
-              title="上传图片"
-              className="absolute left-2 bottom-2 p-1.5 rounded-lg hover:bg-white/10 transition-colors"
-              style={{ color: imagePreview ? '#FFD700' : '#555' }}
-            >
-              <ImagePlus size={14} />
-            </button>
-
-            {/* Send / Stop */}
-            {isLoading ? (
-              <button
-                onClick={stopGeneration}
-                title="停止生成"
-                className="absolute right-2 bottom-2 p-1.5 rounded-lg transition-colors"
-                style={{ background: 'rgba(239,68,68,0.15)', color: '#F87171', border: '1px solid rgba(239,68,68,0.25)' }}
-              >
-                <Square size={13} />
-              </button>
-            ) : (
-              <button
-                onClick={handleSend}
-                disabled={(!input.trim() && !imageFile) || !courseId}
-                title="发送"
-                className="absolute right-2 bottom-2 p-1.5 rounded-lg transition-all"
-                style={{
-                  background: (input.trim() || imageFile) && courseId ? 'rgba(255,215,0,0.9)' : 'rgba(255,255,255,0.06)',
-                  color: (input.trim() || imageFile) && courseId ? '#000' : '#444',
-                }}
-              >
-                <Send size={13} />
-              </button>
+              </div>
             )}
           </div>
+        ))}
+
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input area */}
+      <div
+        className="flex-shrink-0 px-3 pb-3 space-y-2"
+        style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 10 }}
+      >
+        {/* Image preview strip */}
+        {imagePreview && (
+          <div
+            className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl"
+            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={imagePreview} alt=""
+              className="h-9 w-9 rounded-lg object-cover flex-shrink-0 cursor-zoom-in"
+              onClick={() => setLightboxSrc(imagePreview)}
+            />
+            <span className="flex-1 truncate" style={{ fontSize: fs.sm, color: '#666' }}>
+              {imageFile?.name ?? '截图'}
+            </span>
+            <button
+              onClick={clearImage}
+              className="p-0.5 rounded hover:bg-white/10 flex-shrink-0"
+              style={{ color: '#555' }}
+            >
+              <X size={13} />
+            </button>
+          </div>
+        )}
+
+        {/* Textarea + buttons */}
+        <div
+          className="relative rounded-xl"
+          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+        >
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleImageSelect}
+          />
+
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            disabled={!courseId}
+            className="w-full bg-transparent resize-none outline-none"
+            style={{
+              fontSize: fs.base,
+              color: '#E5E5E5',
+              padding: '11px 48px 11px 44px',
+              lineHeight: '1.6',
+              maxHeight: 160,
+              overflowY: 'auto',
+            }}
+            placeholder={
+              !courseId   ? '请先进入课程页面'
+              : isLoading ? '生成中，可最小化继续做题…'
+              : '提问，或 Ctrl+V 粘贴截图'
+            }
+            value={input}
+            onChange={handleTextareaChange}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
+            }}
+          />
+
+          <button
+            onClick={() => imageInputRef.current?.click()}
+            disabled={isLoading || !courseId}
+            title="上传图片"
+            className="absolute left-2.5 bottom-2.5 p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+            style={{ color: imagePreview ? '#FFD700' : '#555' }}
+          >
+            <ImagePlus size={15} />
+          </button>
+
+          {isLoading ? (
+            <button
+              onClick={stopGeneration}
+              title="停止生成"
+              className="absolute right-2.5 bottom-2.5 p-1.5 rounded-lg transition-colors"
+              style={{ background: 'rgba(239,68,68,0.15)', color: '#F87171', border: '1px solid rgba(239,68,68,0.25)' }}
+            >
+              <Square size={14} />
+            </button>
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={(!input.trim() && !imageFile) || !courseId}
+              title="发送"
+              className="absolute right-2.5 bottom-2.5 p-1.5 rounded-lg transition-all"
+              style={{
+                background: (input.trim() || imageFile) && courseId ? 'rgba(255,215,0,0.9)' : 'rgba(255,255,255,0.06)',
+                color: (input.trim() || imageFile) && courseId ? '#000' : '#444',
+              }}
+            >
+              <Send size={14} />
+            </button>
+          )}
         </div>
+      </div>
     </>
   )
 
-  // ── Render: full window ─────────────────────────────────────────────────────
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <>
       {lightboxSrc && <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
 
       {isMobile ? (
-        /* ── Mobile: bottom sheet ── */
+        /* Mobile: bottom sheet */
         <>
-          {/* Backdrop */}
           <div
             className="fixed inset-0 z-40"
             style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)' }}
@@ -762,11 +683,9 @@ export default function FloatingAskWindow() {
               border: '1px solid rgba(255,255,255,0.1)',
               borderBottom: 'none',
               boxShadow: '0 -16px 48px rgba(0,0,0,0.5)',
-              // iOS safe area
               paddingBottom: 'env(safe-area-inset-bottom, 0px)',
             }}
           >
-            {/* Drag handle pill */}
             <div className="flex justify-center pt-2.5 pb-1 flex-shrink-0">
               <div className="w-10 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.15)' }} />
             </div>
@@ -774,17 +693,17 @@ export default function FloatingAskWindow() {
           </div>
         </>
       ) : (
-        /* ── Desktop: draggable + resizable floating window ── */
+        /* Desktop: draggable + resizable floating window */
         <div
           className="fixed z-50 flex flex-col rounded-2xl"
           style={{
-            left: pos.x < 0 ? 'auto' : pos.x,
-            right: pos.x < 0 ? 20 : undefined,
-            top: pos.y < 0 ? 'auto' : pos.y,
+            left:   pos.x < 0 ? 'auto' : pos.x,
+            right:  pos.x < 0 ? 20 : undefined,
+            top:    pos.y < 0 ? 'auto' : pos.y,
             bottom: pos.y < 0 ? 20 : undefined,
-            width: size.w,
+            width:  size.w,
             height: size.h,
-            minWidth: MIN_W,
+            minWidth:  MIN_W,
             minHeight: MIN_H,
             background: 'rgba(7,8,15,0.97)',
             border: '1px solid rgba(255,255,255,0.1)',
@@ -798,17 +717,14 @@ export default function FloatingAskWindow() {
           {innerContent}
 
           {/* Resize handles */}
-          {/* Right edge */}
           <div
             onMouseDown={e => handleResizeMouseDown(e, 'e')}
             style={{ position: 'absolute', top: 0, right: 0, width: 5, height: '100%', cursor: 'ew-resize', zIndex: 10 }}
           />
-          {/* Bottom edge */}
           <div
             onMouseDown={e => handleResizeMouseDown(e, 's')}
             style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: 5, cursor: 'ns-resize', zIndex: 10 }}
           />
-          {/* Bottom-right corner */}
           <div
             onMouseDown={e => handleResizeMouseDown(e, 'se')}
             style={{

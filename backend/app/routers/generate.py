@@ -335,21 +335,6 @@ def ask_question_stream(
     _deny_guest(current_user)
     get_course(supabase, course_id)
 
-    uid = current_user["id"]
-    art_ids: list[int] | None = None
-    if body.scope_set_id:
-        scope = get_scope_set(supabase, uid, body.scope_set_id)
-        ids = scope.get("artifact_ids") or []
-        art_ids = filter_accessible_artifact_ids(supabase, uid, ids) if ids else None
-    elif body.context_mode == "revision":
-        revision_ids = get_artifact_ids_by_doc_type(supabase, course_id, ["revision"])
-        if not revision_ids:
-            logger.info("stream context_mode=revision but no revision files found for course %s, falling back to all content", course_id)
-        art_ids = filter_accessible_artifact_ids(supabase, uid, revision_ids) if revision_ids else None
-    else:
-        accessible = get_all_accessible_artifact_ids(supabase, uid, course_id)
-        art_ids = accessible if accessible else None
-
     from app.services.llm_key_service import get_api_key
     gemini_key: Optional[str] = get_api_key("gemini", supabase)
 
@@ -357,11 +342,17 @@ def ask_question_stream(
     from app.services.credit_service import spend, earn, COSTS
     from app.core.exceptions import InsufficientCreditsError
 
+    if not gemini_key:
+        return StreamingResponse(
+            iter([f"data: {json.dumps({'type': 'error', 'message': 'Gemini API key not configured'})}\n\n"]),
+            media_type="text/event-stream",
+        )
+
     def _sse(data: dict) -> str:
         return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
     def event_stream():
-        cost = COSTS.get("gen_ask", 3)
+        cost = COSTS.get("gen_ask", 20)
         try:
             spend(supabase, current_user["id"], cost, "gen_ask")
         except InsufficientCreditsError as e:
@@ -377,8 +368,6 @@ def ask_question_stream(
         full_answer = ""
 
         try:
-            if not gemini_key:
-                raise RuntimeError("Gemini API key not configured")
 
             for token in gemini_generate_answer_stream(body.question, "", gemini_key, history=history):
                 full_answer += token

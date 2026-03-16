@@ -114,6 +114,10 @@ export function FloatingAskProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading]       = useState(false)
   const [prefillText, setPrefillText]   = useState('')
   const abortRef                        = useRef<AbortController | null>(null)
+  const messagesRef                     = useRef<FloatingMessage[]>([])
+
+  // Keep messagesRef in sync so sendMessage always reads latest messages without re-creating
+  useEffect(() => { messagesRef.current = messages }, [messages])
 
   // Persist messages to localStorage whenever they change (skip in-flight messages)
   useEffect(() => {
@@ -176,8 +180,8 @@ export function FloatingAskProvider({ children }: { children: ReactNode }) {
 
     const asstMsgId = nextId()
 
-    // Build conversation history (exclude in-flight / failed messages, keep last 5 turns = 10 msgs)
-    const historySnapshot = messages
+    // Build conversation history from ref (always latest, no stale closure)
+    const historySnapshot = messagesRef.current
       .filter(m => !m.streaming && !m.pending && !m.failed && m.content)
       .slice(-10)
       .map(m => ({ role: m.role, content: m.content }))

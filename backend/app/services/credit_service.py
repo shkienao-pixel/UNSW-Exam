@@ -23,8 +23,8 @@ COSTS: dict[str, int] = {
     "gen_summary":     1,
     "gen_outline":     5,
     "gen_plan":        5,
-    # 深度追问按 10 次 30 积分折算：单次约 3 积分
-    "gen_ask":         3,
+    # Gemini 3.1 Pro 直接生成，单次 20 积分
+    "gen_ask":         20,
     # 单文件深度解析（解锁 + 考点提取）
     "unlock_upload":   50,
     "enroll_course":   100,
