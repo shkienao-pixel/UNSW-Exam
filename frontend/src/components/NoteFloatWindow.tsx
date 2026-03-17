@@ -10,10 +10,12 @@ import type { UserNote } from '@/lib/types'
 
 const DEFAULT_W = 440
 const DEFAULT_H = 460
-const MIN_W = 360
-const MIN_H = 380
+const MIN_W = 320
+const MIN_H = 360
 const POS_KEY = 'note_float_pos'
 const SIZE_KEY = 'note_float_size'
+
+type ResizeDir = 'e' | 's' | 'se'
 
 function loadPos(): { x: number; y: number } | null {
   if (typeof window === 'undefined') return null
@@ -163,7 +165,11 @@ export default function NoteFloatWindow() {
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const pasteZoneRef = useRef<HTMLDivElement>(null)
+
+  // Drag / resize refs
+  const dragRef = useRef<{ startX: number; startY: number; winX: number; winY: number } | null>(null)
+  const isResizing = useRef<ResizeDir | null>(null)
+  const resizeStart = useRef({ mouseX: 0, mouseY: 0, w: 0, h: 0 })
 
   // Load recent notes when opened
   useEffect(() => {
@@ -188,6 +194,56 @@ export default function NoteFloatWindow() {
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)
   }, [isOpen])
+
+  // Global mouse move/up for drag + resize
+  useEffect(() => {
+    if (!isOpen) return
+
+    function onMouseMove(e: MouseEvent) {
+      // Resize
+      if (isResizing.current) {
+        const dir = isResizing.current
+        const dx = e.clientX - resizeStart.current.mouseX
+        const dy = e.clientY - resizeStart.current.mouseY
+        setSize(prev => {
+          const nw = dir === 's' ? prev.w : Math.max(MIN_W, Math.min(window.innerWidth - pos.x - 4, resizeStart.current.w + dx))
+          const nh = dir === 'e' ? prev.h : Math.max(MIN_H, Math.min(window.innerHeight - pos.y - 4, resizeStart.current.h + dy))
+          return { w: nw, h: nh }
+        })
+        return
+      }
+      // Drag
+      if (!dragRef.current) return
+      const nx = Math.max(0, Math.min(window.innerWidth - size.w, dragRef.current.winX + e.clientX - dragRef.current.startX))
+      const ny = Math.max(0, Math.min(window.innerHeight - 60, dragRef.current.winY + e.clientY - dragRef.current.startY))
+      setPos({ x: nx, y: ny })
+    }
+
+    function onMouseUp() {
+      if (isResizing.current) {
+        isResizing.current = null
+        setSize(s => {
+          localStorage.setItem(SIZE_KEY, JSON.stringify(s))
+          return s
+        })
+        return
+      }
+      if (dragRef.current) {
+        dragRef.current = null
+        setPos(p => {
+          localStorage.setItem(POS_KEY, JSON.stringify(p))
+          return p
+        })
+      }
+    }
+
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [isOpen, pos.x, pos.y, size.w])
 
   function setImageFromFile(file: File) {
     setImageFile(file)
@@ -230,27 +286,15 @@ export default function NoteFloatWindow() {
     setCaption('')
   }
 
-  // Drag window (desktop)
-  const dragRef = useRef<{ startX: number; startY: number; winX: number; winY: number } | null>(null)
-
   function onHeaderMouseDown(e: React.MouseEvent) {
     dragRef.current = { startX: e.clientX, startY: e.clientY, winX: pos.x, winY: pos.y }
-    window.addEventListener('mousemove', onDragMove)
-    window.addEventListener('mouseup', onDragUp)
   }
 
-  function onDragMove(e: MouseEvent) {
-    if (!dragRef.current) return
-    const nx = Math.max(0, Math.min(window.innerWidth - size.w, dragRef.current.winX + e.clientX - dragRef.current.startX))
-    const ny = Math.max(0, Math.min(window.innerHeight - 60, dragRef.current.winY + e.clientY - dragRef.current.startY))
-    setPos({ x: nx, y: ny })
-  }
-
-  function onDragUp() {
-    window.removeEventListener('mousemove', onDragMove)
-    window.removeEventListener('mouseup', onDragUp)
-    localStorage.setItem(POS_KEY, JSON.stringify(pos))
-    dragRef.current = null
+  function onResizeMouseDown(dir: ResizeDir, e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    isResizing.current = dir
+    resizeStart.current = { mouseX: e.clientX, mouseY: e.clientY, w: size.w, h: size.h }
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -356,7 +400,6 @@ export default function NoteFloatWindow() {
             </div>
           ) : (
             <div
-              ref={pasteZoneRef}
               className="flex flex-col items-center justify-center gap-3 rounded-xl cursor-pointer"
               style={{
                 height: 140,
@@ -444,6 +487,37 @@ export default function NoteFloatWindow() {
             </div>
           )}
         </div>
+
+        {/* ── Resize handles (desktop only) ── */}
+        {!isMobile && (
+          <>
+            {/* Right edge */}
+            <div
+              onMouseDown={e => onResizeMouseDown('e', e)}
+              style={{
+                position: 'absolute', top: 0, right: 0, width: 6, height: '100%',
+                cursor: 'ew-resize', zIndex: 10,
+              }}
+            />
+            {/* Bottom edge */}
+            <div
+              onMouseDown={e => onResizeMouseDown('s', e)}
+              style={{
+                position: 'absolute', bottom: 0, left: 0, width: '100%', height: 6,
+                cursor: 's-resize', zIndex: 10,
+              }}
+            />
+            {/* Bottom-right corner */}
+            <div
+              onMouseDown={e => onResizeMouseDown('se', e)}
+              style={{
+                position: 'absolute', bottom: 0, right: 0, width: 14, height: 14,
+                cursor: 'se-resize', zIndex: 11,
+                borderRadius: '0 0 16px 0',
+              }}
+            />
+          </>
+        )}
       </div>
     </>
   )

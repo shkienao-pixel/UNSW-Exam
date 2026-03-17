@@ -35,6 +35,11 @@ def upload_note(
     course_id: Optional[str] = None,
 ) -> dict:
     """Upload image to Storage, save metadata to user_notes, return the note row."""
+    # supabase-py v2 replaces the shared client's auth header when auth.sign_up()
+    # or auth.verify_otp() is called. Restore service-role key before Storage ops.
+    from app.core.supabase_client import restore_service_role_auth
+    restore_service_role_auth()
+
     _ensure_bucket(supabase)
 
     ext = "jpg" if "jpeg" in content_type or "jpg" in content_type else "png"
