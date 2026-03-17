@@ -3,7 +3,7 @@ import type {
   GenerateBody, AskResponse, ExplainImageResponse,
   ReviewSettings, ReviewNodeProgress, ReviewNodeUpdate, TodayPlanResult,
   DocType, Feedback, FeedbackStatus, CourseContentStatus,
-  ExamQuestion, PastExamFile, MockSession, GradeResult, ExamQuestionsResponse,
+  ExamQuestion, PastExamFile, MockSession, GradeResult, ExamQuestionsResponse, StoredMistake,
 } from './types'
 
 export type StreamEvent =
@@ -471,6 +471,18 @@ export const api = {
 
     listAllFavorites: () =>
       req<ExamQuestion[]>('/exam/favorites'),
+
+    listMistakes: (courseId: string) =>
+      req<StoredMistake[]>(`/courses/${courseId}/exam/mistakes`),
+
+    listAllMistakes: () =>
+      req<StoredMistake[]>('/exam/mistakes'),
+
+    masterMistake: (questionId: number) =>
+      req<{ ok: boolean }>(`/exam/mistakes/${questionId}/master`, { method: 'PATCH' }),
+
+    deleteMistake: (questionId: number) =>
+      req<{ ok: boolean }>(`/exam/mistakes/${questionId}`, { method: 'DELETE' }),
   },
 
   courseContent: {

@@ -247,3 +247,48 @@ def list_all_favorites(
 ) -> list[dict[str, Any]]:
     """List all favorited questions across all courses (for the Mistakes page)."""
     return exam_service.list_favorites(supabase, current_user["id"])
+
+
+# ── Mistakes (per course) ──────────────────────────────────────────────────────
+
+@router.get("/exam/mistakes")
+def list_course_mistakes(
+    course_id: str,
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """List user's mistakes for this course."""
+    return exam_service.list_mistakes(supabase, current_user["id"], course_id)
+
+
+# ── Global mistakes (all courses) ─────────────────────────────────────────────
+
+@global_router.get("/exam/mistakes")
+def list_all_mistakes(
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """List all mistakes across all courses."""
+    return exam_service.list_mistakes(supabase, current_user["id"])
+
+
+@global_router.patch("/exam/mistakes/{question_id}/master")
+def master_mistake(
+    question_id: int,
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_db),
+) -> dict[str, Any]:
+    """Mark a mistake as mastered."""
+    exam_service.set_mistake_status(supabase, current_user["id"], question_id, "mastered")
+    return {"ok": True}
+
+
+@global_router.delete("/exam/mistakes/{question_id}")
+def delete_mistake(
+    question_id: int,
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_db),
+) -> dict[str, Any]:
+    """Remove a question from the mistakes list."""
+    exam_service.set_mistake_status(supabase, current_user["id"], question_id, None)
+    return {"ok": True}

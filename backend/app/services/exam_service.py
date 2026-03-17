@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from supabase import Client
@@ -627,22 +628,25 @@ def grade_answers(
         _grade_short_answers_batch(results, short_batch, openai_key)
 
     # Upsert all attempts
+    # 答错时设 mistake_status='active'；答对/未知时不传该字段（保留已有状态）
     for ans in answers:
         qid = ans["question_id"]
         r = next((x for x in results if x["question_id"] == qid), None)
         if not r:
             continue
         try:
+            row: dict = {
+                "user_id":     user_id,
+                "question_id": qid,
+                "course_id":   course_id,
+                "user_answer": ans.get("user_answer", ""),
+                "is_correct":  r["is_correct"],
+                "feedback":    r["feedback"],
+            }
+            if r["is_correct"] is False:
+                row["mistake_status"] = "active"
             supabase.table("exam_attempts").upsert(
-                {
-                    "user_id":     user_id,
-                    "question_id": qid,
-                    "course_id":   course_id,
-                    "user_answer": ans.get("user_answer", ""),
-                    "is_correct":  r["is_correct"],
-                    "feedback":    r["feedback"],
-                },
-                on_conflict="user_id,question_id",
+                row, on_conflict="user_id,question_id",
             ).execute()
         except Exception as exc:
             logger.warning("grade_answers upsert failed for question %s: %s", qid, exc)
@@ -879,3 +883,69 @@ def get_mock_sessions(supabase: Client, course_id: str) -> list[dict]:
         sessions[sid]["question_count"] += 1
 
     return sorted(sessions.values(), key=lambda x: x["created_at"], reverse=True)
+
+
+# ── Mistakes ───────────────────────────────────────────────────────────────────
+
+def list_mistakes(
+    supabase: Client,
+    user_id: str,
+    course_id: Optional[str] = None,
+) -> list[dict]:
+    """List user's mistakes (exam_attempts where mistake_status is not null), joined with question data."""
+    q = (
+        supabase.table("exam_attempts")
+        .select(
+            "question_id, course_id, user_answer, is_correct, feedback, "
+            "mistake_status, mastered_at, created_at, "
+            "exam_questions(id, question_text, question_type, options, correct_answer, explanation, source_type)"
+        )
+        .eq("user_id", user_id)
+        .not_.is_("mistake_status", "null")
+    )
+    if course_id:
+        q = q.eq("course_id", course_id)
+    rows = q.order("created_at", desc=True).execute().data or []
+
+    result: list[dict] = []
+    for row in rows:
+        q_data = row.get("exam_questions")
+        if not q_data:
+            continue
+        item = {
+            "question_id":    row["question_id"],
+            "course_id":      row["course_id"],
+            "user_answer":    row.get("user_answer"),
+            "is_correct":     row.get("is_correct"),
+            "feedback":       row.get("feedback"),
+            "mistake_status": row.get("mistake_status"),
+            "mastered_at":    row.get("mastered_at"),
+            "created_at":     row.get("created_at"),
+            "question_text":  q_data.get("question_text"),
+            "question_type":  q_data.get("question_type"),
+            "options":        q_data.get("options"),
+            "correct_answer": q_data.get("correct_answer"),
+            "explanation":    q_data.get("explanation"),
+            "source_type":    q_data.get("source_type"),
+        }
+        result.append(item)
+    return result
+
+
+def set_mistake_status(
+    supabase: Client,
+    user_id: str,
+    question_id: int,
+    status: Optional[str],
+) -> bool:
+    """Update mistake_status for a specific attempt. status=None removes from mistake list."""
+    update_data: dict = {"mistake_status": status}
+    if status == "mastered":
+        update_data["mastered_at"] = datetime.now(timezone.utc).isoformat()
+    try:
+        supabase.table("exam_attempts").update(update_data) \
+            .eq("user_id", user_id).eq("question_id", question_id).execute()
+        return True
+    except Exception as exc:
+        logger.warning("set_mistake_status failed for question %s: %s", question_id, exc)
+        return False

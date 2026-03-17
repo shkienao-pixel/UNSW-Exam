@@ -1,43 +1,51 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useMistakes, masterMistake, deleteMistake } from '@/lib/mistakes-store'
-import type { StoredMistake } from '@/lib/mistakes-store'
+import { useMistakes } from '@/lib/mistakes-store'
+import type { StoredMistake } from '@/lib/types'
 import {
   AlertTriangle, BookOpen, CheckCircle, Trash2,
-  ExternalLink, FileText, Play, RotateCcw, Heart, Loader2, XCircle,
+  Play, RotateCcw, Heart, Loader2,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import type { ExamQuestion } from '@/lib/types'
 
 type StatusFilter = 'active' | 'mastered' | 'all'
-type SourceFilter = 'all' | 'quiz' | 'flashcard'
+type SourceFilter = 'all' | 'past_exam' | 'mock'
 type MainTab = 'mistakes' | 'favorites'
 
 // ── Main view (used both standalone + inside course tab) ──────────────────────
 
 export default function MistakesView({ courseId }: { courseId?: string }) {
-  const { all, active, mastered, master, remove } = useMistakes()
+  const { all, active, mastered, master, remove, loading } = useMistakes(courseId)
   const [mainTab, setMainTab] = useState<MainTab>('mistakes')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
   const [practiceMode, setPracticeMode] = useState(false)
 
-  // When inside a course, scope to that course only
-  const scoped = courseId ? all.filter(m => m.courseId === courseId) : all
-  const scopedActive   = scoped.filter(m => m.status === 'active')
-  const scopedMastered = scoped.filter(m => m.status === 'mastered')
+  // One-time migration: clear old localStorage data and show notice
+  const [showMigrationNotice, setShowMigrationNotice] = useState(false)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && localStorage.getItem('exam_mistakes_v1')) {
+      localStorage.removeItem('exam_mistakes_v1')
+      setShowMigrationNotice(true)
+    }
+  }, [])
 
-  const filtered = scoped.filter(m => {
-    const matchStatus = statusFilter === 'all' || m.status === statusFilter
-    const matchSource = sourceFilter === 'all' || m.source === sourceFilter
+  const filtered = all.filter(m => {
+    const matchStatus = statusFilter === 'all' || m.mistake_status === statusFilter
+    const matchSource = sourceFilter === 'all' || m.source_type === sourceFilter
     return matchStatus && matchSource
   })
+
+  const practiceList = active.filter(
+    m => sourceFilter === 'all' || m.source_type === sourceFilter,
+  )
 
   if (practiceMode) {
     return (
       <PracticeMode
-        mistakes={scopedActive.filter(m => sourceFilter === 'all' || m.source === sourceFilter)}
+        mistakes={practiceList}
         onMaster={master}
         onExit={() => setPracticeMode(false)}
       />
@@ -46,6 +54,15 @@ export default function MistakesView({ courseId }: { courseId?: string }) {
 
   return (
     <div className="space-y-6">
+
+      {/* ── Migration notice ── */}
+      {showMigrationNotice && (
+        <div className="rounded-xl px-4 py-3 text-xs flex items-start justify-between gap-3"
+          style={{ background: 'rgba(255,215,0,0.07)', border: '1px solid rgba(255,215,0,0.2)', color: '#AAA' }}>
+          <span>📦 检测到旧版本本地错题记录，已自动清理。错题本已升级为云端同步，历史答题中的错题将在下次做题后重新收录。</span>
+          <button onClick={() => setShowMigrationNotice(false)} className="flex-shrink-0 text-white opacity-40 hover:opacity-80">✕</button>
+        </div>
+      )}
 
       {/* ── Main tab switcher ── */}
       <div className="flex gap-2">
@@ -76,10 +93,10 @@ export default function MistakesView({ courseId }: { courseId?: string }) {
             错题集
           </h2>
           <p className="text-sm mt-0.5" style={{ color: '#555' }}>
-            汇聚闪卡与模拟题的错误 · 针对薄弱环节反复练习
+            汇聚真题与模拟题的错误 · 针对薄弱环节反复练习
           </p>
         </div>
-        {scopedActive.length > 0 && (
+        {active.length > 0 && (
           <button
             onClick={() => setPracticeMode(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold flex-shrink-0"
@@ -89,7 +106,7 @@ export default function MistakesView({ courseId }: { courseId?: string }) {
               border: '1px solid rgba(255,215,0,0.35)',
             }}
           >
-            <Play size={14} /> 开始练习 ({scopedActive.length})
+            <Play size={14} /> 开始练习 ({active.length})
           </button>
         )}
       </div>
@@ -97,9 +114,9 @@ export default function MistakesView({ courseId }: { courseId?: string }) {
       {/* ── Stats ── */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: '待复习', value: scopedActive.length,   color: '#FF6666', bg: 'rgba(255,68,68,0.07)'   },
-          { label: '已掌握', value: scopedMastered.length,  color: '#22C55E', bg: 'rgba(34,197,94,0.07)'   },
-          { label: '合计',   value: scoped.length,          color: '#FFD700', bg: 'rgba(255,215,0,0.05)'   },
+          { label: '待复习', value: active.length,   color: '#FF6666', bg: 'rgba(255,68,68,0.07)'   },
+          { label: '已掌握', value: mastered.length,  color: '#22C55E', bg: 'rgba(34,197,94,0.07)'   },
+          { label: '合计',   value: all.length,       color: '#FFD700', bg: 'rgba(255,215,0,0.05)'   },
         ].map(s => (
           <div key={s.label} className="rounded-xl p-4 text-center"
             style={{ background: s.bg, border: `1px solid ${s.color}22` }}>
@@ -126,7 +143,7 @@ export default function MistakesView({ courseId }: { courseId?: string }) {
         </div>
 
         <div className="flex gap-1 p-0.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
-          {(['all', 'quiz', 'flashcard'] as SourceFilter[]).map(f => (
+          {(['all', 'past_exam', 'mock'] as SourceFilter[]).map(f => (
             <button key={f} onClick={() => setSourceFilter(f)}
               className="px-3 py-1.5 rounded-md text-xs transition-all"
               style={{
@@ -134,27 +151,31 @@ export default function MistakesView({ courseId }: { courseId?: string }) {
                 color: sourceFilter === f ? '#DDD' : '#555',
                 border: `1px solid ${sourceFilter === f ? 'rgba(255,255,255,0.18)' : 'transparent'}`,
               }}>
-              {f === 'all' ? '全部来源' : f === 'quiz' ? '🎯 模拟题' : '🃏 闪卡'}
+              {f === 'all' ? '全部来源' : f === 'past_exam' ? '📄 真题' : '🎯 模拟题'}
             </button>
           ))}
         </div>
       </div>
 
       {/* ── List ── */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="animate-spin" style={{ color: '#FFD700' }} size={24} />
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="text-center py-20 glass rounded-2xl" style={{ color: '#444' }}>
           <BookOpen size={48} className="mx-auto mb-4 opacity-20" />
           <p className="text-sm text-white mb-2">
             {statusFilter === 'active' ? '🎉 没有待复习的错题！' : '暂无记录'}
           </p>
           <p className="text-xs" style={{ color: '#555' }}>
-            {statusFilter === 'active' ? '做模拟题或闪卡时，答错的题目会自动收录到这里' : ''}
+            {statusFilter === 'active' ? '做真题或模拟题时，答错的题目会自动收录到这里' : ''}
           </p>
         </div>
       ) : (
         <div className="space-y-3">
           {filtered.map(m => (
-            <MistakeCard key={m.id} mistake={m} onMaster={master} onRemove={remove} />
+            <MistakeCard key={m.question_id} mistake={m} onMaster={master} onRemove={remove} />
           ))}
         </div>
       )}
@@ -255,16 +276,15 @@ function MistakeCard({
   onRemove,
 }: {
   mistake: StoredMistake
-  onMaster: (id: string) => void
-  onRemove: (id: string) => void
+  onMaster: (id: number) => void
+  onRemove: (id: number) => void
 }) {
   const [expanded, setExpanded] = useState(false)
-  const isVocab = m.source === 'flashcard' && !m.options
 
   return (
     <div className="glass p-4 rounded-xl space-y-3"
       style={{
-        border: m.status === 'mastered'
+        border: m.mistake_status === 'mastered'
           ? '1px solid rgba(34,197,94,0.18)'
           : '1px solid rgba(255,255,255,0.07)',
       }}>
@@ -272,33 +292,37 @@ function MistakeCard({
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-xs px-2 py-0.5 rounded-full font-medium"
           style={{
-            background: m.source === 'quiz' ? 'rgba(52,211,153,0.1)' : 'rgba(255,215,0,0.1)',
-            color: m.source === 'quiz' ? '#34D399' : '#FFD700',
-            border: `1px solid ${m.source === 'quiz' ? 'rgba(52,211,153,0.25)' : 'rgba(255,215,0,0.2)'}`,
+            background: m.source_type === 'mock' ? 'rgba(52,211,153,0.1)' : 'rgba(255,215,0,0.1)',
+            color: m.source_type === 'mock' ? '#34D399' : '#FFD700',
+            border: `1px solid ${m.source_type === 'mock' ? 'rgba(52,211,153,0.25)' : 'rgba(255,215,0,0.2)'}`,
           }}>
-          {m.source === 'quiz' ? '🎯 模拟题' : '🃏 闪卡'}
+          {m.source_type === 'mock' ? '🎯 模拟题' : '📄 真题'}
         </span>
-        {m.status === 'mastered' && (
+        <span className="text-xs px-2 py-0.5 rounded-full"
+          style={{ background: 'rgba(255,255,255,0.04)', color: '#555', border: '1px solid rgba(255,255,255,0.07)' }}>
+          {m.question_type === 'mcq' ? '选择题' : '简答题'}
+        </span>
+        {m.mistake_status === 'mastered' && (
           <span className="text-xs px-2 py-0.5 rounded-full"
             style={{ background: 'rgba(34,197,94,0.1)', color: '#22C55E', border: '1px solid rgba(34,197,94,0.2)' }}>
             ✓ 已掌握
           </span>
         )}
         <span className="ml-auto text-xs" style={{ color: '#3a3a3a' }}>
-          {new Date(m.createdAt).toLocaleDateString('zh-CN')}
+          {new Date(m.created_at).toLocaleDateString('zh-CN')}
         </span>
       </div>
 
       {/* Question */}
-      <p className="text-sm text-white leading-relaxed">{m.question}</p>
+      <p className="text-sm text-white leading-relaxed">{m.question_text}</p>
 
       {/* MCQ options */}
-      {m.options && (
+      {m.options && m.question_type === 'mcq' && (
         <div className="space-y-1.5">
           {m.options.map((opt, j) => {
             const label = String.fromCharCode(65 + j)
-            const isCorrect = label === m.correctAnswer
-            const isWrong = m.userAnswer === label && !isCorrect
+            const isCorrect = label === m.correct_answer
+            const isWrong = m.user_answer === label && !isCorrect
             return (
               <div key={j} className="px-3 py-2 rounded-lg text-xs"
                 style={{
@@ -315,16 +339,16 @@ function MistakeCard({
         </div>
       )}
 
-      {/* Vocab answer */}
-      {isVocab && (
+      {/* Short answer reference */}
+      {m.question_type === 'short_answer' && m.correct_answer && (
         <div className="px-3 py-2 rounded-lg text-xs"
           style={{ background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.18)', color: '#22C55E' }}>
-          正确答案：{m.correctAnswer}
+          参考答案：{m.correct_answer}
         </div>
       )}
 
-      {/* Explanation */}
-      {m.explanation && (
+      {/* Feedback / Explanation */}
+      {(m.feedback || m.explanation) && (
         <div>
           <button onClick={() => setExpanded(v => !v)}
             className="text-xs transition-opacity hover:opacity-100"
@@ -334,32 +358,22 @@ function MistakeCard({
           {expanded && (
             <p className="mt-2 text-xs px-3 py-2 rounded-lg"
               style={{ background: 'rgba(255,215,0,0.05)', color: '#AAA' }}>
-              💡 {m.explanation}
+              💡 {m.feedback || m.explanation}
             </p>
           )}
         </div>
       )}
 
-      {/* Source PDF */}
-      {m.sourceUrl && m.sourceFile && (
-        <a href={m.sourceUrl} target="_blank" rel="noopener noreferrer"
-          className="flex items-center gap-1.5 text-xs transition-opacity hover:opacity-100"
-          style={{ color: '#60A5FA', opacity: 0.75 }}>
-          <FileText size={12} />来源：{m.sourceFile}
-          <ExternalLink size={10} />
-        </a>
-      )}
-
       {/* Actions */}
       <div className="flex items-center gap-2 pt-1">
-        {m.status === 'active' && (
-          <button onClick={() => onMaster(m.id)}
+        {m.mistake_status === 'active' && (
+          <button onClick={() => onMaster(m.question_id)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all"
             style={{ background: 'rgba(34,197,94,0.1)', color: '#22C55E', border: '1px solid rgba(34,197,94,0.25)' }}>
             <CheckCircle size={12} /> 已掌握
           </button>
         )}
-        <button onClick={() => onRemove(m.id)}
+        <button onClick={() => onRemove(m.question_id)}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all"
           style={{ background: 'rgba(255,255,255,0.03)', color: '#555', border: '1px solid rgba(255,255,255,0.07)' }}>
           <Trash2 size={12} /> 删除
@@ -377,13 +391,13 @@ function PracticeMode({
   onExit,
 }: {
   mistakes: StoredMistake[]
-  onMaster: (id: string) => void
+  onMaster: (id: number) => void
   onExit: () => void
 }) {
   const [idx, setIdx] = useState(0)
   const [revealed, setRevealed] = useState(false)
   const [chosenAnswer, setChosenAnswer] = useState<string | null>(null)
-  const [session, setSession] = useState<Record<string, 'correct' | 'wrong'>>({})
+  const [session, setSession] = useState<Record<number, 'correct' | 'wrong'>>({})
 
   if (mistakes.length === 0) {
     return (
@@ -399,7 +413,7 @@ function PracticeMode({
   }
 
   const m = mistakes[idx]
-  const isVocab = m.source === 'flashcard' && !m.options
+  const isShortAnswer = m.question_type === 'short_answer'
   const totalDone = Object.keys(session).length
   const correctDone = Object.values(session).filter(v => v === 'correct').length
   const isLastCard = idx === mistakes.length - 1
@@ -413,14 +427,14 @@ function PracticeMode({
   function handleMCQAnswer(label: string) {
     if (chosenAnswer !== null) return
     setChosenAnswer(label); setRevealed(true)
-    const isCorrect = label === m.correctAnswer
-    setSession(prev => ({ ...prev, [m.id]: isCorrect ? 'correct' : 'wrong' }))
-    if (isCorrect) onMaster(m.id)
+    const isCorrect = label === m.correct_answer
+    setSession(prev => ({ ...prev, [m.question_id]: isCorrect ? 'correct' : 'wrong' }))
+    if (isCorrect) onMaster(m.question_id)
   }
 
-  function handleVocabResult(correct: boolean) {
-    setSession(prev => ({ ...prev, [m.id]: correct ? 'correct' : 'wrong' }))
-    if (correct) onMaster(m.id)
+  function handleShortAnswerResult(correct: boolean) {
+    setSession(prev => ({ ...prev, [m.question_id]: correct ? 'correct' : 'wrong' }))
+    if (correct) onMaster(m.question_id)
     advance()
   }
 
@@ -469,22 +483,28 @@ function PracticeMode({
 
       {/* Card */}
       <div className="glass p-6 rounded-2xl space-y-4">
-        <span className="text-xs px-2 py-0.5 rounded-full"
-          style={{
-            background: m.source === 'quiz' ? 'rgba(52,211,153,0.1)' : 'rgba(255,215,0,0.1)',
-            color: m.source === 'quiz' ? '#34D399' : '#FFD700',
-          }}>
-          {m.source === 'quiz' ? '🎯 模拟题' : '🃏 闪卡'}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs px-2 py-0.5 rounded-full"
+            style={{
+              background: m.source_type === 'mock' ? 'rgba(52,211,153,0.1)' : 'rgba(255,215,0,0.1)',
+              color: m.source_type === 'mock' ? '#34D399' : '#FFD700',
+            }}>
+            {m.source_type === 'mock' ? '🎯 模拟题' : '📄 真题'}
+          </span>
+          <span className="text-xs" style={{ color: '#555' }}>
+            {isShortAnswer ? '简答题' : '选择题'}
+          </span>
+        </div>
 
-        <p className="text-base font-semibold text-white leading-relaxed">{m.question}</p>
+        <p className="text-base font-semibold text-white leading-relaxed">{m.question_text}</p>
 
-        {m.options && (
+        {/* MCQ options */}
+        {m.options && !isShortAnswer && (
           <div className="space-y-2">
             {m.options.map((opt, j) => {
               const label = String.fromCharCode(65 + j)
               const isChosen = chosenAnswer === label
-              const isCorrect = label === m.correctAnswer
+              const isCorrect = label === m.correct_answer
               let bg = 'rgba(255,255,255,0.04)', border = 'rgba(255,255,255,0.08)', color = '#DDD'
               if (revealed) {
                 if (isCorrect) { bg = 'rgba(34,197,94,0.1)'; border = '#22C55E'; color = '#22C55E' }
@@ -502,44 +522,38 @@ function PracticeMode({
           </div>
         )}
 
-        {isVocab && !revealed && (
+        {/* Short answer: reveal button */}
+        {isShortAnswer && !revealed && (
           <button onClick={() => setRevealed(true)}
             className="w-full py-3 rounded-xl text-sm font-medium"
             style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}>
-            翻转查看答案 →
+            查看参考答案 →
           </button>
         )}
-        {isVocab && revealed && (
+        {isShortAnswer && revealed && m.correct_answer && (
           <div className="px-4 py-3 rounded-xl text-sm"
             style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', color: '#22C55E' }}>
-            {m.correctAnswer}
+            {m.correct_answer}
           </div>
         )}
 
-        {revealed && m.explanation && (
+        {revealed && (m.feedback || m.explanation) && (
           <p className="text-xs px-3 py-2 rounded-lg"
             style={{ background: 'rgba(255,215,0,0.05)', color: '#AAA' }}>
-            💡 {m.explanation}
+            💡 {m.feedback || m.explanation}
           </p>
-        )}
-
-        {revealed && m.sourceUrl && m.sourceFile && (
-          <a href={m.sourceUrl} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-xs transition-opacity hover:opacity-100"
-            style={{ color: '#60A5FA', opacity: 0.8 }}>
-            <FileText size={12} />来源：{m.sourceFile}<ExternalLink size={10} />
-          </a>
         )}
       </div>
 
-      {isVocab && revealed && (
+      {/* Short answer self-assessment */}
+      {isShortAnswer && revealed && (
         <div className="flex gap-3 justify-center">
-          <button onClick={() => handleVocabResult(false)}
+          <button onClick={() => handleShortAnswerResult(false)}
             className="px-6 py-2.5 rounded-xl text-sm font-medium"
             style={{ background: 'rgba(255,68,68,0.1)', color: '#FF6666', border: '1px solid rgba(255,68,68,0.25)' }}>
             ✗ 还没记住
           </button>
-          <button onClick={() => handleVocabResult(true)}
+          <button onClick={() => handleShortAnswerResult(true)}
             className="px-6 py-2.5 rounded-xl text-sm font-medium"
             style={{ background: 'rgba(34,197,94,0.1)', color: '#22C55E', border: '1px solid rgba(34,197,94,0.25)' }}>
             ✓ 已掌握
@@ -547,7 +561,8 @@ function PracticeMode({
         </div>
       )}
 
-      {m.options && revealed && (
+      {/* MCQ next button */}
+      {!isShortAnswer && revealed && (
         <div className="flex justify-end">
           <button onClick={advance}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold"

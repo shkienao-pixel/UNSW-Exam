@@ -10,7 +10,6 @@ import {
 import { api } from '@/lib/api'
 import type { ExamQuestion, PastExamFile, MockSession, GradeResult } from '@/lib/types'
 import { useLang } from '@/lib/i18n'
-import { addMistake } from '@/lib/mistakes-store'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -38,21 +37,6 @@ export default function ExamTab({ courseId }: { courseId: string }) {
   function onSubmitDone(res: GradeResult[], finalQs: ExamQuestion[]) {
     setResults(res)
     setQuestions(finalQs)
-    // Add wrong answers to mistakes store
-    finalQs.forEach(q => {
-      const r = res.find(x => x.question_id === q.id)
-      if (r && r.is_correct === false && q.question_type === 'mcq') {
-        addMistake({
-          courseId,
-          source: 'quiz',
-          question: q.question_text,
-          options: q.options ?? [],
-          correctAnswer: q.correct_answer ?? '',
-          userAnswer: '',
-          explanation: r.feedback ?? undefined,
-        })
-      }
-    })
     setPhase('result')
   }
 

@@ -308,6 +308,22 @@ export interface ExamQuestionsResponse {
   total: number
 }
 
+export interface StoredMistake {
+  question_id: number
+  course_id: string
+  source_type: 'past_exam' | 'mock'
+  question_text: string
+  question_type: 'mcq' | 'short_answer'
+  options?: string[]
+  correct_answer: string
+  user_answer?: string
+  feedback?: string
+  explanation?: string
+  mistake_status: 'active' | 'mastered'
+  created_at: string
+  mastered_at?: string
+}
+
 // ── Enrollment ────────────────────────────────────────────────────────────────
 
 export type Term = 'T1' | 'T2' | 'T3'
