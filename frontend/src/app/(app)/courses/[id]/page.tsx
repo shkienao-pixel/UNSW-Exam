@@ -406,24 +406,25 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
               {/* ── Vocab card with 3D flip (CodePen pattern) ── */}
               {card.type === 'vocab' && (
                 <div className="space-y-4">
-                  {/* box-item: outer wrapper with backface-visibility hidden */}
+                  {/* flip card wrapper — perspective 在此层设置 */}
                   <div className="mx-auto w-full max-w-[640px]"
-                    style={{ position: 'relative', WebkitBackfaceVisibility: 'hidden', cursor: 'pointer', userSelect: 'none' }}
+                    style={{ perspective: '1000px', WebkitPerspective: '1000px', cursor: 'pointer', userSelect: 'none' }}
                     onClick={() => setFlipped(f => !f)}>
-                    {/* flip-box: preserve-3d + perspective */}
+                    {/* flip-box: preserve-3d，需要显式高度以防布局塌陷 */}
                     <div style={{
+                      position: 'relative',
+                      minHeight: '300px',
                       transformStyle: 'preserve-3d',
                       WebkitTransformStyle: 'preserve-3d',
-                      perspective: '1000px',
-                      WebkitPerspective: '1000px',
                     }}>
-                      {/* flip-box-front */}
+                      {/* 正面 */}
                       <div style={{
-                        minHeight: '300px',
+                        position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
                         borderRadius: '28px',
-                        background: 'rgba(255,255,255,0.03)',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        boxShadow: '0 24px 64px rgba(0,0,0,0.3)',
+                        /* 不透明深色背景，防止透视穿透 */
+                        background: 'rgb(14,16,23)',
+                        border: '1px solid rgba(255,255,255,0.09)',
+                        boxShadow: '0 24px 64px rgba(0,0,0,0.35)',
                         transition: 'transform 0.7s cubic-bezier(.4,.2,.2,1)',
                         WebkitTransition: 'transform 0.7s cubic-bezier(.4,.2,.2,1)',
                         backfaceVisibility: 'hidden',
@@ -432,7 +433,6 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                         WebkitTransformStyle: 'preserve-3d',
                         transform: flipped ? 'rotateY(-180deg)' : 'rotateY(0deg)',
                       }}>
-                        {/* inner content with translateZ depth */}
                         <div style={{
                           position: 'absolute', left: 0, width: '100%', top: '50%',
                           padding: '40px 48px',
@@ -445,26 +445,25 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px',
                         }}>
                           <span className="text-xs px-2.5 py-0.5 rounded-full"
-                            style={{ color: 'rgba(255,215,0,0.45)', border: '1px solid rgba(255,215,0,0.12)', background: 'rgba(255,215,0,0.04)' }}>
+                            style={{ color: 'rgba(255,215,0,0.5)', border: '1px solid rgba(255,215,0,0.14)', background: 'rgba(255,215,0,0.05)' }}>
                             {t('fc_front')}
                           </span>
                           <p className="text-2xl font-semibold text-center" style={{ color: '#FFD700', lineHeight: 1.5 }}>
                             {biText(card.front, biMode)}
                           </p>
-                          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.18)' }}>
+                          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.2)' }}>
                             {t('fc_click_tip')} · Space
                           </p>
                         </div>
                       </div>
 
-                      {/* flip-box-back */}
+                      {/* 背面 */}
                       <div style={{
-                        position: 'absolute', top: 0, left: 0, width: '100%',
-                        minHeight: '300px',
+                        position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
                         borderRadius: '28px',
-                        background: 'rgba(255,255,255,0.05)',
+                        background: 'rgb(18,20,30)',
                         border: '1px solid rgba(255,255,255,0.11)',
-                        boxShadow: '0 24px 64px rgba(0,0,0,0.3)',
+                        boxShadow: '0 24px 64px rgba(0,0,0,0.35)',
                         transition: 'transform 0.7s cubic-bezier(.4,.2,.2,1)',
                         WebkitTransition: 'transform 0.7s cubic-bezier(.4,.2,.2,1)',
                         backfaceVisibility: 'hidden',
@@ -473,7 +472,6 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                         WebkitTransformStyle: 'preserve-3d',
                         transform: flipped ? 'rotateY(0deg)' : 'rotateY(180deg)',
                       }}>
-                        {/* inner content with translateZ depth */}
                         <div style={{
                           position: 'absolute', left: 0, width: '100%', top: '50%',
                           padding: '40px 48px',
@@ -486,7 +484,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px',
                         }}>
                           <span className="text-xs px-2.5 py-0.5 rounded-full"
-                            style={{ color: 'rgba(255,255,255,0.3)', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)' }}>
+                            style={{ color: 'rgba(255,255,255,0.35)', border: '1px solid rgba(255,255,255,0.09)', background: 'rgba(255,255,255,0.04)' }}>
                             {t('fc_back')}
                           </span>
                           <p className="text-xl font-medium text-center" style={{ color: '#E2E2E2', lineHeight: 1.6 }}>
