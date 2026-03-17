@@ -135,7 +135,7 @@ function NoteFab({ onClick, pos, onDragEnd }: {
 // ── Main window ───────────────────────────────────────────────────────────────
 
 export default function NoteFloatWindow() {
-  const { isOpen, courseId, courseName, closeWindow } = useNoteFloat()
+  const { isOpen, courseId, courseName, openWindow, closeWindow } = useNoteFloat()
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
 
@@ -263,7 +263,7 @@ export default function NoteFloatWindow() {
     return (
       <NoteFab
         pos={fabPos}
-        onClick={() => {}}
+        onClick={() => openWindow()}
         onDragEnd={p => {
           setFabPos(p)
           localStorage.setItem('note_fab_pos', JSON.stringify(p))
