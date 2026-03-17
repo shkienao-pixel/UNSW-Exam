@@ -9,6 +9,8 @@ import { useCredits } from '@/hooks/useCredits'
 import { useCourseList } from '@/hooks/useCourseList'
 import { FloatingAskProvider } from '@/lib/floating-ask-context'
 import FloatingAskWindow from '@/components/FloatingAskWindow'
+import { NoteFloatProvider } from '@/lib/note-float-context'
+import NoteFloatWindow from '@/components/NoteFloatWindow'
 import FloatingProgress from '@/components/FloatingProgress'
 import ExamCountdown from '@/components/ExamCountdown'
 import SidebarHeader from '@/components/SidebarHeader'
@@ -266,6 +268,9 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
       {/* Floating AI Q&A window */}
       <FloatingAskWindow />
 
+      {/* Floating notes window */}
+      <NoteFloatWindow />
+
       {/* Global feedback button */}
       <FeedbackWidget />
     </div>
@@ -278,7 +283,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <GenerationProvider>
       <FloatingAskProvider>
-        <AppLayoutInner>{children}</AppLayoutInner>
+        <NoteFloatProvider>
+          <AppLayoutInner>{children}</AppLayoutInner>
+        </NoteFloatProvider>
       </FloatingAskProvider>
     </GenerationProvider>
   )

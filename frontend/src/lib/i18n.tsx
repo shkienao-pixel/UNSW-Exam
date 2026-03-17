@@ -23,7 +23,8 @@ const dict = {
   scope:          { zh: 'Scope',     en: 'Scope'         },
   dashboard:      { zh: 'Dashboard', en: 'Dashboard'     },
   my_courses:     { zh: '我的课程',  en: 'My Courses'    },
-  mistakes:       { zh: '错题本',    en: 'Mistakes'      },
+  mistakes:             { zh: '错题本',      en: 'Mistakes'         },
+  notes_and_mistakes:   { zh: '笔记与错题',  en: 'Notes & Mistakes' },
   logout:         { zh: '退出登录',  en: 'Logout'        },
   no_courses:     { zh: '暂无课程',  en: 'No courses'    },
 

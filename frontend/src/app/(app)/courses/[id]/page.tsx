@@ -98,9 +98,10 @@ function CoursePageInner() {
 
   return (
     <div className="mx-auto w-full max-w-[1180px] flex-1 overflow-y-auto px-5 py-8 sm:px-6 lg:py-10">
-      {view === 'flashcards' && <FlashcardsTab courseId={courseId} />}
-      {view === 'mistakes'   && <MistakesTab courseId={courseId} />}
-      {view === 'quiz'       && <ExamTab courseId={courseId} />}
+      {view === 'flashcards'         && <FlashcardsTab courseId={courseId} />}
+      {view === 'mistakes'           && <MistakesTab courseId={courseId} />}
+      {view === 'notes-and-mistakes' && <MistakesView courseId={courseId} />}
+      {view === 'quiz'               && <ExamTab courseId={courseId} />}
 
       {view === 'outputs'    && <OutputsTab courseId={courseId} outputs={outputs} setOutputs={setOutputs} />}
       {view === 'resources'  && (

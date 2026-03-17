@@ -3,7 +3,7 @@ import type {
   GenerateBody, AskResponse, ExplainImageResponse,
   ReviewSettings, ReviewNodeProgress, ReviewNodeUpdate, TodayPlanResult,
   DocType, Feedback, FeedbackStatus, CourseContentStatus,
-  ExamQuestion, PastExamFile, MockSession, GradeResult, ExamQuestionsResponse, StoredMistake,
+  ExamQuestion, PastExamFile, MockSession, GradeResult, ExamQuestionsResponse, StoredMistake, UserNote,
 } from './types'
 
 export type StreamEvent =
@@ -499,5 +499,29 @@ export const api = {
       req<{ content_json: Record<string, unknown> }>(
         `/courses/${courseId}/course-content/${contentType}`
       ),
+  },
+
+  notes: {
+    upload: (imageFile: File, caption: string, courseId?: string): Promise<UserNote> => {
+      const form = new FormData()
+      form.append('image', imageFile)
+      form.append('caption', caption)
+      if (courseId) form.append('course_id', courseId)
+      return req<UserNote>('/notes', { method: 'POST', body: form })
+    },
+
+    list: (courseId?: string) => {
+      const qs = courseId ? `?course_id=${courseId}` : ''
+      return req<UserNote[]>(`/notes${qs}`)
+    },
+
+    updateCaption: (noteId: number, caption: string) =>
+      req<{ ok: boolean }>(`/notes/${noteId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ caption }),
+      }),
+
+    delete: (noteId: number) =>
+      req<{ ok: boolean }>(`/notes/${noteId}`, { method: 'DELETE' }),
   },
 }

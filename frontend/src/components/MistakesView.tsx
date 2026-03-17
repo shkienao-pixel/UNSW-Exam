@@ -2,23 +2,24 @@
 
 import { useState, useEffect } from 'react'
 import { useMistakes } from '@/lib/mistakes-store'
-import type { StoredMistake } from '@/lib/types'
+import type { StoredMistake, UserNote } from '@/lib/types'
 import {
   AlertTriangle, BookOpen, CheckCircle, Trash2,
-  Play, RotateCcw, Heart, Loader2,
+  Play, RotateCcw, NotebookPen, Loader2, ImagePlus, X,
 } from 'lucide-react'
 import { api } from '@/lib/api'
-import type { ExamQuestion } from '@/lib/types'
+import { useNoteFloat } from '@/lib/note-float-context'
 
 type StatusFilter = 'active' | 'mastered' | 'all'
 type SourceFilter = 'all' | 'past_exam' | 'mock'
-type MainTab = 'mistakes' | 'favorites'
+type MainTab = 'mistakes' | 'notes'
 
 // ── Main view (used both standalone + inside course tab) ──────────────────────
 
-export default function MistakesView({ courseId }: { courseId?: string }) {
+export default function MistakesView({ courseId, defaultTab }: { courseId?: string; defaultTab?: MainTab }) {
   const { all, active, mastered, master, remove, loading } = useMistakes(courseId)
-  const [mainTab, setMainTab] = useState<MainTab>('mistakes')
+  const [mainTab, setMainTab] = useState<MainTab>(defaultTab ?? 'mistakes')
+  const { openWindow: openNoteWindow } = useNoteFloat()
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
   const [practiceMode, setPracticeMode] = useState(false)
@@ -66,23 +67,29 @@ export default function MistakesView({ courseId }: { courseId?: string }) {
 
       {/* ── Main tab switcher ── */}
       <div className="flex gap-2">
-        {(['mistakes', 'favorites'] as MainTab[]).map(t => (
+        {(['mistakes', 'notes'] as MainTab[]).map(t => (
           <button
             key={t}
             onClick={() => setMainTab(t)}
             className="px-4 py-2 rounded-xl text-sm font-medium transition-all"
             style={{
-              background: mainTab === t ? 'rgba(255,215,0,0.15)' : 'rgba(255,255,255,0.03)',
-              color: mainTab === t ? '#FFD700' : '#666',
-              border: `1px solid ${mainTab === t ? 'rgba(255,215,0,0.35)' : 'rgba(255,255,255,0.06)'}`,
+              background: mainTab === t
+                ? t === 'notes' ? 'rgba(167,139,250,0.15)' : 'rgba(255,215,0,0.15)'
+                : 'rgba(255,255,255,0.03)',
+              color: mainTab === t
+                ? t === 'notes' ? '#A78BFA' : '#FFD700'
+                : '#666',
+              border: `1px solid ${mainTab === t
+                ? t === 'notes' ? 'rgba(167,139,250,0.35)' : 'rgba(255,215,0,0.35)'
+                : 'rgba(255,255,255,0.06)'}`,
             }}
           >
-            {t === 'mistakes' ? '❌ 错题集' : '❤️ 收藏'}
+            {t === 'mistakes' ? '❌ 错题集' : '📝 笔记'}
           </button>
         ))}
       </div>
 
-      {mainTab === 'favorites' && <FavoritesTab courseId={courseId} />}
+      {mainTab === 'notes' && <NotesTab courseId={courseId} onAddNote={() => openNoteWindow(courseId ?? undefined)} />}
       {mainTab === 'mistakes' && <>
 
       {/* ── Header ── */}
@@ -184,86 +191,106 @@ export default function MistakesView({ courseId }: { courseId?: string }) {
   )
 }
 
-// ── Favorites Tab ─────────────────────────────────────────────────────────────
+// ── Notes Tab ─────────────────────────────────────────────────────────────────
 
-function FavoritesTab({ courseId }: { courseId?: string }) {
-  const [favorites, setFavorites] = useState<ExamQuestion[]>([])
+function NotesTab({ courseId, onAddNote }: { courseId?: string; onAddNote: () => void }) {
+  const [notes, setNotes] = useState<UserNote[]>([])
   const [loading, setLoading] = useState(true)
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
 
   useEffect(() => {
-    const fn = courseId
-      ? () => api.exam.listCourseFavorites(courseId)
-      : () => api.exam.listAllFavorites()
-    fn().then(setFavorites).finally(() => setLoading(false))
+    api.notes.list(courseId).then(setNotes).finally(() => setLoading(false))
   }, [courseId])
 
-  async function handleUnfavorite(qId: number) {
-    const q = favorites.find(f => f.id === qId)
-    if (!q) return
-    setFavorites(prev => prev.filter(f => f.id !== qId))
+  async function handleDelete(noteId: number) {
+    setNotes(prev => prev.filter(n => n.id !== noteId))
     try {
-      await api.exam.toggleFavorite(q.course_id, qId)
+      await api.notes.delete(noteId)
     } catch {
-      setFavorites(prev => [...prev, q])
+      api.notes.list(courseId).then(setNotes)
     }
   }
 
   if (loading) return (
     <div className="flex justify-center py-16">
-      <Loader2 className="animate-spin" style={{ color: '#FFD700' }} size={24} />
-    </div>
-  )
-
-  if (favorites.length === 0) return (
-    <div className="text-center py-20 glass rounded-2xl" style={{ color: '#444' }}>
-      <Heart size={48} className="mx-auto mb-4 opacity-20" />
-      <p className="text-sm text-white mb-2">暂无收藏</p>
-      <p className="text-xs" style={{ color: '#555' }}>做题时点击心形图标即可收藏</p>
+      <Loader2 className="animate-spin" style={{ color: '#A78BFA' }} size={24} />
     </div>
   )
 
   return (
-    <div className="space-y-3">
-      {favorites.map(q => (
-        <div
-          key={q.id}
-          className="rounded-2xl p-4 space-y-2"
-          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,107,107,0.15)' }}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex-1 min-w-0">
-              <span className="text-xs px-2 py-0.5 rounded-full mr-2" style={{ background: 'rgba(255,107,107,0.1)', color: '#FF6B6B', border: '1px solid rgba(255,107,107,0.2)' }}>
-                {q.question_type === 'mcq' ? '选择题' : '简答题'}
-              </span>
-              <span className="text-xs" style={{ color: '#555' }}>
-                {q.source_type === 'past_exam' ? '真题' : '模拟题'}
-              </span>
-              <p className="text-sm text-white mt-2 leading-relaxed">{q.question_text}</p>
-              {q.options && (
-                <div className="mt-2 space-y-1">
-                  {q.options.map((opt, j) => (
-                    <p key={j} className="text-xs" style={{ color: '#666' }}>
-                      {String.fromCharCode(65 + j)}. {opt}
-                    </p>
-                  ))}
+    <div className="space-y-4">
+      {/* Add note button */}
+      <button
+        onClick={onAddNote}
+        className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium transition-all"
+        style={{
+          background: 'rgba(167,139,250,0.08)',
+          color: '#A78BFA',
+          border: '1.5px dashed rgba(167,139,250,0.3)',
+        }}
+      >
+        <ImagePlus size={16} /> 粘贴截图 / 上传笔记
+      </button>
+
+      {notes.length === 0 ? (
+        <div className="text-center py-20 glass rounded-2xl" style={{ color: '#444' }}>
+          <NotebookPen size={48} className="mx-auto mb-4 opacity-20" />
+          <p className="text-sm text-white mb-2">暂无笔记</p>
+          <p className="text-xs" style={{ color: '#555' }}>点击上方按钮或使用浮窗粘贴截图保存笔记</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {notes.map(note => (
+            <div key={note.id} className="relative group rounded-xl overflow-hidden"
+              style={{ border: '1px solid rgba(255,255,255,0.07)', aspectRatio: '1' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={note.image_url}
+                alt={note.caption || '笔记'}
+                className="w-full h-full object-cover cursor-zoom-in"
+                onClick={() => setLightboxSrc(note.image_url)}
+              />
+              {/* Caption overlay */}
+              {note.caption && (
+                <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5 text-xs truncate"
+                  style={{ background: 'rgba(0,0,0,0.7)', color: '#DDD' }}>
+                  {note.caption}
                 </div>
               )}
-              {q.correct_answer && (
-                <p className="text-xs mt-2" style={{ color: '#22C55E' }}>
-                  ✓ {q.question_type === 'mcq' ? `正确答案：${q.correct_answer}` : q.correct_answer}
-                </p>
-              )}
+              {/* Delete button (shows on hover) */}
+              <button
+                onClick={() => handleDelete(note.id)}
+                className="absolute top-1.5 right-1.5 p-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ background: 'rgba(0,0,0,0.65)', color: '#ff6b6b' }}
+              >
+                <Trash2 size={12} />
+              </button>
+              {/* Date */}
+              <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ background: 'rgba(0,0,0,0.6)', color: '#AAA' }}>
+                {new Date(note.created_at).toLocaleDateString('zh-CN')}
+              </div>
             </div>
-            <button
-              onClick={() => handleUnfavorite(q.id)}
-              className="flex-shrink-0 transition-all hover:scale-110"
-              title="取消收藏"
-            >
-              <Heart size={18} fill="#FF6B6B" style={{ color: '#FF6B6B' }} />
-            </button>
-          </div>
+          ))}
         </div>
-      ))}
+      )}
+
+      {/* Lightbox */}
+      {lightboxSrc && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.88)' }}
+          onClick={() => setLightboxSrc(null)}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightboxSrc} alt="笔记大图"
+            style={{ maxWidth: '92vw', maxHeight: '92vh', objectFit: 'contain', borderRadius: '0.75rem' }}
+            onClick={e => e.stopPropagation()} />
+          <button onClick={() => setLightboxSrc(null)}
+            className="absolute top-4 right-4 p-2 rounded-full"
+            style={{ background: 'rgba(255,255,255,0.1)', color: '#fff' }}>
+            <X size={18} />
+          </button>
+        </div>
+      )}
     </div>
   )
 }

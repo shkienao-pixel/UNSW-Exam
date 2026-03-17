@@ -324,6 +324,17 @@ export interface StoredMistake {
   mastered_at?: string
 }
 
+// ── User Notes ────────────────────────────────────────────────────────────────
+
+export interface UserNote {
+  id: number
+  user_id: string
+  course_id?: string
+  image_url: string
+  caption: string
+  created_at: string
+}
+
 // ── Enrollment ────────────────────────────────────────────────────────────────
 
 export type Term = 'T1' | 'T2' | 'T3'
