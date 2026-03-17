@@ -301,9 +301,9 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h2 className="text-2xl font-bold text-white flex items-center gap-2 flex-wrap">
+          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
             <Layers3 size={22} style={{ color: '#FFD700', flexShrink: 0 }} />
-            <span>{t('flashcards_title')}</span>
+            <span className="whitespace-nowrap">{t('flashcards_title')}</span>
           </h2>
           <p className="text-sm mt-0.5 whitespace-nowrap" style={{ color: '#555' }}>{t('flashcards_sub')}</p>
         </div>
