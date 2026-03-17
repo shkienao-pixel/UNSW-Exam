@@ -21,7 +21,6 @@ import {
   ExternalLink, Trash2, Sparkles,
   Code, Lock, Target, Layers3, ListTree,
 } from 'lucide-react'
-import { addMistake } from '@/lib/mistakes-store'
 import MistakesView from '@/components/MistakesView'
 import InsufficientCreditsModal from '@/components/InsufficientCreditsModal'
 import ReactMarkdown from 'react-markdown'
@@ -277,9 +276,6 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
       if (e.key === 'ArrowRight') {
         if (c.type === 'vocab' && fl) { setRemembered(r => r + 1); next() }
         else if (c.type === 'mcq' && rv) {
-          if (ch !== null && ch !== c.answer) {
-            addMistake({ courseId, source: 'flashcard', question: c.question, options: c.options, correctAnswer: c.answer, userAnswer: ch, explanation: c.explanation })
-          }
           next()
         }
       }
@@ -517,7 +513,6 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                     ) : (
                       <>
                         <button onClick={() => {
-                          addMistake({ courseId, source: 'flashcard', question: card.front, correctAnswer: card.back })
                           setForgotten(f => f + 1)
                           next()
                         }}
@@ -594,12 +589,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                       </button>
                     ) : (
                       <button
-                        onClick={() => {
-                          if (chosen !== null && chosen !== card.answer) {
-                            addMistake({ courseId, source: 'flashcard', question: card.question, options: card.options, correctAnswer: card.answer, userAnswer: chosen, explanation: card.explanation })
-                          }
-                          next()
-                        }}
+                        onClick={() => { next() }}
                         className="px-5 py-2 rounded-full text-sm font-medium"
                         style={{
                           background: chosen === card.answer ? 'rgba(34,197,94,0.1)' : 'rgba(200,165,90,0.12)',
@@ -1035,17 +1025,6 @@ function QuizDisplay({
     if (revealed[i]) return // already answered
     setAnswers(p => ({ ...p, [i]: label }))
     setRevealed(p => ({ ...p, [i]: true }))
-    if (label !== q.answer && courseId) {
-      addMistake({
-        courseId,
-        source: 'quiz',
-        question: q.question,
-        options: q.options,
-        correctAnswer: q.answer,
-        userAnswer: label,
-        explanation: q.explanation,
-      })
-    }
   }
 
   return (
