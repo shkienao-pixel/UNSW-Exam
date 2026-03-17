@@ -299,15 +299,16 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Layers3 size={22} style={{ color: '#FFD700' }} /> {t('flashcards_title')}
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-2xl font-bold text-white flex items-center gap-2 flex-wrap">
+            <Layers3 size={22} style={{ color: '#FFD700', flexShrink: 0 }} />
+            <span>{t('flashcards_title')}</span>
           </h2>
-          <p className="text-sm mt-0.5" style={{ color: '#555' }}>{t('flashcards_sub')}</p>
+          <p className="text-sm mt-0.5 whitespace-nowrap" style={{ color: '#555' }}>{t('flashcards_sub')}</p>
         </div>
         {outputs.length > 0 && (
-          <select className="input-glass text-xs py-1 flex-shrink-0 mt-1" value={selectedOutputId ?? ''}
+          <select className="input-glass text-xs py-1 flex-shrink-0" value={selectedOutputId ?? ''}
             onChange={e => { const o = outputs.find(x => x.id === Number(e.target.value)); if (o) loadCards(o) }}>
             {outputs.map(o => (
               <option key={o.id} value={o.id}>
