@@ -466,6 +466,114 @@ def extract_questions_from_artifact(
 
 # ── Generate mock questions (called by generation worker) ─────────────────────
 
+def _trim_prompt_text(text: str, limit: int = 280) -> str:
+    text = " ".join((text or "").split())
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3].rstrip() + "..."
+
+
+def _build_mock_reference(past_rows: list[dict], num_mcq: int, num_short: int) -> str:
+    """Summarize the available past-paper style so mock papers feel less generic."""
+    total = len(past_rows)
+    mcqs = [row for row in past_rows if row.get("question_type") == "mcq"]
+    shorts = [row for row in past_rows if row.get("question_type") != "mcq"]
+
+    paper_map: dict[str, dict[str, int]] = {}
+    for row in past_rows:
+        paper_key = str(row.get("artifact_id") or "unknown")
+        if paper_key not in paper_map:
+            paper_map[paper_key] = {"total": 0, "mcq": 0, "short": 0}
+        paper_map[paper_key]["total"] += 1
+        if row.get("question_type") == "mcq":
+            paper_map[paper_key]["mcq"] += 1
+        else:
+            paper_map[paper_key]["short"] += 1
+
+    paper_lines = [
+        f"- Paper {paper_id}: total={stats['total']}, mcq={stats['mcq']}, short={stats['short']}"
+        for paper_id, stats in list(paper_map.items())[:6]
+    ]
+
+    mcq_examples: list[str] = []
+    for idx, row in enumerate(mcqs[: min(16, max(num_mcq * 2, 8))], 1):
+        mcq_examples.append(
+            f"[MCQ {idx}] Q{row.get('question_index')}: {_trim_prompt_text(row.get('question_text', ''))}"
+        )
+        options = row.get("options") or []
+        if options:
+            mcq_examples.append(
+                "    options: " + " | ".join(_trim_prompt_text(str(opt), 90) for opt in options[:4])
+            )
+
+    short_examples: list[str] = []
+    for idx, row in enumerate(shorts[: min(12, max(num_short * 2, 6))], 1):
+        short_examples.append(
+            f"[SHORT {idx}] Q{row.get('question_index')}: {_trim_prompt_text(row.get('question_text', ''))}"
+        )
+        if row.get("correct_answer"):
+            short_examples.append(
+                f"    reference: {_trim_prompt_text(str(row['correct_answer']), 120)}"
+            )
+
+    return (
+        "Observed paper structure:\n"
+        f"- total past questions available: {total}\n"
+        f"- mcq available: {len(mcqs)}\n"
+        f"- short-answer available: {len(shorts)}\n"
+        f"- target output: {num_mcq} mcq + {num_short} short-answer\n"
+        + ("\n".join(paper_lines) if paper_lines else "- No per-paper grouping available")
+        + "\n\nRepresentative MCQ style:\n"
+        + ("\n".join(mcq_examples) if mcq_examples else "- none")
+        + "\n\nRepresentative short-answer style:\n"
+        + ("\n".join(short_examples) if short_examples else "- none")
+    )
+
+
+def _normalize_mock_questions(questions: list[dict], num_mcq: int, num_short: int) -> list[dict]:
+    """Keep valid generated questions, enforce counts, and re-sequence them."""
+    cleaned: list[dict] = []
+    mcq_seen = 0
+    short_seen = 0
+
+    for row in questions:
+        q_text = str(row.get("question_text", "")).strip()
+        q_type = row.get("question_type", "short_answer")
+        if not q_text:
+            continue
+
+        if q_type == "mcq":
+            options = row.get("options") or []
+            if len(options) < 4 or mcq_seen >= num_mcq:
+                continue
+            mcq_seen += 1
+            cleaned.append({
+                "question_type": "mcq",
+                "question_text": q_text,
+                "options": [str(opt).strip() for opt in options[:4]],
+                "correct_answer": str(row.get("correct_answer", "")).strip().upper()[:1] or None,
+                "explanation": row.get("explanation"),
+            })
+        else:
+            if short_seen >= num_short:
+                continue
+            short_seen += 1
+            cleaned.append({
+                "question_type": "short_answer",
+                "question_text": q_text,
+                "options": None,
+                "correct_answer": row.get("correct_answer"),
+                "explanation": row.get("explanation"),
+            })
+
+    ordered = [q for q in cleaned if q["question_type"] == "mcq"] + [
+        q for q in cleaned if q["question_type"] == "short_answer"
+    ]
+    for idx, row in enumerate(ordered, 1):
+        row["question_index"] = idx
+    return ordered
+
+
 def run_mock_generation(db: Client, user_id: str, course_id: str, body: Any) -> dict:
     """Generate mock exam questions and store in exam_questions table.
 
@@ -481,10 +589,12 @@ def run_mock_generation(db: Client, user_id: str, course_id: str, body: Any) -> 
 
     past_rows = (
         db.table("exam_questions")
-        .select("question_type, question_text, options, correct_answer")
+        .select("artifact_id, question_index, question_type, question_text, options, correct_answer")
         .eq("course_id", course_id)
         .eq("source_type", "past_exam")
-        .limit(20)
+        .order("artifact_id", desc=True)
+        .order("question_index")
+        .limit(80)
         .execute()
         .data
     ) or []
@@ -492,27 +602,21 @@ def run_mock_generation(db: Client, user_id: str, course_id: str, body: Any) -> 
     if not past_rows:
         raise AppError("没有找到往年真题，请先上传并审核 past_exam 类型文件")
 
-    sample_parts: list[str] = []
-    for i, q in enumerate(past_rows[:20], 1):
-        sample_parts.append(f"[{i}] type={q['question_type']}, Q: {q['question_text']}")
-        if q.get("options"):
-            sample_parts.append(f"    options: {q['options']}")
-        if q.get("correct_answer"):
-            sample_parts.append(f"    answer: {q['correct_answer']}")
-    past_sample = "\n".join(sample_parts)
+    past_sample = _build_mock_reference(past_rows, num_mcq, num_short)
 
     system = (
-        f"You are a creative exam question generator for university-level courses.\n"
+        "You are a careful university exam-paper writer.\n"
         f"Generate exactly {num_mcq} multiple-choice questions and {num_short} short-answer questions "
-        f"in the style of the provided past exam questions.\n\n"
+        "using the real past-paper style shown below.\n\n"
         "Rules:\n"
         "1. Questions must be DIFFERENT from the examples — do NOT copy them.\n"
-        "2. Test similar concepts and difficulty level.\n"
-        "3. For MCQ: 4 options (plain text, no A./B. prefix), one correct answer (A/B/C/D), include explanation.\n"
-        "4. For short_answer: include a concise reference answer.\n"
-        f"5. Number sequentially: MCQ first (indices 1–{num_mcq}), "
+        "2. Match the voice of the real papers: wording, difficulty, pacing, and distractor style.\n"
+        "3. Preserve the course's exam feel, not just the topic coverage.\n"
+        "4. For MCQ: provide exactly 4 options as plain text, one correct answer (A/B/C/D), and a short explanation.\n"
+        "5. For short_answer: provide a concise reference answer that a marker could use.\n"
+        f"6. Number sequentially: MCQ first (indices 1–{num_mcq}), "
         f"then short_answer (indices {num_mcq + 1}–{num_mcq + num_short}).\n"
-        "6. Return ONLY a raw JSON array — no markdown fences, no extra text.\n\n"
+        "7. Return ONLY a raw JSON array — no markdown fences, no extra text.\n\n"
         "Output format:\n"
         "[{\"question_index\":1,\"question_type\":\"mcq\","
         "\"question_text\":\"...\",\"options\":[\"opt\",\"opt\",\"opt\",\"opt\"],"
@@ -525,9 +629,11 @@ def run_mock_generation(db: Client, user_id: str, course_id: str, body: Any) -> 
     try:
         raw = _chat(
             system,
-            f"Past exam questions (style reference):\n\n{past_sample}",
+            "Use the following real-paper evidence as style reference.\n"
+            "First infer the common exam voice and structure, then write the new paper.\n\n"
+            f"{past_sample}",
             openai_key,
-            temperature=0.75,
+            temperature=0.55,
             top_p=0.9,
         )
     except Exception as exc:
@@ -543,6 +649,8 @@ def run_mock_generation(db: Client, user_id: str, course_id: str, body: Any) -> 
 
     if not questions:
         raise AppError("AI 未能生成有效题目，请重试")
+
+    questions = _normalize_mock_questions(questions, num_mcq, num_short)
 
     rows_to_insert = []
     for q in questions:
