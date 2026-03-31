@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { NotebookPen, X, ImagePlus, Loader2, Check, Trash2 } from 'lucide-react'
+import { NotebookPen, X, ImagePlus, Loader2, Check, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import { useNoteFloat } from '@/lib/note-float-context'
 import { api } from '@/lib/api'
 import type { UserNote } from '@/lib/types'
@@ -41,6 +41,58 @@ function loadSize(): { w: number; h: number } {
       h: Math.max(MIN_H, Math.min(window.innerHeight - 40, s.h)),
     }
   } catch { return { w: DEFAULT_W, h: DEFAULT_H } }
+}
+
+// ── NoteCard ──────────────────────────────────────────────────────────────────
+
+function NoteCard({ note, onZoom, onDelete }: {
+  note: import('@/lib/types').UserNote
+  onZoom: () => void
+  onDelete: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const hasContent = note.ai_content && note.ai_content.trim().length > 0
+
+  return (
+    <div className="rounded-lg overflow-hidden group"
+      style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
+      {/* Image row */}
+      <div className="relative" style={{ height: 90 }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={note.image_url} alt={note.caption || '笔记'}
+          className="w-full h-full object-cover cursor-zoom-in"
+          onClick={onZoom}
+        />
+        <button
+          onClick={onDelete}
+          className="absolute top-1 right-1 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+          style={{ background: 'rgba(0,0,0,0.7)', color: '#ff6b6b' }}>
+          <Trash2 size={11} />
+        </button>
+        {hasContent && (
+          <button
+            onClick={() => setExpanded(v => !v)}
+            className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-xs flex items-center gap-0.5"
+            style={{ background: 'rgba(167,139,250,0.85)', color: '#fff' }}>
+            {expanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+            AI
+          </button>
+        )}
+      </div>
+      {/* Caption */}
+      {note.caption && (
+        <p className="px-2 py-1 text-xs truncate" style={{ color: '#888' }}>{note.caption}</p>
+      )}
+      {/* AI extracted content */}
+      {hasContent && expanded && (
+        <div className="px-3 py-2 text-xs whitespace-pre-wrap leading-relaxed"
+          style={{ color: '#CCC', borderTop: '1px solid rgba(255,255,255,0.06)', maxHeight: 200, overflowY: 'auto' }}>
+          {note.ai_content}
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ── Lightbox ──────────────────────────────────────────────────────────────────
@@ -455,7 +507,7 @@ export default function NoteFloatWindow() {
             }}
           >
             {saving
-              ? <><Loader2 size={14} className="animate-spin" /> 保存中...</>
+              ? <><Loader2 size={14} className="animate-spin" /> AI 识别中...</>
               : savedOk
                 ? <><Check size={14} /> 已保存！</>
                 : '保存到笔记本'}
@@ -465,23 +517,14 @@ export default function NoteFloatWindow() {
           {recentNotes.length > 0 && (
             <div>
               <p className="text-xs mb-2" style={{ color: '#444' }}>最近保存</p>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-2">
                 {recentNotes.slice(0, 6).map(note => (
-                  <div key={note.id} className="relative group rounded-lg overflow-hidden"
-                    style={{ aspectRatio: '1', border: '1px solid rgba(255,255,255,0.08)' }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={note.image_url} alt={note.caption || '笔记'}
-                      className="w-full h-full object-cover cursor-zoom-in"
-                      onClick={() => setLightboxSrc(note.image_url)}
-                    />
-                    <button
-                      onClick={() => handleDeleteNote(note.id)}
-                      className="absolute top-1 right-1 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                      style={{ background: 'rgba(0,0,0,0.7)', color: '#ff6b6b' }}>
-                      <Trash2 size={11} />
-                    </button>
-                  </div>
+                  <NoteCard
+                    key={note.id}
+                    note={note}
+                    onZoom={() => setLightboxSrc(note.image_url)}
+                    onDelete={() => handleDeleteNote(note.id)}
+                  />
                 ))}
               </div>
             </div>

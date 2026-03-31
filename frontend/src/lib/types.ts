@@ -332,6 +332,7 @@ export interface UserNote {
   course_id?: string
   image_url: string
   caption: string
+  ai_content: string
   created_at: string
 }
 
