@@ -261,6 +261,19 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
     setRemembered(0); setForgotten(0)
   }
 
+  function recordFlashcardMistake(card: Flashcard, idx: number) {
+    if (!selectedOutputId) return
+    const cardFront = card.type === 'vocab' ? card.front : card.question
+    const cardBack  = card.type === 'vocab' ? card.back  : card.answer
+    api.flashcardMistakes.add(courseId, {
+      output_id:  selectedOutputId,
+      card_index: idx,
+      card_front: cardFront,
+      card_back:  cardBack,
+      card_type:  card.type,
+    }).catch(() => {})
+  }
+
   // Keyboard shortcuts
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -516,6 +529,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                       <>
                         <button onClick={() => {
                           setForgotten(f => f + 1)
+                          recordFlashcardMistake(card, cardIndex)
                           next()
                         }}
                           className="px-4 py-2 rounded-full text-sm"
@@ -554,7 +568,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                         }
                         return (
                           <button key={j}
-                            onClick={() => { if (!revealed) { setChosen(label); setRevealed(true) } }}
+                            onClick={() => { if (!revealed) { setChosen(label); setRevealed(true); if (label !== card.answer) recordFlashcardMistake(card, cardIndex) } }}
                             disabled={revealed}
                             className="w-full text-left px-4 py-3 rounded-[15px] text-sm transition-all duration-200"
                             style={{ background: bg, border: `1px solid ${border}`, color }}>

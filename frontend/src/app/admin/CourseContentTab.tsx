@@ -5,6 +5,7 @@ import { CheckCircle, EyeOff, FileText, ListTree, Sparkles, Loader2, Search, X }
 import { Course, adminReq, Spinner, ErrorBox, API } from './_shared'
 import ReactMarkdown from 'react-markdown'
 import SummarySchemaRenderer from '@/components/SummarySchemaRenderer'
+import KnowledgeSummaryRenderer from '@/components/KnowledgeSummaryRenderer'
 import type { SummarySchemaV1 } from '@/lib/types'
 
 type ContentType = 'summary' | 'outline'
@@ -105,7 +106,15 @@ function ContentPreview({ format, content, schema }: {
     )
   }
   if (format === 'html') return <HtmlPreview content={content} />
-  if (format === 'json') return <JsonPreview content={content} />
+  if (format === 'json') {
+    let parsed: unknown = null
+    try { parsed = JSON.parse(content) } catch {}
+    return (
+      <div className="rounded-xl p-4" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(167,139,250,0.15)' }}>
+        <KnowledgeSummaryRenderer rawJson={parsed} />
+      </div>
+    )
+  }
   return (
     <div className="w-full rounded-lg p-4 overflow-y-auto prose prose-invert prose-sm max-w-none"
       style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)', minHeight: 300, maxHeight: 600, color: '#CCC' }}>

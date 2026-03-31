@@ -336,6 +336,22 @@ export interface UserNote {
   created_at: string
 }
 
+// ── Flashcard Mistakes ────────────────────────────────────────────────────────
+
+export interface FlashcardMistake {
+  id: number
+  user_id: string
+  course_id: string
+  output_id: number
+  card_index: number
+  card_front: string
+  card_back: string
+  card_type: string
+  mistake_status: 'active' | 'mastered'
+  created_at: string
+  mastered_at?: string
+}
+
 // ── Enrollment ────────────────────────────────────────────────────────────────
 
 export type Term = 'T1' | 'T2' | 'T3'

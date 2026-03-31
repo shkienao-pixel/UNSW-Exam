@@ -104,13 +104,18 @@ def upload_note(
         "image_url":    image_url,
         "storage_path": path,
         "caption":      caption,
-        "ai_content":   ai_content,
     }
     if course_id:
         row["course_id"] = course_id
 
-    result = supabase.table("user_notes").insert(row).select().execute().data
-    return result[0] if result else row
+    # Try to include ai_content (requires migration 033 to have been run).
+    # Fall back silently if the column doesn't exist yet.
+    try:
+        result = supabase.table("user_notes").insert({**row, "ai_content": ai_content}).select().execute().data
+        return result[0] if result else {**row, "ai_content": ai_content}
+    except Exception:
+        result = supabase.table("user_notes").insert(row).select().execute().data
+        return result[0] if result else row
 
 
 def list_notes(

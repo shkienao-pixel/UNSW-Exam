@@ -192,12 +192,12 @@ export default function SummaryTab({ courseId }: { courseId: string }) {
     const WEIGHT_DOT: Record<string, string> = { high: '#FF6B6B', medium: '#FFD700', low: '#444' }
     return (
       <div className="flex gap-0 min-h-[70vh]">
-        <div className="w-52 flex-shrink-0 pr-4">
+        <div className="w-64 flex-shrink-0 pr-4">
           <div className="sticky top-4 space-y-0.5 max-h-[calc(100vh-140px)] overflow-y-auto">
             <p className="text-xs font-semibold mb-3 uppercase tracking-wider" style={{ color: '#555' }}>章节</p>
             {schema.sections.map((sec, i) => (
               <button key={i} onClick={() => scrollToSection(i)}
-                className="w-full text-left text-xs py-1.5 px-2 rounded-lg transition-all hover:bg-white/5 leading-snug flex items-center gap-2"
+                className="w-full text-left text-sm py-2 px-3 rounded-lg transition-all hover:bg-white/5 leading-snug flex items-center gap-2"
                 style={{ color: activeSectionIdx === i ? '#FFD700' : '#888', background: activeSectionIdx === i ? 'rgba(255,215,0,0.06)' : 'transparent' }}>
                 <span className="w-1.5 h-1.5 rounded-full flex-shrink-0"
                   style={{ background: WEIGHT_DOT[sec.exam_weight] ?? '#444' }} />
@@ -222,15 +222,15 @@ export default function SummaryTab({ courseId }: { courseId: string }) {
     <div className="flex gap-0 min-h-[70vh]">
       {toc.length > 0 && (
         <>
-          <div className="w-52 flex-shrink-0 pr-4">
+          <div className="w-64 flex-shrink-0 pr-4">
             <div className="sticky top-4 space-y-0.5 max-h-[calc(100vh-140px)] overflow-y-auto">
               <p className="text-xs font-semibold mb-3 uppercase tracking-wider" style={{ color: '#555' }}>目录</p>
               {toc.map((item, i) => (
                 <button key={i} onClick={() => scrollTo(item.id)}
-                  className="w-full text-left text-xs py-1.5 rounded-lg transition-all hover:bg-white/5 leading-snug"
+                  className="w-full text-left text-sm py-2 rounded-lg transition-all hover:bg-white/5 leading-snug"
                   style={{
                     color: item.level === 1 ? '#FFD700' : item.level === 2 ? '#CCC' : '#888',
-                    paddingLeft: item.level <= 2 ? '8px' : '20px',
+                    paddingLeft: item.level <= 2 ? '10px' : '22px',
                     fontWeight: item.level <= 2 ? 600 : 400,
                   }}>
                   {item.title}

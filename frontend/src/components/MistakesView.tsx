@@ -2,16 +2,16 @@
 
 import { useState, useEffect } from 'react'
 import { useMistakes } from '@/lib/mistakes-store'
-import type { StoredMistake, UserNote } from '@/lib/types'
+import type { StoredMistake, UserNote, FlashcardMistake } from '@/lib/types'
 import {
   AlertTriangle, BookOpen, CheckCircle, Trash2,
-  Play, RotateCcw, NotebookPen, Loader2, ImagePlus, X,
+  Play, RotateCcw, NotebookPen, Loader2, ImagePlus, X, Layers3,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useNoteFloat } from '@/lib/note-float-context'
 
 type StatusFilter = 'active' | 'mastered' | 'all'
-type SourceFilter = 'all' | 'past_exam' | 'mock'
+type SourceFilter = 'all' | 'past_exam' | 'mock' | 'flashcard'
 type MainTab = 'mistakes' | 'notes'
 
 // ── Main view (used both standalone + inside course tab) ──────────────────────
@@ -23,6 +23,13 @@ export default function MistakesView({ courseId, defaultTab }: { courseId?: stri
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
   const [practiceMode, setPracticeMode] = useState(false)
+
+  // Flashcard mistakes
+  const [fcMistakes, setFcMistakes] = useState<FlashcardMistake[]>([])
+  useEffect(() => {
+    if (!courseId) return
+    api.flashcardMistakes.list(courseId).then(setFcMistakes).catch(() => {})
+  }, [courseId])
 
   // One-time migration: clear old localStorage data and show notice
   const [showMigrationNotice, setShowMigrationNotice] = useState(false)
@@ -150,7 +157,7 @@ export default function MistakesView({ courseId, defaultTab }: { courseId?: stri
         </div>
 
         <div className="flex gap-1 p-0.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
-          {(['all', 'past_exam', 'mock'] as SourceFilter[]).map(f => (
+          {(['all', 'past_exam', 'mock', 'flashcard'] as SourceFilter[]).map(f => (
             <button key={f} onClick={() => setSourceFilter(f)}
               className="px-3 py-1.5 rounded-md text-xs transition-all"
               style={{
@@ -158,14 +165,39 @@ export default function MistakesView({ courseId, defaultTab }: { courseId?: stri
                 color: sourceFilter === f ? '#DDD' : '#555',
                 border: `1px solid ${sourceFilter === f ? 'rgba(255,255,255,0.18)' : 'transparent'}`,
               }}>
-              {f === 'all' ? '全部来源' : f === 'past_exam' ? '📄 真题' : '🎯 模拟题'}
+              {f === 'all' ? '全部来源' : f === 'past_exam' ? '📄 真题' : f === 'mock' ? '🎯 模拟题' : '🎴 闪卡'}
             </button>
           ))}
         </div>
       </div>
 
-      {/* ── List ── */}
-      {loading ? (
+      {/* ── Flashcard mistakes section ── */}
+      {(sourceFilter === 'all' || sourceFilter === 'flashcard') && fcMistakes.filter(m => statusFilter === 'all' || m.mistake_status === statusFilter).length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold flex items-center gap-1.5" style={{ color: '#A78BFA' }}>
+            <Layers3 size={12} /> 闪卡错题
+          </p>
+          {fcMistakes
+            .filter(m => statusFilter === 'all' || m.mistake_status === statusFilter)
+            .map(m => (
+              <FlashcardMistakeCard
+                key={m.id}
+                mistake={m}
+                onMaster={() => {
+                  api.flashcardMistakes.update(m.course_id, m.id, 'mastered').catch(() => {})
+                  setFcMistakes(prev => prev.map(x => x.id === m.id ? { ...x, mistake_status: 'mastered' as const } : x))
+                }}
+                onRemove={() => {
+                  api.flashcardMistakes.delete(m.course_id, m.id).catch(() => {})
+                  setFcMistakes(prev => prev.filter(x => x.id !== m.id))
+                }}
+              />
+            ))}
+        </div>
+      )}
+
+      {/* ── Exam mistakes list ── */}
+      {sourceFilter !== 'flashcard' && (loading ? (
         <div className="flex justify-center py-16">
           <Loader2 className="animate-spin" style={{ color: '#FFD700' }} size={24} />
         </div>
@@ -176,7 +208,7 @@ export default function MistakesView({ courseId, defaultTab }: { courseId?: stri
             {statusFilter === 'active' ? '🎉 没有待复习的错题！' : '暂无记录'}
           </p>
           <p className="text-xs" style={{ color: '#555' }}>
-            {statusFilter === 'active' ? '做真题或模拟题时，答错的题目会自动收录到这里' : ''}
+            {statusFilter === 'active' ? '做真题或模拟题时，答错的题目会自动收录到这里；闪卡点"✗ 忘了"也会记录' : ''}
           </p>
         </div>
       ) : (
@@ -185,7 +217,7 @@ export default function MistakesView({ courseId, defaultTab }: { courseId?: stri
             <MistakeCard key={m.question_id} mistake={m} onMaster={master} onRemove={remove} />
           ))}
         </div>
-      )}
+      ))}
       </>}
     </div>
   )
@@ -199,8 +231,8 @@ function NotesTab({ courseId, onAddNote }: { courseId?: string; onAddNote: () =>
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
 
   useEffect(() => {
-    api.notes.list(courseId).then(setNotes).finally(() => setLoading(false))
-  }, [courseId])
+    api.notes.list(undefined).then(setNotes).finally(() => setLoading(false))
+  }, [])
 
   async function handleDelete(noteId: number) {
     setNotes(prev => prev.filter(n => n.id !== noteId))
@@ -597,6 +629,52 @@ function PracticeMode({
             {isLastCard ? '完成 ✓' : '下一题 →'}
           </button>
         </div>
+      )}
+    </div>
+  )
+}
+
+// ── Flashcard Mistake Card ────────────────────────────────────────────────────
+
+function FlashcardMistakeCard({
+  mistake: m,
+  onMaster,
+  onRemove,
+}: {
+  mistake: FlashcardMistake
+  onMaster: () => void
+  onRemove: () => void
+}) {
+  return (
+    <div className="glass p-4 rounded-xl space-y-2"
+      style={{
+        border: m.mistake_status === 'mastered'
+          ? '1px solid rgba(34,197,94,0.18)'
+          : '1px solid rgba(167,139,250,0.15)',
+      }}>
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs px-2 py-0.5 rounded-full font-medium"
+          style={{ background: 'rgba(167,139,250,0.12)', color: '#A78BFA', border: '1px solid rgba(167,139,250,0.25)' }}>
+          🎴 {m.card_type === 'vocab' ? '词汇卡' : '选择题'}
+        </span>
+        {m.mistake_status === 'mastered' && (
+          <span className="text-xs px-2 py-0.5 rounded-full"
+            style={{ background: 'rgba(34,197,94,0.1)', color: '#22C55E', border: '1px solid rgba(34,197,94,0.2)' }}>
+            ✓ 已掌握
+          </span>
+        )}
+        <button onClick={onRemove} className="ml-auto p-1 rounded" style={{ color: '#444' }}>
+          <Trash2 size={13} />
+        </button>
+      </div>
+      <p className="text-sm font-medium text-white leading-relaxed">{m.card_front}</p>
+      <p className="text-xs leading-relaxed" style={{ color: '#888' }}>答案：{m.card_back}</p>
+      {m.mistake_status === 'active' && (
+        <button onClick={onMaster}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
+          style={{ background: 'rgba(34,197,94,0.08)', color: '#22C55E', border: '1px solid rgba(34,197,94,0.2)' }}>
+          <CheckCircle size={12} /> 已掌握
+        </button>
       )}
     </div>
   )

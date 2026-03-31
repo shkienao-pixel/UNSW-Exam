@@ -374,7 +374,7 @@ export default function KnowledgeSummaryRenderer({ rawJson }: { rawJson: unknown
       {/* ── Left TOC (only when ≥ 3 groups) ── */}
       {hasToc && (
         <>
-          <div className="w-44 flex-shrink-0 pr-4">
+          <div className="w-64 flex-shrink-0 pr-4">
             <div className="sticky top-4 max-h-[calc(100vh-140px)] overflow-y-auto">
               <LangToggle />
               <p className="text-xs font-semibold mb-2 uppercase tracking-wider px-1" style={{ color: '#444' }}>目录</p>
@@ -382,7 +382,7 @@ export default function KnowledgeSummaryRenderer({ rawJson }: { rawJson: unknown
                 <button
                   key={i}
                   onClick={() => navTo(i)}
-                  className="w-full text-left py-1.5 px-2 rounded-lg transition-all hover:bg-white/5 flex items-center gap-1.5"
+                  className="w-full text-left py-2 px-3 rounded-lg transition-all hover:bg-white/5 flex items-center gap-2"
                   style={{
                     color: activeGroup === i ? '#e6cf98' : '#555',
                     background: activeGroup === i ? 'rgba(200,165,90,0.07)' : 'transparent',
@@ -390,11 +390,11 @@ export default function KnowledgeSummaryRenderer({ rawJson }: { rawJson: unknown
                 >
                   <span
                     className="text-xs font-mono flex-shrink-0"
-                    style={{ color: activeGroup === i ? '#c8a55a' : '#444', minWidth: 24 }}
+                    style={{ color: activeGroup === i ? '#c8a55a' : '#444', minWidth: 28 }}
                   >
                     {g.label}
                   </span>
-                  <span className="text-xs truncate leading-snug">{g.title}</span>
+                  <span className="text-sm truncate leading-snug">{g.title}</span>
                 </button>
               ))}
             </div>

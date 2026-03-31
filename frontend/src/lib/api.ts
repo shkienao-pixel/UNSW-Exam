@@ -3,7 +3,7 @@ import type {
   GenerateBody, AskResponse, ExplainImageResponse,
   ReviewSettings, ReviewNodeProgress, ReviewNodeUpdate, TodayPlanResult,
   DocType, Feedback, FeedbackStatus, CourseContentStatus,
-  ExamQuestion, PastExamFile, MockSession, GradeResult, ExamQuestionsResponse, StoredMistake, UserNote,
+  ExamQuestion, PastExamFile, MockSession, GradeResult, ExamQuestionsResponse, StoredMistake, UserNote, FlashcardMistake,
 } from './types'
 
 export type StreamEvent =
@@ -523,5 +523,30 @@ export const api = {
 
     delete: (noteId: number) =>
       req<{ ok: boolean }>(`/notes/${noteId}`, { method: 'DELETE' }),
+  },
+
+  flashcardMistakes: {
+    add: (courseId: string, body: {
+      output_id: number; card_index: number
+      card_front: string; card_back: string; card_type: string
+    }) =>
+      req<FlashcardMistake>(`/courses/${courseId}/flashcard-mistakes`, {
+        method: 'POST', body: JSON.stringify(body),
+      }),
+
+    list: (courseId: string, status?: string) => {
+      const qs = status && status !== 'all' ? `?status=${status}` : ''
+      return req<FlashcardMistake[]>(`/courses/${courseId}/flashcard-mistakes${qs}`)
+    },
+
+    update: (courseId: string, id: number, mistakeStatus: 'active' | 'mastered') =>
+      req<{ ok: boolean }>(`/courses/${courseId}/flashcard-mistakes/${id}`, {
+        method: 'PATCH', body: JSON.stringify({ mistake_status: mistakeStatus }),
+      }),
+
+    delete: (courseId: string, id: number) =>
+      req<{ ok: boolean }>(`/courses/${courseId}/flashcard-mistakes/${id}`, {
+        method: 'DELETE',
+      }),
   },
 }
