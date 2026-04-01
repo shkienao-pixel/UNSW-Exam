@@ -109,6 +109,7 @@ def get_questions(
         q = q.eq("mock_session_id", mock_session_id).eq("source_type", "mock")
 
     rows = q.order("question_index").execute().data or []
+    rows = [exam_service._normalize_past_exam_question(row) for row in rows]
 
     if rows:
         q_ids = [r["id"] for r in rows]

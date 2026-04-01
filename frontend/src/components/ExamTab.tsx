@@ -124,6 +124,44 @@ function formatDate(value: string, lang: 'zh' | 'en') {
   })
 }
 
+function getRenderableOptions(question: ExamQuestion) {
+  const direct = (question.options || []).map(option => String(option).trim()).filter(Boolean)
+  if (direct.length >= 4) return direct.slice(0, 4)
+
+  const text = (question.question_text || '').replace(/\r\n/g, '\n')
+  const matches = [...text.matchAll(/(?:^|\n)\s*(?:\(?([A-D])\)?[.)])\s*([\s\S]+?)(?=(?:\n\s*\(?[A-D]\)?[.)]\s*)|\Z)/g)]
+  if (matches.length < 4) return direct
+
+  const ordered = matches
+    .slice(0, 4)
+    .sort((a, b) => a.index! - b.index!)
+
+  const labels = ordered.map(match => (match[1] || '').toUpperCase())
+  if (labels.join('') !== 'ABCD') return direct
+
+  return ordered.map(match => match[2].replace(/\s+/g, ' ').trim())
+}
+
+function isLikelyMcqStem(question: ExamQuestion) {
+  const text = question.question_text || ''
+  const lines = text
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+  const headLine = lines[0] || text
+
+  const mcqPhrase =
+    /\b(which|what)\s+(one\s+of\s+)?the\s+following\b|\bwhich statement\b|\bwhich option\b|\bbest describes?\b|\bbest matches?\b|\bmost likely\b|\b(?:is|are)\s+incorrect\b|\b(?:is|are)\s+correct\b/i.test(
+      text
+    )
+
+  const structuredStem =
+    /\bfollowing\s+(algorithm|kernel|filter|matrix|diagram|figure|table)\b/i.test(headLine) &&
+    (headLine.trim().endsWith(':') || lines.slice(1).some(line => /^step\s*\d+\s*:/i.test(line)))
+
+  return mcqPhrase || structuredStem
+}
+
 export default function ExamTab({ courseId }: { courseId: string }) {
   const [mode, setMode] = useState<ExamMode>('past_exam')
   const [phase, setPhase] = useState<Phase>('select')
@@ -1084,6 +1122,9 @@ function QuestionPanel({
   onAnswer: (value: string) => void
 }) {
   const [lightbox, setLightbox] = useState(false)
+  const renderableOptions = getRenderableOptions(question)
+  const treatAsMcq = question.question_type === 'mcq' || isLikelyMcqStem(question)
+  const missingMcqOptions = treatAsMcq && renderableOptions.length < 4
 
   return (
     <div className="space-y-4">
@@ -1108,6 +1149,20 @@ function QuestionPanel({
             >
               <AlertCircle size={16} />
               {tt(lang, '这道题依赖图表，但图像暂时没有自动提取出来，请结合原试卷查看。', 'This question depends on a figure, but the image could not be extracted automatically. Please refer to the original paper if needed.')}
+            </div>
+          )}
+
+          {missingMcqOptions && (
+            <div
+              className="flex items-center gap-2 rounded-2xl px-4 py-3 text-sm"
+              style={{ background: 'rgba(239,68,68,0.08)', color: '#991b1b', border: '1px solid rgba(239,68,68,0.18)' }}
+            >
+              <AlertCircle size={16} />
+              {tt(
+                lang,
+                '这道选择题的选项在提取时缺失了。重新抽取后会优先保留整页图像；当前请点击图片查看原页内容。',
+                'The answer options for this MCQ were lost during extraction. Re-extraction will now preserve the full page image first; for now, click the image to inspect the original page.'
+              )}
             </div>
           )}
 
@@ -1142,9 +1197,9 @@ function QuestionPanel({
             </>
           )}
 
-          {question.question_type === 'mcq' && question.options ? (
+          {treatAsMcq && renderableOptions.length >= 4 ? (
             <div className="space-y-3">
-              {question.options.map((option, index) => {
+              {renderableOptions.map((option, index) => {
                 const letter = LETTERS[index] || String(index + 1)
                 const chosen = getChoiceLetter(answer) === letter
                 return (
@@ -1172,7 +1227,7 @@ function QuestionPanel({
                 )
               })}
             </div>
-          ) : (
+          ) : !treatAsMcq ? (
             <div className="space-y-2">
               <label className="text-sm font-medium" style={{ color: '#475569' }}>
                 {tt(lang, '你的答案', 'Your Answer')}
@@ -1192,7 +1247,7 @@ function QuestionPanel({
                 }}
               />
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </div>
@@ -1213,6 +1268,8 @@ function QuestionReviewPanel({
   const tone = getResultTone(result)
   const selectedLetter = getChoiceLetter(answer)
   const correctLetter = getChoiceLetter(question.correct_answer)
+  const renderableOptions = getRenderableOptions(question)
+  const treatAsMcq = question.question_type === 'mcq' || isLikelyMcqStem(question)
 
   return (
     <div className="space-y-4">
@@ -1224,9 +1281,9 @@ function QuestionReviewPanel({
             </p>
           </div>
 
-          {question.question_type === 'mcq' && question.options ? (
+          {treatAsMcq && renderableOptions.length >= 4 ? (
             <div className="space-y-3">
-              {question.options.map((option, index) => {
+              {renderableOptions.map((option, index) => {
                 const letter = LETTERS[index] || String(index + 1)
                 const chosen = selectedLetter === letter
                 const correct = correctLetter === letter
@@ -1277,7 +1334,7 @@ function QuestionReviewPanel({
                 )
               })}
             </div>
-          ) : (
+          ) : !treatAsMcq ? (
             <div className="grid gap-4 lg:grid-cols-2">
               <ReviewAnswerBlock
                 title={tt(lang, '你的答案', 'Your answer')}
@@ -1295,6 +1352,18 @@ function QuestionReviewPanel({
                 toneText="#166534"
               />
             </div>
+          ) : (
+            <ReviewAnswerBlock
+              title={tt(lang, '选项缺失', 'Missing options')}
+              content={tt(
+                lang,
+                '这道选择题在抽题时没有拿到完整选项。建议重新提取该真题文件后再做。',
+                'This MCQ was extracted without its full answer options. Re-extract the past paper to repair it.'
+              )}
+              toneBorder="rgba(239,68,68,0.22)"
+              toneBg="rgba(239,68,68,0.06)"
+              toneText="#991b1b"
+            />
           )}
         </div>
       </div>

@@ -192,21 +192,27 @@ export default function SummaryTab({ courseId }: { courseId: string }) {
     const WEIGHT_DOT: Record<string, string> = { high: '#FF6B6B', medium: '#FFD700', low: '#444' }
     return (
       <div className="flex gap-0 min-h-[70vh]">
-        <div className="w-64 flex-shrink-0 pr-4">
-          <div className="sticky top-4 space-y-0.5 max-h-[calc(100vh-140px)] overflow-y-auto">
-            <p className="text-xs font-semibold mb-3 uppercase tracking-wider" style={{ color: '#555' }}>章节</p>
+        <div className="w-[280px] xl:w-[300px] flex-shrink-0 pr-5">
+          <div
+            className="sticky top-4 max-h-[calc(100vh-132px)] overflow-y-auto rounded-[24px] px-3 py-4"
+            style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}
+          >
+            <p className="text-[11px] font-semibold mb-3 uppercase tracking-[0.24em] px-2" style={{ color: '#666' }}>章节</p>
             {schema.sections.map((sec, i) => (
               <button key={i} onClick={() => scrollToSection(i)}
-                className="w-full text-left text-sm py-2 px-3 rounded-lg transition-all hover:bg-white/5 leading-snug flex items-center gap-2"
-                style={{ color: activeSectionIdx === i ? '#FFD700' : '#888', background: activeSectionIdx === i ? 'rgba(255,215,0,0.06)' : 'transparent' }}>
-                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                className="w-full text-left text-[13px] py-2.5 px-3.5 rounded-xl transition-all hover:bg-white/5 leading-snug flex items-center gap-3"
+                style={{
+                  color: activeSectionIdx === i ? '#FFD700' : '#8b8b92',
+                  background: activeSectionIdx === i ? 'rgba(255,215,0,0.08)' : 'transparent',
+                }}>
+                <span className="w-2 h-2 rounded-full flex-shrink-0"
                   style={{ background: WEIGHT_DOT[sec.exam_weight] ?? '#444' }} />
-                <span className="truncate">{sec.heading}</span>
+                <span className="truncate font-medium">{sec.heading}</span>
               </button>
             ))}
           </div>
         </div>
-        <div className="w-px flex-shrink-0 mr-6" style={{ background: 'rgba(255,255,255,0.06)' }} />
+        <div className="w-px flex-shrink-0 mr-7" style={{ background: 'rgba(255,255,255,0.06)' }} />
         <div className="flex-1 min-w-0">
           {error && <p className="text-sm mb-4" style={{ color: '#FF6666' }}>{error}</p>}
           <SummarySchemaRenderer schema={schema} onTocClick={scrollToSection} />
@@ -222,15 +228,18 @@ export default function SummaryTab({ courseId }: { courseId: string }) {
     <div className="flex gap-0 min-h-[70vh]">
       {toc.length > 0 && (
         <>
-          <div className="w-64 flex-shrink-0 pr-4">
-            <div className="sticky top-4 space-y-0.5 max-h-[calc(100vh-140px)] overflow-y-auto">
-              <p className="text-xs font-semibold mb-3 uppercase tracking-wider" style={{ color: '#555' }}>目录</p>
+          <div className="w-[280px] xl:w-[300px] flex-shrink-0 pr-5">
+            <div
+              className="sticky top-4 space-y-0.5 max-h-[calc(100vh-132px)] overflow-y-auto rounded-[24px] px-3 py-4"
+              style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}
+            >
+              <p className="text-[11px] font-semibold mb-3 uppercase tracking-[0.24em] px-2" style={{ color: '#666' }}>目录</p>
               {toc.map((item, i) => (
                 <button key={i} onClick={() => scrollTo(item.id)}
-                  className="w-full text-left text-sm py-2 rounded-lg transition-all hover:bg-white/5 leading-snug"
+                  className="w-full text-left text-[13px] py-2.5 rounded-xl transition-all hover:bg-white/5 leading-snug"
                   style={{
                     color: item.level === 1 ? '#FFD700' : item.level === 2 ? '#CCC' : '#888',
-                    paddingLeft: item.level <= 2 ? '10px' : '22px',
+                    paddingLeft: item.level <= 2 ? '14px' : '28px',
                     fontWeight: item.level <= 2 ? 600 : 400,
                   }}>
                   {item.title}
@@ -238,7 +247,7 @@ export default function SummaryTab({ courseId }: { courseId: string }) {
               ))}
             </div>
           </div>
-          <div className="w-px flex-shrink-0 mr-6" style={{ background: 'rgba(255,255,255,0.06)' }} />
+          <div className="w-px flex-shrink-0 mr-7" style={{ background: 'rgba(255,255,255,0.06)' }} />
         </>
       )}
 

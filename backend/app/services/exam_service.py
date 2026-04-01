@@ -47,7 +47,8 @@ _VISION_SYSTEM = (
     "  9. When has_visual=true, provide visual_y_start_pct and visual_y_end_pct (0–100, % from top of page):\n"
     "     - Cover ONLY the visual element(s), NOT the question text.\n"
     "     - Extend 2–3% above and below the visual element to avoid clipping.\n"
-    "     - If multiple visuals belong to one question, span all of them in a single range.\n\n"
+    "     - If multiple visuals belong to one question, span all of them in a single range.\n"
+    "  10. For MCQ questions, ALWAYS extract all answer options even if they appear below a figure or table.\n\n"
     "Field 2 — \"page_has_visual\": boolean — true if the page contains ANY visual element.\n\n"
     "Return ONLY a raw JSON object — no markdown fences, no extra text.\n"
     "Format: {\"page_has_visual\": true/false, \"questions\": [{\"question_index\":1,\"question_type\":\"mcq\","
@@ -93,6 +94,81 @@ def _has_significant_images(doc) -> bool:
             if w > _SIGNIFICANT_IMAGE_PX and h > _SIGNIFICANT_IMAGE_PX:
                 return True
     return False
+
+
+def _extract_inline_mcq_options(question_text: str) -> tuple[str, list[str] | None]:
+    """Try to recover MCQ options if the parser embedded them into question_text."""
+    import re
+
+    text = (question_text or "").replace("\r\n", "\n")
+    if not text.strip():
+        return question_text, None
+
+    pattern = re.compile(
+        r"(?:^|\n)\s*(?:\(?([A-D])\)?[.)])\s*(.+?)(?=(?:\n\s*\(?[A-D]\)?[.)]\s*)|\Z)",
+        re.S,
+    )
+    matches = list(pattern.finditer(text))
+    if len(matches) < 4:
+        return question_text, None
+
+    ordered = sorted(matches, key=lambda m: m.start())
+    labels = [m.group(1).upper() for m in ordered[:4]]
+    if labels != ["A", "B", "C", "D"]:
+        return question_text, None
+
+    options = [" ".join(m.group(2).split()) for m in ordered[:4]]
+    stem = text[: ordered[0].start()].strip()
+    return stem or question_text, options
+
+
+def _normalize_past_exam_question(q: dict[str, Any]) -> dict[str, Any]:
+    """Repair imperfect OCR/vision output before storing."""
+    import re
+
+    row = dict(q)
+    q_type = row.get("question_type", "short_answer")
+    row["question_text"] = str(row.get("question_text", "")).strip()
+    lines = [line.strip() for line in row["question_text"].splitlines() if line.strip()]
+    head_line = lines[0] if lines else row["question_text"]
+
+    mcq_phrase = re.search(
+        (
+            r"\b(which|what)\s+(one\s+of\s+)?the\s+following\b"
+            r"|\bwhich statement\b"
+            r"|\bwhich option\b"
+            r"|\bbest describes?\b"
+            r"|\bbest matches?\b"
+            r"|\bmost likely\b"
+            r"|\b(?:is|are)\s+incorrect\b"
+            r"|\b(?:is|are)\s+correct\b"
+        ),
+        row["question_text"],
+        re.I,
+    )
+    structured_mcq_stem = bool(
+        re.search(r"\bfollowing\s+(algorithm|kernel|filter|matrix|diagram|figure|table)\b", head_line, re.I)
+        and (
+            head_line.rstrip().endswith(":")
+            or any(re.match(r"step\s*\d+\s*:", line, re.I) for line in lines[1:])
+        )
+    )
+
+    if q_type != "mcq" and (mcq_phrase or structured_mcq_stem):
+        q_type = "mcq"
+        row["question_type"] = "mcq"
+
+    if q_type == "mcq":
+        options = row.get("options") or []
+        options = [str(opt).strip() for opt in options if str(opt).strip()]
+        if len(options) < 4:
+            stem, parsed = _extract_inline_mcq_options(row["question_text"])
+            if parsed:
+                row["question_text"] = stem
+                options = parsed
+        row["options"] = options[:4] if options else None
+
+    return row
 
 
 def _merge_cross_page_questions(questions: list[dict]) -> list[dict]:
@@ -145,6 +221,7 @@ def _insert_past_exam_questions(supabase: Client, questions: list[dict], course_
     """Build rows and insert past_exam questions into exam_questions table."""
     rows = []
     for q in questions:
+        q = _normalize_past_exam_question(q)
         if not q.get("question_text"):
             continue
         rows.append({
@@ -227,6 +304,7 @@ def _extract_questions_vision(data: bytes, openai_key: str, supabase: Client, ar
         mat = fitz.Matrix(1.5, 1.5)  # 108 DPI — sufficient for Vision, 40% smaller than 2x
         pix = page.get_pixmap(matrix=mat)
         b64 = base64.b64encode(pix.tobytes("png")).decode()
+        full_page_jpeg = pix.tobytes("jpeg", 88)
 
         try:
             resp = client.chat.completions.create(
@@ -257,6 +335,7 @@ def _extract_questions_vision(data: bytes, openai_key: str, supabase: Client, ar
         page_w_pt = page_rect.width
         pad_pt = 10.0  # small padding around the visual element only
         for q in page_qs:
+            q = _normalize_past_exam_question(q)
             if not q.get("question_text"):
                 continue
             q_image_url: str | None = None
@@ -274,7 +353,9 @@ def _extract_questions_vision(data: bytes, openai_key: str, supabase: Client, ar
                     clip = fitz.Rect(0, y_start_pt, page_w_pt, y_end_pt)
                     crop_pix = page.get_pixmap(matrix=mat, clip=clip)
                     crop_jpeg = crop_pix.tobytes("jpeg", 88)
-                    q_image_url = _upload_page_image(supabase, crop_jpeg, artifact_id, page_num, global_index)
+                    mcq_options = q.get("options") or []
+                    image_bytes = full_page_jpeg if q.get("question_type") == "mcq" and len(mcq_options) < 4 else crop_jpeg
+                    q_image_url = _upload_page_image(supabase, image_bytes, artifact_id, page_num, global_index)
             q["question_index"] = global_index
             q["page_image_url"] = q_image_url
             all_questions.append(q)
@@ -530,6 +611,23 @@ def _build_mock_reference(past_rows: list[dict], num_mcq: int, num_short: int) -
     )
 
 
+def _build_mock_visual_reference(visual_rows: list[dict], target_visual: int) -> str:
+    refs: list[str] = []
+    for idx, row in enumerate(visual_rows[: min(8, len(visual_rows))], 1):
+        refs.append(
+            f"[V{idx}] type={row.get('question_type')} "
+            f"Q{row.get('question_index')}: {_trim_prompt_text(row.get('question_text', ''), 220)}"
+        )
+    return (
+        f"Visual references available: {len(visual_rows)}\n"
+        f"Target visual mock questions: {target_visual}\n"
+        "When you want a generated question to use one of these visuals, return visual_ref as V1/V2/... .\n"
+        "If a question does not use a visual, return visual_ref as null.\n\n"
+        "Available visual references:\n"
+        + ("\n".join(refs) if refs else "- none")
+    )
+
+
 def _normalize_mock_questions(questions: list[dict], num_mcq: int, num_short: int) -> list[dict]:
     """Keep valid generated questions, enforce counts, and re-sequence them."""
     cleaned: list[dict] = []
@@ -553,6 +651,7 @@ def _normalize_mock_questions(questions: list[dict], num_mcq: int, num_short: in
                 "options": [str(opt).strip() for opt in options[:4]],
                 "correct_answer": str(row.get("correct_answer", "")).strip().upper()[:1] or None,
                 "explanation": row.get("explanation"),
+                "visual_ref": row.get("visual_ref"),
             })
         else:
             if short_seen >= num_short:
@@ -564,6 +663,7 @@ def _normalize_mock_questions(questions: list[dict], num_mcq: int, num_short: in
                 "options": None,
                 "correct_answer": row.get("correct_answer"),
                 "explanation": row.get("explanation"),
+                "visual_ref": row.get("visual_ref"),
             })
 
     ordered = [q for q in cleaned if q["question_type"] == "mcq"] + [
@@ -589,7 +689,7 @@ def run_mock_generation(db: Client, user_id: str, course_id: str, body: Any) -> 
 
     past_rows = (
         db.table("exam_questions")
-        .select("artifact_id, question_index, question_type, question_text, options, correct_answer")
+        .select("artifact_id, question_index, question_type, question_text, options, correct_answer, has_visual, page_image_url")
         .eq("course_id", course_id)
         .eq("source_type", "past_exam")
         .order("artifact_id", desc=True)
@@ -603,6 +703,15 @@ def run_mock_generation(db: Client, user_id: str, course_id: str, body: Any) -> 
         raise AppError("没有找到往年真题，请先上传并审核 past_exam 类型文件")
 
     past_sample = _build_mock_reference(past_rows, num_mcq, num_short)
+    visual_rows = [
+        row for row in past_rows
+        if row.get("has_visual") and row.get("page_image_url")
+    ]
+    target_visual = min(len(visual_rows), max(1, min(num_mcq, (num_mcq + num_short) // 4))) if visual_rows else 0
+    visual_sample = _build_mock_visual_reference(visual_rows, target_visual) if visual_rows else "Visual references available: 0"
+    visual_ref_map = {
+        f"V{idx}": row for idx, row in enumerate(visual_rows[: min(8, len(visual_rows))], 1)
+    }
 
     system = (
         "You are a careful university exam-paper writer.\n"
@@ -614,6 +723,9 @@ def run_mock_generation(db: Client, user_id: str, course_id: str, body: Any) -> 
         "3. Preserve the course's exam feel, not just the topic coverage.\n"
         "4. For MCQ: provide exactly 4 options as plain text, one correct answer (A/B/C/D), and a short explanation.\n"
         "5. For short_answer: provide a concise reference answer that a marker could use.\n"
+        f"6. If visual references are available, create {target_visual} generated questions that explicitly use one of them.\n"
+        "   For those questions set visual_ref to the chosen reference id such as V1. Otherwise set visual_ref to null.\n"
+        "   The question must genuinely depend on the referenced visual to answer it.\n"
         f"6. Number sequentially: MCQ first (indices 1–{num_mcq}), "
         f"then short_answer (indices {num_mcq + 1}–{num_mcq + num_short}).\n"
         "7. Return ONLY a raw JSON array — no markdown fences, no extra text.\n\n"
@@ -631,7 +743,10 @@ def run_mock_generation(db: Client, user_id: str, course_id: str, body: Any) -> 
             system,
             "Use the following real-paper evidence as style reference.\n"
             "First infer the common exam voice and structure, then write the new paper.\n\n"
-            f"{past_sample}",
+            f"{past_sample}\n\n{visual_sample}\n\n"
+            "Additional output rule:\n"
+            "Return visual_ref for each generated question. Use null for non-visual questions.\n"
+            "If you use a visual reference, set visual_ref to V1/V2/etc and write a question that depends on that visual.",
             openai_key,
             temperature=0.55,
             top_p=0.9,
@@ -656,6 +771,8 @@ def run_mock_generation(db: Client, user_id: str, course_id: str, body: Any) -> 
     for q in questions:
         if not q.get("question_text"):
             continue
+        visual_ref = str(q.get("visual_ref") or "").strip().upper()
+        visual_row = visual_ref_map.get(visual_ref) if visual_ref else None
         rows_to_insert.append({
             "course_id":      course_id,
             "artifact_id":    None,
@@ -667,6 +784,8 @@ def run_mock_generation(db: Client, user_id: str, course_id: str, body: Any) -> 
             "correct_answer": q.get("correct_answer"),
             "explanation":    q.get("explanation"),
             "mock_session_id": session_id,
+            "page_image_url": visual_row.get("page_image_url") if visual_row else None,
+            "has_visual": bool(visual_row),
         })
 
     if not rows_to_insert:

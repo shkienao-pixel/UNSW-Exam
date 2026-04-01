@@ -374,32 +374,35 @@ export default function KnowledgeSummaryRenderer({ rawJson }: { rawJson: unknown
       {/* ── Left TOC (only when ≥ 3 groups) ── */}
       {hasToc && (
         <>
-          <div className="w-64 flex-shrink-0 pr-4">
-            <div className="sticky top-4 max-h-[calc(100vh-140px)] overflow-y-auto">
+          <div className="w-[280px] xl:w-[300px] flex-shrink-0 pr-5">
+            <div
+              className="sticky top-4 max-h-[calc(100vh-132px)] overflow-y-auto rounded-[24px] px-3 py-4"
+              style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}
+            >
               <LangToggle />
-              <p className="text-xs font-semibold mb-2 uppercase tracking-wider px-1" style={{ color: '#444' }}>目录</p>
+              <p className="text-[11px] font-semibold mb-3 uppercase tracking-[0.24em] px-2" style={{ color: '#666' }}>目录</p>
               {data.groups.map((g, i) => (
                 <button
                   key={i}
                   onClick={() => navTo(i)}
-                  className="w-full text-left py-2 px-3 rounded-lg transition-all hover:bg-white/5 flex items-center gap-2"
+                  className="w-full text-left py-2.5 px-3.5 rounded-xl transition-all hover:bg-white/5 flex items-center gap-3"
                   style={{
-                    color: activeGroup === i ? '#e6cf98' : '#555',
-                    background: activeGroup === i ? 'rgba(200,165,90,0.07)' : 'transparent',
+                    color: activeGroup === i ? '#e6cf98' : '#8b8b92',
+                    background: activeGroup === i ? 'rgba(200,165,90,0.08)' : 'transparent',
                   }}
                 >
                   <span
                     className="text-xs font-mono flex-shrink-0"
-                    style={{ color: activeGroup === i ? '#c8a55a' : '#444', minWidth: 28 }}
+                    style={{ color: activeGroup === i ? '#c8a55a' : '#555', minWidth: 32 }}
                   >
                     {g.label}
                   </span>
-                  <span className="text-sm truncate leading-snug">{g.title}</span>
+                  <span className="text-[13px] truncate leading-snug font-medium">{g.title}</span>
                 </button>
               ))}
             </div>
           </div>
-          <div className="w-px flex-shrink-0 mr-6" style={{ background: 'rgba(255,255,255,0.06)' }} />
+          <div className="w-px flex-shrink-0 mr-7" style={{ background: 'rgba(255,255,255,0.06)' }} />
         </>
       )}
 
