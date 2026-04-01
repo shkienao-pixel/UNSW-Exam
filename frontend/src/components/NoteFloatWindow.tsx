@@ -1,22 +1,23 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { NotebookPen, X, ImagePlus, Loader2, Check, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { NotebookPen, X, Check, Loader2 } from 'lucide-react'
 import { useNoteFloat } from '@/lib/note-float-context'
 import { api } from '@/lib/api'
-import type { UserNote } from '@/lib/types'
+import DynamicBlockNoteEditor from '@/components/notes/DynamicBlockNoteEditor'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const DEFAULT_W = 440
-const DEFAULT_H = 520
-const MIN_W = 320
+const DEFAULT_W = 560
+const DEFAULT_H = 560
+const MIN_W = 380
 const MIN_H = 400
 const POS_KEY = 'note_float_pos'
 const SIZE_KEY = 'note_float_size'
+const SAVE_DEBOUNCE_MS = 1200
 
 type ResizeDir = 'e' | 's' | 'se'
-type TabId = 'upload' | 'all'
+type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
 function loadPos(): { x: number; y: number } | null {
   if (typeof window === 'undefined') return null
@@ -44,74 +45,7 @@ function loadSize(): { w: number; h: number } {
   } catch { return { w: DEFAULT_W, h: DEFAULT_H } }
 }
 
-// ── NoteCard ──────────────────────────────────────────────────────────────────
-
-function NoteCard({ note, onZoom, onDelete }: {
-  note: UserNote
-  onZoom: () => void
-  onDelete: () => void
-}) {
-  return (
-    <div className="rounded-lg overflow-hidden group"
-      style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
-      {/* Image row */}
-      <div className="relative" style={{ height: 90 }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={note.image_url} alt={note.caption || '笔记'}
-          className="w-full h-full object-cover cursor-zoom-in"
-          onClick={onZoom}
-        />
-        <button
-          onClick={onDelete}
-          className="absolute top-1 right-1 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-          style={{ background: 'rgba(0,0,0,0.7)', color: '#ff6b6b' }}>
-          <Trash2 size={11} />
-        </button>
-      </div>
-      {/* Caption */}
-      {note.caption && (
-        <p className="px-2 py-1 text-xs truncate" style={{ color: '#888' }}>{note.caption}</p>
-      )}
-      {/* Date */}
-      <p className="px-2 pb-1 text-xs" style={{ color: '#444' }}>
-        {new Date(note.created_at).toLocaleDateString('zh-CN')}
-      </p>
-    </div>
-  )
-}
-
-// ── Lightbox ──────────────────────────────────────────────────────────────────
-
-function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
-  useEffect(() => {
-    const fn = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', fn)
-    return () => window.removeEventListener('keydown', fn)
-  }, [onClose])
-
-  return (
-    <div
-      className="fixed inset-0 z-[70] flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.88)' }}
-      onClick={onClose}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={src} alt="笔记全屏"
-        style={{ maxWidth: '92vw', maxHeight: '92vh', objectFit: 'contain', borderRadius: '0.75rem' }}
-        onClick={e => e.stopPropagation()}
-      />
-      <button onClick={onClose}
-        className="absolute top-4 right-4 p-2 rounded-full"
-        style={{ background: 'rgba(255,255,255,0.1)', color: '#fff' }}>
-        <X size={18} />
-      </button>
-    </div>
-  )
-}
-
-// ── FAB (floating action button) ──────────────────────────────────────────────
+// ── FAB ───────────────────────────────────────────────────────────────────────
 
 function NoteFab({ onClick, pos, onDragEnd }: {
   onClick: () => void
@@ -134,19 +68,17 @@ function NoteFab({ onClick, pos, onDragEnd }: {
     const dx = e.clientX - dragRef.current.startX
     const dy = e.clientY - dragRef.current.startY
     if (Math.sqrt(dx * dx + dy * dy) > 4) movedRef.current = true
-    const nx = Math.max(0, Math.min(window.innerWidth - 52, dragRef.current.btnX + dx))
-    const ny = Math.max(0, Math.min(window.innerHeight - 52, dragRef.current.btnY + dy))
-    setFabPos({ x: nx, y: ny })
+    setFabPos({
+      x: Math.max(0, Math.min(window.innerWidth - 52, dragRef.current.btnX + dx)),
+      y: Math.max(0, Math.min(window.innerHeight - 52, dragRef.current.btnY + dy)),
+    })
   }
 
   function onMouseUp() {
     window.removeEventListener('mousemove', onMouseMove)
     window.removeEventListener('mouseup', onMouseUp)
-    if (!movedRef.current) {
-      onClick()
-    } else {
-      onDragEnd(fabPos)
-    }
+    if (!movedRef.current) onClick()
+    else onDragEnd(fabPos)
     dragRef.current = null
   }
 
@@ -175,8 +107,7 @@ function NoteFab({ onClick, pos, onDragEnd }: {
 // ── Main window ───────────────────────────────────────────────────────────────
 
 export default function NoteFloatWindow() {
-  const { isOpen, courseId, courseName, openWindow, closeWindow } = useNoteFloat()
-
+  const { isOpen, courseId, openWindow, closeWindow } = useNoteFloat()
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
 
   const [size, setSize] = useState(loadSize)
@@ -191,96 +122,80 @@ export default function NoteFloatWindow() {
     return { x: window.innerWidth - 72, y: window.innerHeight - 180 }
   })
 
-  // Tab state
-  const [activeTab, setActiveTab] = useState<TabId>('upload')
-
-  // Upload state
-  const [preview, setPreview] = useState<string | null>(null)
-  const [imageFile, setImageFile] = useState<File | null>(null)
-  const [caption, setCaption] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [savedOk, setSavedOk] = useState(false)
-
-  // All notes (for notebook tab)
-  const [notes, setNotes] = useState<UserNote[]>([])
-  const [notesLoading, setNotesLoading] = useState(false)
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
-  const [saveError, setSaveError] = useState<string | null>(null)
-
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  // BlockNote content
+  const [initialContent, setInitialContent] = useState<unknown[]>([])
+  const [contentLoaded, setContentLoaded] = useState(false)
+  const [saveState, setSaveState] = useState<SaveState>('idle')
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Drag / resize refs
   const dragRef = useRef<{ startX: number; startY: number; winX: number; winY: number } | null>(null)
   const isResizing = useRef<ResizeDir | null>(null)
   const resizeStart = useRef({ mouseX: 0, mouseY: 0, w: 0, h: 0 })
 
-  // Load notes when window opens (only if notes not yet loaded)
+  // Load content when window opens
   useEffect(() => {
-    if (!isOpen) return
-    setNotesLoading(true)
-    api.notes.list(courseId ?? undefined).then(setNotes).catch(() => {}).finally(() => setNotesLoading(false))
-  }, [isOpen, courseId])
+    if (!isOpen || contentLoaded) return
+    api.notes.getBlock(courseId ?? undefined)
+      .then(data => {
+        setInitialContent(data.content ?? [])
+        setContentLoaded(true)
+      })
+      .catch(() => setContentLoaded(true))
+  }, [isOpen, courseId, contentLoaded])
 
-  // Paste support
+  // Reset on close so fresh load next open
   useEffect(() => {
-    if (!isOpen) return
-    function onPaste(e: ClipboardEvent) {
-      const items = e.clipboardData?.items
-      if (!items) return
-      for (const item of Array.from(items)) {
-        if (item.type.startsWith('image/')) {
-          const file = item.getAsFile()
-          if (file) {
-            setImageFromFile(file)
-            setActiveTab('upload')
-          }
-          break
-        }
-      }
+    if (!isOpen) {
+      setContentLoaded(false)
     }
-    window.addEventListener('paste', onPaste)
-    return () => window.removeEventListener('paste', onPaste)
   }, [isOpen])
 
-  // Global mouse move/up for drag + resize
+  const handleChange = useCallback((blocks: unknown[]) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    setSaveState('saving')
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        await api.notes.saveBlock(blocks, courseId ?? undefined)
+        setSaveState('saved')
+        setTimeout(() => setSaveState('idle'), 2000)
+      } catch {
+        setSaveState('error')
+      }
+    }, SAVE_DEBOUNCE_MS)
+  }, [courseId])
+
+  // Global drag/resize listeners
   useEffect(() => {
     if (!isOpen) return
 
     function onMouseMove(e: MouseEvent) {
-      // Resize
       if (isResizing.current) {
         const dir = isResizing.current
         const dx = e.clientX - resizeStart.current.mouseX
         const dy = e.clientY - resizeStart.current.mouseY
-        setSize(prev => {
-          const nw = dir === 's' ? prev.w : Math.max(MIN_W, Math.min(window.innerWidth - pos.x - 4, resizeStart.current.w + dx))
-          const nh = dir === 'e' ? prev.h : Math.max(MIN_H, Math.min(window.innerHeight - pos.y - 4, resizeStart.current.h + dy))
-          return { w: nw, h: nh }
-        })
+        setSize(prev => ({
+          w: dir === 's' ? prev.w : Math.max(MIN_W, Math.min(window.innerWidth - pos.x - 4, resizeStart.current.w + dx)),
+          h: dir === 'e' ? prev.h : Math.max(MIN_H, Math.min(window.innerHeight - pos.y - 4, resizeStart.current.h + dy)),
+        }))
         return
       }
-      // Drag
       if (!dragRef.current) return
-      const nx = Math.max(0, Math.min(window.innerWidth - size.w, dragRef.current.winX + e.clientX - dragRef.current.startX))
-      const ny = Math.max(0, Math.min(window.innerHeight - 60, dragRef.current.winY + e.clientY - dragRef.current.startY))
-      setPos({ x: nx, y: ny })
+      setPos({
+        x: Math.max(0, Math.min(window.innerWidth - size.w, dragRef.current.winX + e.clientX - dragRef.current.startX)),
+        y: Math.max(0, Math.min(window.innerHeight - 60, dragRef.current.winY + e.clientY - dragRef.current.startY)),
+      })
     }
 
     function onMouseUp() {
       if (isResizing.current) {
         isResizing.current = null
-        setSize(s => {
-          localStorage.setItem(SIZE_KEY, JSON.stringify(s))
-          return s
-        })
+        setSize(s => { localStorage.setItem(SIZE_KEY, JSON.stringify(s)); return s })
         return
       }
       if (dragRef.current) {
         dragRef.current = null
-        setPos(p => {
-          localStorage.setItem(POS_KEY, JSON.stringify(p))
-          return p
-        })
+        setPos(p => { localStorage.setItem(POS_KEY, JSON.stringify(p)); return p })
       }
     }
 
@@ -291,68 +206,6 @@ export default function NoteFloatWindow() {
       document.removeEventListener('mouseup', onMouseUp)
     }
   }, [isOpen, pos.x, pos.y, size.w])
-
-  function setImageFromFile(file: File) {
-    setImageFile(file)
-    setSavedOk(false)
-    const reader = new FileReader()
-    reader.onload = e => setPreview(e.target?.result as string)
-    reader.readAsDataURL(file)
-  }
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (file) setImageFromFile(file)
-    e.target.value = ''
-  }
-
-  async function handleSave() {
-    if (!imageFile) return
-    setSaving(true)
-    setSaveError(null)
-    try {
-      const note = await api.notes.upload(imageFile, caption, courseId ?? undefined)
-      setNotes(prev => [note, ...prev])
-      setPreview(null)
-      setImageFile(null)
-      setCaption('')
-      setSavedOk(true)
-      setTimeout(() => setSavedOk(false), 2000)
-      setActiveTab('all')
-    } catch (e) {
-      setSaveError(e instanceof Error ? e.message : '保存失败，请重试')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function handleDeleteNote(noteId: number) {
-    await api.notes.delete(noteId)
-    setNotes(prev => prev.filter(n => n.id !== noteId))
-  }
-
-  function clearImage() {
-    setPreview(null)
-    setImageFile(null)
-    setCaption('')
-  }
-
-  function onHeaderMouseDown(e: React.MouseEvent) {
-    dragRef.current = { startX: e.clientX, startY: e.clientY, winX: pos.x, winY: pos.y }
-  }
-
-  function onResizeMouseDown(dir: ResizeDir, e: React.MouseEvent) {
-    e.preventDefault()
-    e.stopPropagation()
-    isResizing.current = dir
-    resizeStart.current = { mouseX: e.clientX, mouseY: e.clientY, w: size.w, h: size.h }
-  }
-
-  // ── Render ─────────────────────────────────────────────────────────────────
-
-  if (lightboxSrc) {
-    return <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
-  }
 
   if (!isOpen) {
     return (
@@ -368,43 +221,28 @@ export default function NoteFloatWindow() {
   }
 
   const windowStyle: React.CSSProperties = isMobile
-    ? {
-        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 60,
-        borderRadius: '20px 20px 0 0',
-        maxHeight: '85dvh',
-      }
-    : {
-        position: 'fixed',
-        left: pos.x, top: pos.y,
-        width: size.w, height: size.h,
-        zIndex: 60,
-        borderRadius: 16,
-        minWidth: MIN_W, minHeight: MIN_H,
-      }
-
-  const sharedStyle: React.CSSProperties = {
-    background: 'rgba(7,8,15,0.97)',
-    border: '1px solid rgba(255,255,255,0.1)',
-    boxShadow: '0 32px 80px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.04)',
-    backdropFilter: 'blur(24px)',
-    WebkitBackdropFilter: 'blur(24px)',
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-  }
+    ? { position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 60, borderRadius: '20px 20px 0 0', maxHeight: '85dvh' }
+    : { position: 'fixed', left: pos.x, top: pos.y, width: size.w, height: size.h, zIndex: 60, borderRadius: 16, minWidth: MIN_W, minHeight: MIN_H }
 
   return (
     <>
       {isMobile && (
-        <div className="fixed inset-0 z-50"
-          style={{ background: 'rgba(0,0,0,0.5)' }}
-          onClick={closeWindow}
-        />
+        <div className="fixed inset-0 z-50" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={closeWindow} />
       )}
 
-      <div style={{ ...windowStyle, ...sharedStyle }}>
+      <div style={{
+        ...windowStyle,
+        background: 'rgba(7,8,15,0.97)',
+        border: '1px solid rgba(255,255,255,0.1)',
+        boxShadow: '0 32px 80px rgba(0,0,0,0.65)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}>
 
-        {/* ── Header ── */}
+        {/* Header */}
         <div
           className="flex items-center gap-2 px-4 shrink-0"
           style={{
@@ -413,211 +251,51 @@ export default function NoteFloatWindow() {
             cursor: isMobile ? 'default' : 'grab',
             userSelect: 'none',
           }}
-          onMouseDown={isMobile ? undefined : onHeaderMouseDown}
+          onMouseDown={isMobile ? undefined : e => {
+            dragRef.current = { startX: e.clientX, startY: e.clientY, winX: pos.x, winY: pos.y }
+          }}
         >
-          {isMobile && (
-            <div className="w-8 h-1 rounded-full mx-auto mb-1 absolute top-3 left-1/2 -translate-x-1/2"
-              style={{ background: 'rgba(255,255,255,0.15)' }} />
-          )}
           <NotebookPen size={15} style={{ color: '#A78BFA' }} />
-          <span className="text-sm font-semibold text-white flex-1">📝 笔记本</span>
-          {courseName && (
-            <span className="text-xs px-2 py-0.5 rounded-full"
-              style={{ background: 'rgba(167,139,250,0.1)', color: '#A78BFA', border: '1px solid rgba(167,139,250,0.2)' }}>
-              {courseName}
-            </span>
-          )}
+          <span className="text-sm font-semibold text-white flex-1">笔记本</span>
+
+          {/* Save indicator */}
+          <div className="flex items-center gap-1 text-xs" style={{ color: '#444' }}>
+            {saveState === 'saving' && <><Loader2 size={11} className="animate-spin" /> 保存中</>}
+            {saveState === 'saved' && <><Check size={11} style={{ color: '#22C55E' }} /><span style={{ color: '#22C55E' }}>已保存</span></>}
+            {saveState === 'error' && <span style={{ color: '#EF4444' }}>保存失败</span>}
+          </div>
+
           <button onClick={closeWindow}
-            className="p-1.5 rounded-lg transition-all hover:bg-white/8"
-            style={{ color: 'rgba(255,255,255,0.4)' }}>
+            className="p-1.5 rounded-lg transition-all hover:bg-white/8 ml-1"
+            style={{ color: 'rgba(255,255,255,0.4)' }}
+            onMouseDown={e => e.stopPropagation()}>
             <X size={15} />
           </button>
         </div>
 
-        {/* ── Tab Bar ── */}
-        <div className="flex shrink-0 px-4 pt-3 pb-0 gap-1"
-          onMouseDown={e => e.stopPropagation()}>
-          {([
-            { id: 'upload' as TabId, label: '上传笔记' },
-            { id: 'all' as TabId, label: `笔记本${notes.length > 0 ? ` (${notes.length})` : ''}` },
-          ]).map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
-              style={{
-                background: activeTab === tab.id ? 'rgba(167,139,250,0.15)' : 'transparent',
-                color: activeTab === tab.id ? '#A78BFA' : '#555',
-                border: `1px solid ${activeTab === tab.id ? 'rgba(167,139,250,0.3)' : 'transparent'}`,
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* ── Body ── */}
-        <div className="flex-1 overflow-y-auto no-scrollbar px-4 py-4 space-y-4">
-
-          {activeTab === 'upload' ? (
-            <>
-              {/* Paste zone / preview */}
-              {preview ? (
-                <div className="relative rounded-xl overflow-hidden border"
-                  style={{ borderColor: 'rgba(167,139,250,0.3)' }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={preview} alt="预览" className="w-full object-contain" style={{ maxHeight: 220, background: '#111' }} />
-                  <button onClick={clearImage}
-                    className="absolute top-2 right-2 p-1 rounded-lg"
-                    style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
-                    <X size={14} />
-                  </button>
-                </div>
-              ) : (
-                <div
-                  className="flex flex-col items-center justify-center gap-3 rounded-xl cursor-pointer"
-                  style={{
-                    height: 140,
-                    border: '1.5px dashed rgba(167,139,250,0.3)',
-                    background: 'rgba(167,139,250,0.04)',
-                  }}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <ImagePlus size={28} style={{ color: 'rgba(167,139,250,0.5)' }} />
-                  <div className="text-center">
-                    <p className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                      粘贴截图 或 点击上传
-                    </p>
-                    <p className="text-xs mt-0.5" style={{ color: '#444' }}>
-                      支持 Ctrl+V 直接粘贴 · JPG / PNG / WebP
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleFileChange}
-              />
-
-              {/* Caption input */}
-              <textarea
-                value={caption}
-                onChange={e => setCaption(e.target.value)}
-                placeholder="添加备注（可选）"
-                rows={2}
-                className="w-full resize-none rounded-xl px-3 py-2.5 text-sm outline-none transition-all"
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  color: '#DDD',
-                  lineHeight: 1.6,
-                }}
-              />
-
-              {/* Save error */}
-              {saveError && (
-                <p className="text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.1)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.2)' }}>
-                  {saveError}
-                </p>
-              )}
-
-              {/* Save button */}
-              <button
-                onClick={handleSave}
-                disabled={!imageFile || saving}
-                className="w-full py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{
-                  background: savedOk ? 'rgba(34,197,94,0.15)' : 'rgba(167,139,250,0.15)',
-                  color: savedOk ? '#22C55E' : '#A78BFA',
-                  border: `1px solid ${savedOk ? 'rgba(34,197,94,0.3)' : 'rgba(167,139,250,0.3)'}`,
-                }}
-              >
-                {saving
-                  ? <><Loader2 size={14} className="animate-spin" /> 上传中...</>
-                  : savedOk
-                    ? <><Check size={14} /> 已保存！</>
-                    : '保存到笔记本'}
-              </button>
-
-              {/* Quick link to notebook */}
-              {notes.length > 0 && (
-                <button
-                  onClick={() => setActiveTab('all')}
-                  className="w-full py-2 text-xs transition-all"
-                  style={{ color: '#555' }}
-                >
-                  查看全部 {notes.length} 条笔记 →
-                </button>
-              )}
-            </>
+        {/* Editor area */}
+        <div className="flex-1 overflow-y-auto" style={{ background: 'rgba(255,255,255,0.01)' }}>
+          {contentLoaded ? (
+            <DynamicBlockNoteEditor
+              initialContent={initialContent}
+              onChange={handleChange}
+            />
           ) : (
-            /* ── All Notes Tab ── */
-            <>
-              {notesLoading ? (
-                <div className="flex justify-center py-12">
-                  <Loader2 className="animate-spin" style={{ color: '#A78BFA' }} size={22} />
-                </div>
-              ) : notes.length === 0 ? (
-                <div className="text-center py-16" style={{ color: '#444' }}>
-                  <NotebookPen size={40} className="mx-auto mb-3 opacity-20" />
-                  <p className="text-sm text-white mb-1">暂无笔记</p>
-                  <p className="text-xs" style={{ color: '#555' }}>切换到「上传笔记」标签保存截图</p>
-                  <button
-                    onClick={() => setActiveTab('upload')}
-                    className="mt-4 px-4 py-2 rounded-xl text-xs font-medium"
-                    style={{ background: 'rgba(167,139,250,0.1)', color: '#A78BFA', border: '1px solid rgba(167,139,250,0.25)' }}
-                  >
-                    去上传
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {notes.map(note => (
-                    <NoteCard
-                      key={note.id}
-                      note={note}
-                      onZoom={() => setLightboxSrc(note.image_url)}
-                      onDelete={() => handleDeleteNote(note.id)}
-                    />
-                  ))}
-                </div>
-              )}
-            </>
+            <div className="flex items-center justify-center h-full" style={{ color: '#444' }}>
+              <Loader2 size={18} className="animate-spin" />
+            </div>
           )}
         </div>
 
-        {/* ── Resize handles (desktop only) ── */}
+        {/* Resize handles (desktop only) */}
         {!isMobile && (
           <>
-            {/* Right edge */}
-            <div
-              onMouseDown={e => onResizeMouseDown('e', e)}
-              style={{
-                position: 'absolute', top: 0, right: 0, width: 6, height: '100%',
-                cursor: 'ew-resize', zIndex: 10,
-              }}
-            />
-            {/* Bottom edge */}
-            <div
-              onMouseDown={e => onResizeMouseDown('s', e)}
-              style={{
-                position: 'absolute', bottom: 0, left: 0, width: '100%', height: 6,
-                cursor: 's-resize', zIndex: 10,
-              }}
-            />
-            {/* Bottom-right corner */}
-            <div
-              onMouseDown={e => onResizeMouseDown('se', e)}
-              style={{
-                position: 'absolute', bottom: 0, right: 0, width: 14, height: 14,
-                cursor: 'se-resize', zIndex: 11,
-                borderRadius: '0 0 16px 0',
-              }}
-            />
+            <div onMouseDown={e => { e.preventDefault(); e.stopPropagation(); isResizing.current = 'e'; resizeStart.current = { mouseX: e.clientX, mouseY: e.clientY, w: size.w, h: size.h } }}
+              style={{ position: 'absolute', top: 0, right: 0, width: 6, height: '100%', cursor: 'ew-resize', zIndex: 10 }} />
+            <div onMouseDown={e => { e.preventDefault(); e.stopPropagation(); isResizing.current = 's'; resizeStart.current = { mouseX: e.clientX, mouseY: e.clientY, w: size.w, h: size.h } }}
+              style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: 6, cursor: 's-resize', zIndex: 10 }} />
+            <div onMouseDown={e => { e.preventDefault(); e.stopPropagation(); isResizing.current = 'se'; resizeStart.current = { mouseX: e.clientX, mouseY: e.clientY, w: size.w, h: size.h } }}
+              style={{ position: 'absolute', bottom: 0, right: 0, width: 14, height: 14, cursor: 'se-resize', zIndex: 11, borderRadius: '0 0 16px 0' }} />
           </>
         )}
       </div>

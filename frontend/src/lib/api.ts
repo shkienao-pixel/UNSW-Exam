@@ -507,6 +507,18 @@ export const api = {
   },
 
   notes: {
+    // Block notes (BlockNote rich-text editor)
+    getBlock: (courseId?: string) => {
+      const qs = courseId ? `?course_id=${courseId}` : ''
+      return req<{ content: unknown[] }>(`/notes/block${qs}`)
+    },
+    saveBlock: (content: unknown[], courseId?: string) =>
+      req<{ ok: boolean }>('/notes/block', {
+        method: 'PUT',
+        body: JSON.stringify({ content, course_id: courseId ?? null }),
+      }),
+
+    // Legacy screenshot notes (kept for backwards compat)
     upload: (imageFile: File, caption: string, courseId?: string): Promise<UserNote> => {
       const form = new FormData()
       form.append('image', imageFile)
