@@ -1,10 +1,5 @@
 // Stub: PBL generation is not used in ExamMaster
-import type { PBLProjectConfig } from './types';
-
-export async function generatePBLContent(
-  _config: PBLProjectConfig,
-  _aiCall: unknown,
-  _options?: unknown,
-): Promise<unknown> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function generatePBLContent(..._args: any[]): Promise<any> {
   return null;
 }
