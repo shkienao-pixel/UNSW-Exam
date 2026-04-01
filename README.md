@@ -49,6 +49,23 @@
 
 ## Changelog
 
+### v1.6.0 (2026-04-01)
+
+**错题集模块 — 重新设计（成熟产品风格）：**
+- **3 个固定笔记本**（真题错题 / 模拟题错题 / 闪卡笔记），移除 CRUD，降低复杂度
+- **列表 → 详情** 两层导航：卡片列表页展示进度条 + 红色错题数 badge + hover glow；详情页顶部单行导航栏 + 统计 strip
+- **可折叠错题卡** — 默认折叠仅显示题干 + 答案摘要，展开后显示完整选项，避免信息过载
+- **统一视觉语言** — 金色/绿色/紫色三色主题与整体深色风格一致
+
+**生产环境 Bug Fix：**
+- **修复 Application error（生产崩溃）** — `NoteFloatWindow` 在 render 阶段直接读取 `window.innerWidth`，SSR/客户端 hydration 不一致触发 React 19 崩溃；改为 `useState(false)` + `useEffect` 延迟初始化
+
+**测试：**
+- 前端 Vitest：44/44 通过（4 个测试文件）
+- 后端 pytest：178/178 通过（11 个测试文件）
+
+---
+
 ### v1.5.0 (2026-04-01)
 
 **UI/UX 全面重设计：**
@@ -64,14 +81,6 @@
 - **Lock → Zap** — 全部锁图标替换为 Zap，视觉更轻盈
 - **价格弱化** — 积分价格右对齐低对比度灰字，减少焦虑感
 - **解锁弹窗** — 增加价值说明 bullet，按钮文案改为"确认解锁"
-
-**笔记本模块 — 两层结构重构：**
-- **列表 → 详情** 两层导航，支持每个笔记本独立浏览错题/闪卡
-- **完整 CRUD 管理** — 创建/重命名/删除笔记本；系统笔记本（真题/模拟题/闪卡）不可删除
-- **NotebookFormModal** — 图标选择器（15 个）+ 颜色选择器（8 色）+ 名称/描述 + 实时预览
-- **DeleteConfirmModal** — 展示笔记本名，红色"确认删除"按钮
-- **`...` 菜单** — 点外部自动关闭；系统笔记本仅显示"重命名"
-- **useNotebooks hook** — localStorage 持久化（`em_notebooks_{courseId}`），支持完整 CRUD
 
 **Bug Fixes:**
 - 修复 NoteFloatWindow rebase 冲突导致被旧版（截图上传版）覆盖，恢复 BlockNote 版本
@@ -859,6 +868,29 @@ Access `/admin` and enter the `X-Admin-Secret` in the UI.
 ---
 
 ## 更新日志
+
+### v1.6.0（2026-04-01）
+
+**错题集模块 — 重新设计：**
+- **3 个固定笔记本**（真题错题 / 模拟题错题 / 闪卡笔记），移除 CRUD，降低复杂度
+- **列表 → 详情** 两层导航，卡片进度条 + badge + hover glow；详情顶栏 + 统计 strip
+- **可折叠错题卡** — 默认折叠显示题干+答案摘要，展开显示完整选项
+- **修复生产 Application error** — `NoteFloatWindow` SSR hydration 不一致崩溃，改为 `useEffect` 延迟初始化
+- **测试全通过** — 前端 44/44（Vitest）、后端 178/178（pytest）
+
+---
+
+### v1.5.0（2026-04-01）
+
+**AI 问答工作台重设计：**
+- 结构化答案卡片（Markdown 渲染 + AI badge）；快捷操作 Chips；空状态引导卡片
+
+**积分/解锁 UX：**
+- 锁定态改为内容模糊预览 + 解锁细条；Lock → Zap 图标；价格低对比度灰字
+
+**Bug Fixes:** NoteFloatWindow 恢复 BlockNote 版本；FAB 点击无响应；闪卡 header 换行；笔记 403；FlashcardMistake.id 类型错误
+
+---
 
 ### v1.2.0（2026-03-16）
 
