@@ -228,6 +228,11 @@ export default function ClassroomTab({ courseId, artifacts, creditBalance, onCre
         const res = await fetch(`${API}/classroom/jobs/${jobId}`, {
           headers: { Authorization: `Bearer ${token()}` },
         })
+        if (res.status === 401) {
+          setError('登录已过期，请刷新页面重新登录后再试')
+          setPhase('idle')
+          return
+        }
         if (!res.ok) { pollRef.current = setTimeout(poll, 4000); return }
         const data: JobStatus = await res.json()
         setJobStatus(data)
