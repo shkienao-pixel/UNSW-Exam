@@ -8,13 +8,14 @@ import { useFloatingAsk } from '@/lib/floating-ask-context'
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/i18n'
 import { useGeneration } from '@/lib/generation-context'
-import type { Course, Artifact, ScopeSet, Output, DocType } from '@/lib/types'
+import type { Course, Artifact, ScopeSet, Output, DocType, FlashcardMistake } from '@/lib/types'
 import { DOC_TYPE_LABELS, DOC_TYPE_COLORS } from '@/lib/types'
 import { biText } from '@/lib/utils'
 import type { BiMode } from '@/lib/utils'
 import { useCourseData } from '@/hooks/useCourseData'
 import { useEnrollment } from '@/hooks/useEnrollment'
 import { useCredits } from '@/hooks/useCredits'
+import { emitFlashcardMistakesChanged } from '@/lib/ui-sync'
 import {
   FileText, Upload, Loader2, History,
   ChevronDown, ChevronRight, BookOpen, RotateCcw,
@@ -216,6 +217,10 @@ type Flashcard =
   | { type: 'vocab'; front: string; back: string }
   | { type: 'mcq'; question: string; options: string[]; answer: string; explanation?: string }
 
+function flashcardMistakeKey(outputId: number, cardIndex: number) {
+  return `${outputId}:${cardIndex}`
+}
+
 function FlashcardsTab({ courseId }: { courseId: string }) {
   const { t, lang } = useLang()
   const [outputs, setOutputs] = useState<Output[]>([])
@@ -230,6 +235,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
   const [finished, setFinished] = useState(false)
   const [remembered, setRemembered] = useState(0)
   const [forgotten, setForgotten] = useState(0)
+  const [mistakeMap, setMistakeMap] = useState<Record<string, FlashcardMistake>>({})
   const [isSliding, setIsSliding] = useState(false)
   const [slideDir, setSlideDir] = useState<'left' | 'right'>('left')
 
@@ -252,6 +258,18 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
       .then(data => { setOutputs(data); if (data.length > 0) loadCards(data[0]) })
       .finally(() => setLoading(false))
   }, [courseId, loadCards])
+
+  useEffect(() => {
+    api.flashcardMistakes.list(courseId)
+      .then(rows => {
+        setMistakeMap(
+          Object.fromEntries(
+            rows.map(row => [flashcardMistakeKey(row.output_id, row.card_index), row]),
+          ),
+        )
+      })
+      .catch(() => {})
+  }, [courseId])
 
   function animateSlide(dir: 'left' | 'right') {
     setSlideDir(dir)
@@ -276,17 +294,48 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
     setRemembered(0); setForgotten(0)
   }
 
-  function recordFlashcardMistake(card: Flashcard, idx: number) {
+  async function recordFlashcardMistake(card: Flashcard, idx: number) {
     if (!selectedOutputId) return
     const cardFront = card.type === 'vocab' ? card.front : card.question
     const cardBack  = card.type === 'vocab' ? card.back  : card.answer
-    api.flashcardMistakes.add(courseId, {
-      output_id:  selectedOutputId,
-      card_index: idx,
-      card_front: cardFront,
-      card_back:  cardBack,
-      card_type:  card.type,
-    }).catch(() => {})
+    try {
+      const row = await api.flashcardMistakes.add(courseId, {
+        output_id:  selectedOutputId,
+        card_index: idx,
+        card_front: cardFront,
+        card_back:  cardBack,
+        card_type:  card.type,
+      })
+      setMistakeMap(prev => ({
+        ...prev,
+        [flashcardMistakeKey(selectedOutputId, idx)]: row,
+      }))
+      emitFlashcardMistakesChanged({ courseId })
+    } catch {
+      // ignore
+    }
+  }
+
+  async function markFlashcardMastered(idx: number) {
+    if (!selectedOutputId) return
+    const key = flashcardMistakeKey(selectedOutputId, idx)
+    const existing = mistakeMap[key]
+    if (!existing || existing.mistake_status === 'mastered') return
+
+    setMistakeMap(prev => ({
+      ...prev,
+      [key]: { ...existing, mistake_status: 'mastered' },
+    }))
+    emitFlashcardMistakesChanged({ courseId })
+
+    try {
+      await api.flashcardMistakes.update(courseId, existing.id, 'mastered')
+    } catch {
+      setMistakeMap(prev => ({
+        ...prev,
+        [key]: existing,
+      }))
+    }
   }
 
   // Keyboard shortcuts
@@ -302,12 +351,12 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
         e.preventDefault()
         if (c.type === 'vocab') setFlipped(f => !f)
       }
-      if (e.key === 'ArrowRight') {
-        if (c.type === 'vocab' && fl) { setRemembered(r => r + 1); next() }
-        else if (c.type === 'mcq' && rv) {
-          next()
+        if (e.key === 'ArrowRight') {
+          if (c.type === 'vocab' && fl) { setRemembered(r => r + 1); markFlashcardMastered(ci); next() }
+          else if (c.type === 'mcq' && rv) {
+            next()
+          }
         }
-      }
       if (e.key === 'ArrowLeft') prev()
     }
     window.addEventListener('keydown', handleKey)
@@ -544,14 +593,18 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                       <>
                         <button onClick={() => {
                           setForgotten(f => f + 1)
-                          recordFlashcardMistake(card, cardIndex)
+                          void recordFlashcardMistake(card, cardIndex)
                           next()
                         }}
                           className="px-4 py-2 rounded-full text-sm"
                           style={{ background: 'rgba(255,68,68,0.09)', color: '#ff8d8d', border: '1px solid rgba(255,68,68,0.18)' }}>
                           ✗ {t('fc_forgot')}
                         </button>
-                        <button onClick={() => { setRemembered(r => r + 1); next() }}
+                        <button onClick={() => {
+                          setRemembered(r => r + 1)
+                          void markFlashcardMastered(cardIndex)
+                          next()
+                        }}
                           className="px-5 py-2 rounded-full text-sm font-medium"
                           style={{ background: 'rgba(34,197,94,0.1)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.2)' }}>
                           ✓ {t('fc_got_it')}
@@ -583,7 +636,17 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                         }
                         return (
                           <button key={j}
-                            onClick={() => { if (!revealed) { setChosen(label); setRevealed(true); if (label !== card.answer) recordFlashcardMistake(card, cardIndex) } }}
+                            onClick={() => {
+                              if (!revealed) {
+                                setChosen(label)
+                                setRevealed(true)
+                                if (label !== card.answer) {
+                                  void recordFlashcardMistake(card, cardIndex)
+                                } else {
+                                  void markFlashcardMastered(cardIndex)
+                                }
+                              }
+                            }}
                             disabled={revealed}
                             className="w-full text-left px-4 py-3 rounded-[15px] text-sm transition-all duration-200"
                             style={{ background: bg, border: `1px solid ${border}`, color }}>
