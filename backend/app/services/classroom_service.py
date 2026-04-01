@@ -65,23 +65,30 @@ def get_job(job_id: str) -> dict | None:
 # ── 文本提取 ──────────────────────────────────────────────────────────────────
 
 def _fetch_text(db: Client, user_id: str, course_id: str, artifact_ids: list[int]) -> str:
-    # 直接按 course_id + artifact_ids 取 approved 文件，不做 ownership 过滤
-    # （课程 PDF 由 admin 共享，用户无需拥有即可用于生成）
     arts = list_artifacts_by_ids(db, user_id, course_id, artifact_ids)
+    logger.info("classroom _fetch_text: requested=%s found=%s", artifact_ids, [a["id"] for a in arts])
     arts = [a for a in arts if a.get("status") == "approved"]
+    logger.info("classroom _fetch_text: approved=%s", [a["id"] for a in arts])
     parts: list[str] = []
     for art in arts:
         file_type = art.get("file_type", "pdf")
         storage_path = art.get("storage_path")
+        logger.info("classroom extract: id=%s file_type=%s storage_path=%s", art["id"], file_type, storage_path)
         if file_type == "url":
             parts.append(f"URL: {art.get('storage_url', '')}")
         elif storage_path:
             try:
                 raw = download_artifact_bytes(db, storage_path)
-                parts.append(extract_text(file_type, raw, art["file_name"]))
+                text = extract_text(file_type, raw, art["file_name"])
+                logger.info("classroom extract: id=%s text_len=%s", art["id"], len(text))
+                parts.append(text)
             except Exception as e:
-                logger.warning("extract_text failed: %s", e)
-    return "\n\n".join(parts)[:18000]
+                logger.warning("classroom extract_text failed id=%s: %s", art["id"], e)
+        else:
+            logger.warning("classroom extract: id=%s has no storage_path", art["id"])
+    result = "\n\n".join(parts)[:18000]
+    logger.info("classroom _fetch_text total chars=%s", len(result))
+    return result
 
 
 # ── LLM 调用 ──────────────────────────────────────────────────────────────────
