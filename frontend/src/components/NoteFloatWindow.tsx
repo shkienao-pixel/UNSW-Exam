@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { NotebookPen, X, ImagePlus, Loader2, Check, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
+import { NotebookPen, X, ImagePlus, Loader2, Check, Trash2 } from 'lucide-react'
 import { useNoteFloat } from '@/lib/note-float-context'
 import { api } from '@/lib/api'
 import type { UserNote } from '@/lib/types'
@@ -51,9 +51,6 @@ function NoteCard({ note, onZoom, onDelete }: {
   onZoom: () => void
   onDelete: () => void
 }) {
-  const [expanded, setExpanded] = useState(false)
-  const hasContent = note.ai_content && note.ai_content.trim().length > 0
-
   return (
     <div className="rounded-lg overflow-hidden group"
       style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
@@ -71,15 +68,6 @@ function NoteCard({ note, onZoom, onDelete }: {
           style={{ background: 'rgba(0,0,0,0.7)', color: '#ff6b6b' }}>
           <Trash2 size={11} />
         </button>
-        {hasContent && (
-          <button
-            onClick={() => setExpanded(v => !v)}
-            className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-xs flex items-center gap-0.5"
-            style={{ background: 'rgba(167,139,250,0.85)', color: '#fff' }}>
-            {expanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
-            AI
-          </button>
-        )}
       </div>
       {/* Caption */}
       {note.caption && (
@@ -89,13 +77,6 @@ function NoteCard({ note, onZoom, onDelete }: {
       <p className="px-2 pb-1 text-xs" style={{ color: '#444' }}>
         {new Date(note.created_at).toLocaleDateString('zh-CN')}
       </p>
-      {/* AI extracted content */}
-      {hasContent && expanded && (
-        <div className="px-3 py-2 text-xs whitespace-pre-wrap leading-relaxed"
-          style={{ color: '#CCC', borderTop: '1px solid rgba(255,255,255,0.06)', maxHeight: 200, overflowY: 'auto' }}>
-          {note.ai_content}
-        </div>
-      )}
     </div>
   )
 }

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import logging
 import uuid
 from typing import Optional
@@ -27,49 +26,6 @@ def _ensure_bucket(supabase: Client) -> None:
     _BUCKET_CREATED = True
 
 
-def _analyze_with_vision(image_bytes: bytes, content_type: str, openai_key: str) -> str:
-    """Call GPT-4o Vision to extract text and describe the screenshot for studying.
-
-    Returns extracted content string, or empty string on any failure.
-    """
-    try:
-        import openai
-
-        b64 = base64.b64encode(image_bytes).decode()
-        data_url = f"data:{content_type};base64,{b64}"
-
-        client = openai.OpenAI(api_key=openai_key)
-        resp = client.chat.completions.create(
-            model="gpt-4o-mini",
-            max_tokens=1500,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": (
-                                "这是一张学习截图。请：\n"
-                                "1. 提取截图中所有文字内容（保持原有结构）\n"
-                                "2. 如果有图表/公式/代码，用文字简要描述\n"
-                                "3. 输出格式：纯文本，保留层级结构，不要加额外说明\n"
-                                "如果截图内容不清晰，尽量提取可见文字。"
-                            ),
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": data_url, "detail": "high"},
-                        },
-                    ],
-                }
-            ],
-        )
-        return resp.choices[0].message.content or ""
-    except Exception as exc:
-        logger.warning("Vision analysis failed: %s", exc)
-        return ""
-
-
 def upload_note(
     supabase: Client,
     user_id: str,
@@ -78,7 +34,7 @@ def upload_note(
     caption: str = "",
     course_id: Optional[str] = None,
 ) -> dict:
-    """Upload image to Storage, save to user_notes immediately, run Vision analysis in background."""
+    """Upload image to Storage, save to user_notes, return the note row."""
     from app.core.supabase_client import restore_service_role_auth
     restore_service_role_auth()
 
@@ -97,45 +53,15 @@ def upload_note(
         "image_url":    image_url,
         "storage_path": path,
         "caption":      caption,
-        "ai_content":   "",
     }
     if course_id:
         row["course_id"] = course_id
 
-    # Save immediately so the note appears in the notebook right away
     try:
         result = supabase.table("user_notes").insert(row).select().execute().data
-        saved = result[0] if result else row
+        return result[0] if result else row
     except Exception:
-        saved = row
-
-    # Run Vision AI analysis in background thread (non-blocking)
-    note_id = saved.get("id")
-    if note_id:
-        import threading
-        threading.Thread(
-            target=_analyze_and_update,
-            args=(supabase, note_id, image_bytes, content_type),
-            daemon=True,
-        ).start()
-
-    return saved
-
-
-def _analyze_and_update(supabase: Client, note_id: int, image_bytes: bytes, content_type: str) -> None:
-    """Background: run Vision AI and update ai_content for the note."""
-    try:
-        from app.core.supabase_client import restore_service_role_auth
-        restore_service_role_auth()
-        from app.services.llm_key_service import get_api_key
-        openai_key = get_api_key("openai", supabase) or ""
-        if not openai_key:
-            return
-        ai_content = _analyze_with_vision(image_bytes, content_type, openai_key)
-        if ai_content:
-            supabase.table("user_notes").update({"ai_content": ai_content}).eq("id", note_id).execute()
-    except Exception as exc:
-        logger.warning("Background Vision analysis failed for note %s: %s", note_id, exc)
+        return row
 
 
 def list_notes(
