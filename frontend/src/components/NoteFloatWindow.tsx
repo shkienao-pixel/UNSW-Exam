@@ -224,6 +224,7 @@ export default function NoteFloatWindow() {
   const [notes, setNotes] = useState<UserNote[]>([])
   const [notesLoading, setNotesLoading] = useState(false)
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -232,19 +233,12 @@ export default function NoteFloatWindow() {
   const isResizing = useRef<ResizeDir | null>(null)
   const resizeStart = useRef({ mouseX: 0, mouseY: 0, w: 0, h: 0 })
 
-  // Load all notes when window opens or tab switches to 'all'
+  // Load notes when window opens (only if notes not yet loaded)
   useEffect(() => {
     if (!isOpen) return
     setNotesLoading(true)
     api.notes.list(courseId ?? undefined).then(setNotes).catch(() => {}).finally(() => setNotesLoading(false))
   }, [isOpen, courseId])
-
-  useEffect(() => {
-    if (activeTab === 'all' && isOpen) {
-      setNotesLoading(true)
-      api.notes.list(courseId ?? undefined).then(setNotes).catch(() => {}).finally(() => setNotesLoading(false))
-    }
-  }, [activeTab, isOpen, courseId])
 
   // Paste support
   useEffect(() => {
@@ -334,6 +328,7 @@ export default function NoteFloatWindow() {
   async function handleSave() {
     if (!imageFile) return
     setSaving(true)
+    setSaveError(null)
     try {
       const note = await api.notes.upload(imageFile, caption, courseId ?? undefined)
       setNotes(prev => [note, ...prev])
@@ -342,6 +337,9 @@ export default function NoteFloatWindow() {
       setCaption('')
       setSavedOk(true)
       setTimeout(() => setSavedOk(false), 2000)
+      setActiveTab('all')
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : '保存失败，请重试')
     } finally {
       setSaving(false)
     }
@@ -539,6 +537,13 @@ export default function NoteFloatWindow() {
                 }}
               />
 
+              {/* Save error */}
+              {saveError && (
+                <p className="text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.1)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.2)' }}>
+                  {saveError}
+                </p>
+              )}
+
               {/* Save button */}
               <button
                 onClick={handleSave}
@@ -551,7 +556,7 @@ export default function NoteFloatWindow() {
                 }}
               >
                 {saving
-                  ? <><Loader2 size={14} className="animate-spin" /> AI 识别中...</>
+                  ? <><Loader2 size={14} className="animate-spin" /> 上传中...</>
                   : savedOk
                     ? <><Check size={14} /> 已保存！</>
                     : '保存到笔记本'}

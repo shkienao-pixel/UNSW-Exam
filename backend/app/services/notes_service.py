@@ -78,9 +78,7 @@ def upload_note(
     caption: str = "",
     course_id: Optional[str] = None,
 ) -> dict:
-    """Upload image to Storage, run Vision analysis, save to user_notes, return the note row."""
-    # supabase-py v2 replaces the shared client's auth header when auth.sign_up()
-    # or auth.verify_otp() is called. Restore service-role key before Storage ops.
+    """Upload image to Storage, save to user_notes immediately, run Vision analysis in background."""
     from app.core.supabase_client import restore_service_role_auth
     restore_service_role_auth()
 
@@ -94,28 +92,50 @@ def upload_note(
     )
     image_url = supabase.storage.from_(_NOTES_BUCKET).get_public_url(path)
 
-    # Run Vision analysis (best-effort — failure won't block the upload)
-    from app.services.llm_key_service import get_api_key
-    openai_key = get_api_key("openai", supabase) or ""
-    ai_content = _analyze_with_vision(image_bytes, content_type, openai_key) if openai_key else ""
-
     row: dict = {
         "user_id":      user_id,
         "image_url":    image_url,
         "storage_path": path,
         "caption":      caption,
+        "ai_content":   "",
     }
     if course_id:
         row["course_id"] = course_id
 
-    # Try to include ai_content (requires migration 033 to have been run).
-    # Fall back silently if the column doesn't exist yet.
+    # Save immediately so the note appears in the notebook right away
     try:
-        result = supabase.table("user_notes").insert({**row, "ai_content": ai_content}).select().execute().data
-        return result[0] if result else {**row, "ai_content": ai_content}
-    except Exception:
         result = supabase.table("user_notes").insert(row).select().execute().data
-        return result[0] if result else row
+        saved = result[0] if result else row
+    except Exception:
+        saved = row
+
+    # Run Vision AI analysis in background thread (non-blocking)
+    note_id = saved.get("id")
+    if note_id:
+        import threading
+        threading.Thread(
+            target=_analyze_and_update,
+            args=(supabase, note_id, image_bytes, content_type),
+            daemon=True,
+        ).start()
+
+    return saved
+
+
+def _analyze_and_update(supabase: Client, note_id: int, image_bytes: bytes, content_type: str) -> None:
+    """Background: run Vision AI and update ai_content for the note."""
+    try:
+        from app.core.supabase_client import restore_service_role_auth
+        restore_service_role_auth()
+        from app.services.llm_key_service import get_api_key
+        openai_key = get_api_key("openai", supabase) or ""
+        if not openai_key:
+            return
+        ai_content = _analyze_with_vision(image_bytes, content_type, openai_key)
+        if ai_content:
+            supabase.table("user_notes").update({"ai_content": ai_content}).eq("id", note_id).execute()
+    except Exception as exc:
+        logger.warning("Background Vision analysis failed for note %s: %s", note_id, exc)
 
 
 def list_notes(
