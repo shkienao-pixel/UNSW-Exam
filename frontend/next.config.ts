@@ -23,6 +23,10 @@ const nextConfig: NextConfig = {
   env: {
     DEFAULT_MODEL: process.env.DEFAULT_MODEL || 'openai/gpt-4o-mini',
   },
+  // Include classroom prompt .md files in Vercel deployment
+  outputFileTracingIncludes: {
+    '/api/classroom/**': ['./src/lib/classroom/generation/prompts/**'],
+  },
 };
 
 export default nextConfig;

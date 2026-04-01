@@ -22,8 +22,14 @@ const snippetCache = new Map<string, string>();
  * Get the prompts directory path
  */
 function getPromptsDir(): string {
-  // In Next.js, use process.cwd() for the project root
-  return path.join(process.cwd(), 'lib', 'generation', 'prompts');
+  // __dirname is the compiled directory (e.g. .next/server/)
+  // We need to resolve relative to the source location at build time
+  // In development: process.cwd() is the project root (frontend/)
+  // In production (Vercel): __dirname resolves near the bundled file
+  const fromCwd = path.join(process.cwd(), 'src', 'lib', 'classroom', 'generation', 'prompts');
+  if (require('fs').existsSync(fromCwd)) return fromCwd;
+  // Fallback for production builds that inline the path
+  return path.join(__dirname, 'prompts');
 }
 
 /**
