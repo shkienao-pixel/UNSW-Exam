@@ -32,7 +32,8 @@ from app.services.artifact_service import (
 from app.services.course_service import list_artifacts_by_ids
 from app.services.text_extractor import extract_text
 from app.services.llm_key_service import get_api_key
-from app.core.config import settings
+from app.core.config import get_settings
+settings = get_settings()
 
 logger = logging.getLogger(__name__)
 
@@ -174,10 +175,7 @@ def _call_gemini(content: str, gemini_key: str) -> dict:
 def _call_openai(content: str, openai_key: str) -> dict:
     import openai
 
-    client = openai.OpenAI(
-        api_key=openai_key,
-        base_url=settings.openai_base_url if hasattr(settings, "openai_base_url") and settings.openai_base_url else None,
-    )
+    client = openai.OpenAI(api_key=openai_key)
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
