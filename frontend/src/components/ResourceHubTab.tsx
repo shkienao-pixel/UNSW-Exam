@@ -20,7 +20,7 @@ import { DOC_TYPE_LABELS, DOC_TYPE_COLORS } from '@/lib/types'
 import {
   Upload, Search, Lock, ExternalLink, MoreVertical, Edit2,
   Loader2, X, CheckCircle2, ChevronDown, FileText,
-  Code, Globe, FileJson, FileCheck,
+  Code, Globe, FileJson, FileCheck, Zap,
 } from 'lucide-react'
 
 // ── 上传队列类型 ─────────────────────────────────────────────────────────────
@@ -248,11 +248,12 @@ function ArtifactCard({
         ) : isLocked ? (
           <button
             onClick={() => onUnlock(artifact)}
-            className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-semibold transition-all hover:opacity-80"
-            style={{ background: 'rgba(255,165,0,0.12)', color: '#FFA500', border: '1px solid rgba(255,165,0,0.28)' }}
+            className="w-full flex items-center gap-2 py-2 px-3 rounded-xl text-sm font-medium transition-all hover:opacity-85"
+            style={{ background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.1)' }}
           >
-            <Lock size={13} />
-            <span>50 积分深度解析</span>
+            <Zap size={12} style={{ color: '#FFD700', flexShrink: 0 }} />
+            <span className="flex-1 text-left">解锁完整内容</span>
+            <span style={{ fontSize: '11px', color: 'rgba(255,215,0,0.6)', fontVariantNumeric: 'tabular-nums' }}>50 ✦</span>
           </button>
         ) : artifact.storage_url ? (
           <a
@@ -419,21 +420,19 @@ function UnlockModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.75)' }}
       onClick={() => !loading && onClose()}>
       <div className="relative w-full max-w-sm mx-4 p-6 rounded-2xl" onClick={e => e.stopPropagation()}
-        style={{ background: '#0e0e1c', border: '1px solid rgba(255,165,0,0.25)', boxShadow: '0 20px 60px rgba(0,0,0,0.7)' }}>
+        style={{ background: '#0e0e1c', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 20px 60px rgba(0,0,0,0.7)' }}>
         <div className="flex items-center gap-2 mb-3">
-          <Lock size={18} style={{ color: '#FFA500' }} />
-          <h3 className="text-base font-bold text-white">AI 深度解析</h3>
+          <Zap size={16} style={{ color: '#FFD700' }} />
+          <h3 className="text-base font-bold text-white">解锁完整内容</h3>
         </div>
-        <p className="text-sm mb-1" style={{ color: '#aaa' }}>文件：<span className="text-white font-medium">{artifact.file_name}</span></p>
-        <p className="text-sm mb-4" style={{ color: '#777' }}>
-          「{DOC_TYPE_LABELS[artifact.doc_type]}」类型文件需消耗{' '}
-          <span style={{ color: '#FFD700', fontWeight: 600 }}>{UNLOCK_COST} 积分</span>{' '}
-          进行深度解析。
-        </p>
-        <div className="mb-4 space-y-1.5 rounded-xl px-3 py-2 text-xs" style={{ background: 'rgba(255,215,0,0.06)', border: '1px solid rgba(255,215,0,0.14)', color: '#aaa' }}>
-          <p>• 解锁全文阅读</p>
-          <p>• 自动提取核心考点</p>
-          <p>• 生成思维导图预览</p>
+        <p className="text-sm mb-3 truncate" style={{ color: '#888' }}>{artifact.file_name}</p>
+        <div className="mb-4 space-y-1.5 rounded-xl px-3 py-2.5 text-xs" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', color: '#777' }}>
+          <p>全文阅读权限 · 核心考点提取 · 思维导图预览</p>
+        </div>
+        <div className="flex items-center justify-between mb-4 rounded-xl px-3 py-2.5"
+          style={{ background: 'rgba(255,215,0,0.05)', border: '1px solid rgba(255,215,0,0.12)' }}>
+          <span className="text-sm" style={{ color: '#888' }}>解锁所需</span>
+          <span className="text-sm font-semibold" style={{ color: '#FFD700' }}>{UNLOCK_COST} ✦  ·  一次解锁永久有效</span>
         </div>
         {loading && (
           <p className="mb-3 rounded-lg px-3 py-2 text-xs" style={{ color: '#e6cf98', background: 'rgba(255,215,0,0.08)', border: '1px solid rgba(255,215,0,0.2)' }}>
@@ -453,9 +452,9 @@ function UnlockModal({
           </button>
           <button onClick={confirm} disabled={loading}
             className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
-            style={{ background: 'rgba(255,165,0,0.16)', color: '#FFA500', border: '1px solid rgba(255,165,0,0.32)' }}>
-            {loading ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
-            {loading ? '解析中...' : `确认深度解析（-${UNLOCK_COST} 积分）`}
+            style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.28)' }}>
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+            {loading ? '解锁中…' : '确认解锁'}
           </button>
         </div>
       </div>
@@ -504,8 +503,8 @@ function UnlockAllModal({
         style={{ background: '#0e0e1c', border: '1px solid rgba(255,165,0,0.25)', boxShadow: '0 20px 60px rgba(0,0,0,0.7)' }}>
 
         <div className="flex items-center gap-2 mb-4">
-          <Lock size={18} style={{ color: '#FFD700' }} />
-          <h3 className="text-base font-bold text-white">一键深度解析全部文件</h3>
+          <Zap size={16} style={{ color: '#FFD700' }} />
+          <h3 className="text-base font-bold text-white">全课内容一键解锁</h3>
         </div>
 
         <div className="space-y-2 mb-4 px-3 py-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -550,9 +549,9 @@ function UnlockAllModal({
           </button>
           <button onClick={confirm} disabled={loading || !canAfford}
             className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-40"
-            style={{ background: 'rgba(255,215,0,0.16)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.32)' }}>
-            {loading ? <Loader2 size={14} className="animate-spin" /> : <Lock size={14} />}
-            {loading ? '解析中...' : `确认（-${totalCost} 积分）`}
+            style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.28)' }}>
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+            {loading ? '解锁中…' : '确认解锁全部'}
           </button>
         </div>
       </div>
@@ -707,29 +706,29 @@ export default function ResourceHubTab({
         </div>
 
         {/* 积分余额 */}
-        <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl flex-shrink-0 text-xs font-semibold"
-          style={{ background: 'rgba(255,215,0,0.08)', border: '1px solid rgba(255,215,0,0.18)', color: '#FFD700' }}>
-          ⚡ {creditBalance} 积分
+        <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl flex-shrink-0 text-xs"
+          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.45)', fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ color: 'rgba(255,215,0,0.6)', fontSize: 10 }}>✦</span>
+          {creditBalance}
         </div>
 
-        {/* 一键解锁全部 */}
+        {/* 全部解锁入口 */}
         {lockedCount > 0 && (
-          <div className="flex flex-col items-end gap-1">
-            <button
-              onClick={() => setUnlockAllOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold flex-shrink-0 transition-all"
-              style={{
-                background: 'rgba(255,165,0,0.1)',
-                border: '1px solid rgba(255,165,0,0.28)',
-                color: '#FFA500',
-              }}>
-              <Lock size={12} />
-              一键解锁 ({lockedCount} / {unlockAllCost}积分)
-            </button>
-            {creditBalance >= 3000 && (
-              <span className="text-[11px]" style={{ color: '#e6cf98' }}>全课包解锁：立省 300 积分</span>
-            )}
-          </div>
+          <button
+            onClick={() => setUnlockAllOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium flex-shrink-0 transition-all hover:opacity-85"
+            style={{
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              color: 'rgba(255,255,255,0.5)',
+            }}
+          >
+            <Zap size={11} style={{ color: '#FFD700' }} />
+            解锁全部 {lockedCount} 份文件
+            <span style={{ marginLeft: 2, color: 'rgba(255,215,0,0.55)', fontVariantNumeric: 'tabular-nums' }}>
+              · {unlockAllCost} ✦
+            </span>
+          </button>
         )}
 
         {/* 上传按钮 */}

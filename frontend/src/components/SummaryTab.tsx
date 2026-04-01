@@ -172,18 +172,55 @@ export default function SummaryTab({ courseId }: { courseId: string }) {
   )
 
   if (status === 'locked') return (
-    <div className="text-center py-20 glass rounded-2xl space-y-4">
-      <FileText size={52} className="mx-auto opacity-30" style={{ color: '#FFD700' }} />
-      <p className="text-xl font-bold text-white">知识摘要</p>
-      <p className="text-sm" style={{ color: '#777' }}>系统整理的课程核心知识，可作为刷题参考</p>
-      {error && <p className="text-sm" style={{ color: '#FF6666' }}>{error}</p>}
-      <button onClick={handleUnlock} disabled={unlocking}
-        className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm"
-        style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.35)' }}>
-        {unlocking ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
-        {unlocking ? '解锁中...' : `解锁摘要 ${creditsRequired} ✦`}
-      </button>
-      <p className="text-xs" style={{ color: '#444' }}>一次解锁，永久可用</p>
+    <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
+      {/* 模糊预览骨架 — 让用户感知内容存在，不是硬锁 */}
+      <div
+        className="px-8 py-6 space-y-3 select-none pointer-events-none"
+        style={{ background: 'rgba(255,255,255,0.015)', filter: 'blur(1.5px)', opacity: 0.28 }}
+        aria-hidden
+      >
+        <div className="h-5 w-2/5 rounded-full" style={{ background: 'rgba(255,215,0,0.3)' }} />
+        <div className="h-3 w-full rounded-full" style={{ background: 'rgba(255,255,255,0.1)' }} />
+        <div className="h-3 w-5/6 rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }} />
+        <div className="h-3 w-4/5 rounded-full" style={{ background: 'rgba(255,255,255,0.07)' }} />
+        <div className="mt-5 h-4 w-1/3 rounded-full" style={{ background: 'rgba(255,215,0,0.2)' }} />
+        <div className="h-3 w-full rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }} />
+        <div className="h-3 w-3/4 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }} />
+        <div className="h-3 w-5/6 rounded-full" style={{ background: 'rgba(255,255,255,0.05)' }} />
+        <div className="mt-5 h-4 w-2/5 rounded-full" style={{ background: 'rgba(255,215,0,0.18)' }} />
+        <div className="h-3 w-full rounded-full" style={{ background: 'rgba(255,255,255,0.07)' }} />
+        <div className="h-3 w-4/6 rounded-full" style={{ background: 'rgba(255,255,255,0.05)' }} />
+      </div>
+
+      {/* 解锁升级条 */}
+      <div
+        className="px-6 py-5"
+        style={{ borderTop: '1px solid rgba(255,215,0,0.1)', background: 'rgba(255,215,0,0.025)' }}
+      >
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-white mb-1">AI 整理的课程知识摘要</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs" style={{ color: '#555' }}>
+              <span>章节核心知识点</span>
+              <span>高频考点标注</span>
+              <span>易错点分析</span>
+            </div>
+          </div>
+          <div className="flex-shrink-0 flex flex-col items-end gap-1">
+            <button
+              onClick={handleUnlock}
+              disabled={unlocking}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all hover:opacity-85 disabled:opacity-60"
+              style={{ background: 'rgba(255,215,0,0.13)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.28)' }}
+            >
+              {unlocking ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
+              {unlocking ? '解锁中…' : `解锁摘要  ·  ${creditsRequired} ✦`}
+            </button>
+            <span className="text-[11px]" style={{ color: '#3a3a3a' }}>一次解锁，本课永久有效</span>
+          </div>
+        </div>
+        {error && <p className="mt-2 text-xs" style={{ color: '#FF6666' }}>{error}</p>}
+      </div>
     </div>
   )
 
