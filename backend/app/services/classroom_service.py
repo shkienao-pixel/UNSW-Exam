@@ -25,10 +25,7 @@ from typing import Any
 
 from supabase import Client
 
-from app.services.artifact_service import (
-    download_artifact_bytes,
-    filter_accessible_artifact_ids,
-)
+from app.services.artifact_service import download_artifact_bytes
 from app.services.course_service import list_artifacts_by_ids
 from app.services.text_extractor import extract_text
 from app.services.llm_key_service import get_api_key
@@ -68,8 +65,9 @@ def get_job(job_id: str) -> dict | None:
 # ── 文本提取 ──────────────────────────────────────────────────────────────────
 
 def _fetch_text(db: Client, user_id: str, course_id: str, artifact_ids: list[int]) -> str:
-    ids = filter_accessible_artifact_ids(db, user_id, artifact_ids)
-    arts = list_artifacts_by_ids(db, user_id, course_id, ids)
+    # 直接按 course_id + artifact_ids 取 approved 文件，不做 ownership 过滤
+    # （课程 PDF 由 admin 共享，用户无需拥有即可用于生成）
+    arts = list_artifacts_by_ids(db, user_id, course_id, artifact_ids)
     arts = [a for a in arts if a.get("status") == "approved"]
     parts: list[str] = []
     for art in arts:
