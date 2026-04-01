@@ -108,7 +108,10 @@ function NoteFab({ onClick, pos, onDragEnd }: {
 
 export default function NoteFloatWindow() {
   const { isOpen, courseId, openWindow, closeWindow } = useNoteFloat()
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    setIsMobile(window.innerWidth < 768)
+  }, [])
 
   const [size, setSize] = useState(loadSize)
   const [pos, setPos] = useState<{ x: number; y: number }>(() => {
