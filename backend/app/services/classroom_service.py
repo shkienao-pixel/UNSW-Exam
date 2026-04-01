@@ -31,7 +31,7 @@ from app.services.artifact_service import (
 )
 from app.services.course_service import list_artifacts_by_ids
 from app.services.text_extractor import extract_text
-from app.services.llm_key_service import get_active_key
+from app.services.llm_key_service import get_api_key
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -194,14 +194,14 @@ def _generate_with_llm(db: Client, content: str) -> dict:
     """优先用 Gemini，失败则 fallback 到 OpenAI。"""
     # 尝试 Gemini
     try:
-        gemini_key = get_active_key(db, "gemini") or settings.gemini_api_key
+        gemini_key = get_api_key("gemini", db) or settings.gemini_api_key
         if gemini_key:
             return _call_gemini(content, gemini_key)
     except Exception as e:
         logger.warning("Gemini classroom gen failed, falling back to OpenAI: %s", e)
 
     # Fallback: OpenAI
-    openai_key = get_active_key(db, "openai") or settings.openai_api_key
+    openai_key = get_api_key("openai", db) or settings.openai_api_key
     if not openai_key:
         raise RuntimeError("没有可用的 AI 密钥（Gemini / OpenAI）")
     return _call_openai(content, openai_key)
