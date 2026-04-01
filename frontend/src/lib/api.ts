@@ -396,6 +396,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ package: pkg, success_url: successUrl, cancel_url: cancelUrl }),
       }),
+    spend: (type_: string) =>
+      req<{ balance: number }>('/credits/deduct', {
+        method: 'POST',
+        body: JSON.stringify({ type_ }),
+      }),
   },
 
   enrollments: {

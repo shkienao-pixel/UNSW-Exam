@@ -9,13 +9,14 @@ import type { UserNote } from '@/lib/types'
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const DEFAULT_W = 440
-const DEFAULT_H = 460
+const DEFAULT_H = 520
 const MIN_W = 320
-const MIN_H = 360
+const MIN_H = 400
 const POS_KEY = 'note_float_pos'
 const SIZE_KEY = 'note_float_size'
 
 type ResizeDir = 'e' | 's' | 'se'
+type TabId = 'upload' | 'all'
 
 function loadPos(): { x: number; y: number } | null {
   if (typeof window === 'undefined') return null
@@ -46,7 +47,7 @@ function loadSize(): { w: number; h: number } {
 // ── NoteCard ──────────────────────────────────────────────────────────────────
 
 function NoteCard({ note, onZoom, onDelete }: {
-  note: import('@/lib/types').UserNote
+  note: UserNote
   onZoom: () => void
   onDelete: () => void
 }) {
@@ -84,6 +85,10 @@ function NoteCard({ note, onZoom, onDelete }: {
       {note.caption && (
         <p className="px-2 py-1 text-xs truncate" style={{ color: '#888' }}>{note.caption}</p>
       )}
+      {/* Date */}
+      <p className="px-2 pb-1 text-xs" style={{ color: '#444' }}>
+        {new Date(note.created_at).toLocaleDateString('zh-CN')}
+      </p>
       {/* AI extracted content */}
       {hasContent && expanded && (
         <div className="px-3 py-2 text-xs whitespace-pre-wrap leading-relaxed"
@@ -179,7 +184,7 @@ function NoteFab({ onClick, pos, onDragEnd }: {
         cursor: 'grab',
         color: '#A78BFA',
       }}
-      title="记笔记"
+      title="笔记本"
     >
       <NotebookPen size={22} />
     </button>
@@ -205,6 +210,9 @@ export default function NoteFloatWindow() {
     return { x: window.innerWidth - 72, y: window.innerHeight - 180 }
   })
 
+  // Tab state
+  const [activeTab, setActiveTab] = useState<TabId>('upload')
+
   // Upload state
   const [preview, setPreview] = useState<string | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
@@ -212,8 +220,9 @@ export default function NoteFloatWindow() {
   const [saving, setSaving] = useState(false)
   const [savedOk, setSavedOk] = useState(false)
 
-  // Recent notes
-  const [recentNotes, setRecentNotes] = useState<UserNote[]>([])
+  // All notes (for notebook tab)
+  const [notes, setNotes] = useState<UserNote[]>([])
+  const [notesLoading, setNotesLoading] = useState(false)
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -223,11 +232,19 @@ export default function NoteFloatWindow() {
   const isResizing = useRef<ResizeDir | null>(null)
   const resizeStart = useRef({ mouseX: 0, mouseY: 0, w: 0, h: 0 })
 
-  // Load recent notes when opened
+  // Load all notes when window opens or tab switches to 'all'
   useEffect(() => {
     if (!isOpen) return
-    api.notes.list(courseId ?? undefined).then(setRecentNotes).catch(() => {})
+    setNotesLoading(true)
+    api.notes.list(courseId ?? undefined).then(setNotes).catch(() => {}).finally(() => setNotesLoading(false))
   }, [isOpen, courseId])
+
+  useEffect(() => {
+    if (activeTab === 'all' && isOpen) {
+      setNotesLoading(true)
+      api.notes.list(courseId ?? undefined).then(setNotes).catch(() => {}).finally(() => setNotesLoading(false))
+    }
+  }, [activeTab, isOpen, courseId])
 
   // Paste support
   useEffect(() => {
@@ -238,7 +255,10 @@ export default function NoteFloatWindow() {
       for (const item of Array.from(items)) {
         if (item.type.startsWith('image/')) {
           const file = item.getAsFile()
-          if (file) setImageFromFile(file)
+          if (file) {
+            setImageFromFile(file)
+            setActiveTab('upload')
+          }
           break
         }
       }
@@ -316,7 +336,7 @@ export default function NoteFloatWindow() {
     setSaving(true)
     try {
       const note = await api.notes.upload(imageFile, caption, courseId ?? undefined)
-      setRecentNotes(prev => [note, ...prev.slice(0, 9)])
+      setNotes(prev => [note, ...prev])
       setPreview(null)
       setImageFile(null)
       setCaption('')
@@ -329,7 +349,7 @@ export default function NoteFloatWindow() {
 
   async function handleDeleteNote(noteId: number) {
     await api.notes.delete(noteId)
-    setRecentNotes(prev => prev.filter(n => n.id !== noteId))
+    setNotes(prev => prev.filter(n => n.id !== noteId))
   }
 
   function clearImage() {
@@ -421,7 +441,7 @@ export default function NoteFloatWindow() {
               style={{ background: 'rgba(255,255,255,0.15)' }} />
           )}
           <NotebookPen size={15} style={{ color: '#A78BFA' }} />
-          <span className="text-sm font-semibold text-white flex-1">📝 笔记</span>
+          <span className="text-sm font-semibold text-white flex-1">📝 笔记本</span>
           {courseName && (
             <span className="text-xs px-2 py-0.5 rounded-full"
               style={{ background: 'rgba(167,139,250,0.1)', color: '#A78BFA', border: '1px solid rgba(167,139,250,0.2)' }}>
@@ -435,99 +455,152 @@ export default function NoteFloatWindow() {
           </button>
         </div>
 
+        {/* ── Tab Bar ── */}
+        <div className="flex shrink-0 px-4 pt-3 pb-0 gap-1"
+          onMouseDown={e => e.stopPropagation()}>
+          {([
+            { id: 'upload' as TabId, label: '上传笔记' },
+            { id: 'all' as TabId, label: `笔记本${notes.length > 0 ? ` (${notes.length})` : ''}` },
+          ]).map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
+              style={{
+                background: activeTab === tab.id ? 'rgba(167,139,250,0.15)' : 'transparent',
+                color: activeTab === tab.id ? '#A78BFA' : '#555',
+                border: `1px solid ${activeTab === tab.id ? 'rgba(167,139,250,0.3)' : 'transparent'}`,
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         {/* ── Body ── */}
         <div className="flex-1 overflow-y-auto no-scrollbar px-4 py-4 space-y-4">
 
-          {/* Paste zone / preview */}
-          {preview ? (
-            <div className="relative rounded-xl overflow-hidden border"
-              style={{ borderColor: 'rgba(167,139,250,0.3)' }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={preview} alt="预览" className="w-full object-contain" style={{ maxHeight: 220, background: '#111' }} />
-              <button onClick={clearImage}
-                className="absolute top-2 right-2 p-1 rounded-lg"
-                style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
-                <X size={14} />
+          {activeTab === 'upload' ? (
+            <>
+              {/* Paste zone / preview */}
+              {preview ? (
+                <div className="relative rounded-xl overflow-hidden border"
+                  style={{ borderColor: 'rgba(167,139,250,0.3)' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={preview} alt="预览" className="w-full object-contain" style={{ maxHeight: 220, background: '#111' }} />
+                  <button onClick={clearImage}
+                    className="absolute top-2 right-2 p-1 rounded-lg"
+                    style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <div
+                  className="flex flex-col items-center justify-center gap-3 rounded-xl cursor-pointer"
+                  style={{
+                    height: 140,
+                    border: '1.5px dashed rgba(167,139,250,0.3)',
+                    background: 'rgba(167,139,250,0.04)',
+                  }}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <ImagePlus size={28} style={{ color: 'rgba(167,139,250,0.5)' }} />
+                  <div className="text-center">
+                    <p className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                      粘贴截图 或 点击上传
+                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: '#444' }}>
+                      支持 Ctrl+V 直接粘贴 · JPG / PNG / WebP
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+
+              {/* Caption input */}
+              <textarea
+                value={caption}
+                onChange={e => setCaption(e.target.value)}
+                placeholder="添加备注（可选）"
+                rows={2}
+                className="w-full resize-none rounded-xl px-3 py-2.5 text-sm outline-none transition-all"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  color: '#DDD',
+                  lineHeight: 1.6,
+                }}
+              />
+
+              {/* Save button */}
+              <button
+                onClick={handleSave}
+                disabled={!imageFile || saving}
+                className="w-full py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{
+                  background: savedOk ? 'rgba(34,197,94,0.15)' : 'rgba(167,139,250,0.15)',
+                  color: savedOk ? '#22C55E' : '#A78BFA',
+                  border: `1px solid ${savedOk ? 'rgba(34,197,94,0.3)' : 'rgba(167,139,250,0.3)'}`,
+                }}
+              >
+                {saving
+                  ? <><Loader2 size={14} className="animate-spin" /> AI 识别中...</>
+                  : savedOk
+                    ? <><Check size={14} /> 已保存！</>
+                    : '保存到笔记本'}
               </button>
-            </div>
+
+              {/* Quick link to notebook */}
+              {notes.length > 0 && (
+                <button
+                  onClick={() => setActiveTab('all')}
+                  className="w-full py-2 text-xs transition-all"
+                  style={{ color: '#555' }}
+                >
+                  查看全部 {notes.length} 条笔记 →
+                </button>
+              )}
+            </>
           ) : (
-            <div
-              className="flex flex-col items-center justify-center gap-3 rounded-xl cursor-pointer"
-              style={{
-                height: 140,
-                border: '1.5px dashed rgba(167,139,250,0.3)',
-                background: 'rgba(167,139,250,0.04)',
-              }}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <ImagePlus size={28} style={{ color: 'rgba(167,139,250,0.5)' }} />
-              <div className="text-center">
-                <p className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                  粘贴截图 或 点击上传
-                </p>
-                <p className="text-xs mt-0.5" style={{ color: '#444' }}>
-                  支持 Ctrl+V 直接粘贴 · JPG / PNG / WebP
-                </p>
-              </div>
-            </div>
-          )}
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleFileChange}
-          />
-
-          {/* Caption input */}
-          <textarea
-            value={caption}
-            onChange={e => setCaption(e.target.value)}
-            placeholder="添加备注（可选）"
-            rows={2}
-            className="w-full resize-none rounded-xl px-3 py-2.5 text-sm outline-none transition-all"
-            style={{
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              color: '#DDD',
-              lineHeight: 1.6,
-            }}
-          />
-
-          {/* Save button */}
-          <button
-            onClick={handleSave}
-            disabled={!imageFile || saving}
-            className="w-full py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{
-              background: savedOk ? 'rgba(34,197,94,0.15)' : 'rgba(167,139,250,0.15)',
-              color: savedOk ? '#22C55E' : '#A78BFA',
-              border: `1px solid ${savedOk ? 'rgba(34,197,94,0.3)' : 'rgba(167,139,250,0.3)'}`,
-            }}
-          >
-            {saving
-              ? <><Loader2 size={14} className="animate-spin" /> AI 识别中...</>
-              : savedOk
-                ? <><Check size={14} /> 已保存！</>
-                : '保存到笔记本'}
-          </button>
-
-          {/* Recent notes */}
-          {recentNotes.length > 0 && (
-            <div>
-              <p className="text-xs mb-2" style={{ color: '#444' }}>最近保存</p>
-              <div className="space-y-2">
-                {recentNotes.slice(0, 6).map(note => (
-                  <NoteCard
-                    key={note.id}
-                    note={note}
-                    onZoom={() => setLightboxSrc(note.image_url)}
-                    onDelete={() => handleDeleteNote(note.id)}
-                  />
-                ))}
-              </div>
-            </div>
+            /* ── All Notes Tab ── */
+            <>
+              {notesLoading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="animate-spin" style={{ color: '#A78BFA' }} size={22} />
+                </div>
+              ) : notes.length === 0 ? (
+                <div className="text-center py-16" style={{ color: '#444' }}>
+                  <NotebookPen size={40} className="mx-auto mb-3 opacity-20" />
+                  <p className="text-sm text-white mb-1">暂无笔记</p>
+                  <p className="text-xs" style={{ color: '#555' }}>切换到「上传笔记」标签保存截图</p>
+                  <button
+                    onClick={() => setActiveTab('upload')}
+                    className="mt-4 px-4 py-2 rounded-xl text-xs font-medium"
+                    style={{ background: 'rgba(167,139,250,0.1)', color: '#A78BFA', border: '1px solid rgba(167,139,250,0.25)' }}
+                  >
+                    去上传
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {notes.map(note => (
+                    <NoteCard
+                      key={note.id}
+                      note={note}
+                      onZoom={() => setLightboxSrc(note.image_url)}
+                      onDelete={() => handleDeleteNote(note.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
 

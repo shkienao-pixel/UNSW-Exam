@@ -32,6 +32,8 @@ COSTS: dict[str, int] = {
     "exam_past_unlock": 150,
     # 模拟题生成
     "gen_exam_mock":   100,
+    # 互动课堂生成
+    "gen_classroom":   300,
 }
 
 

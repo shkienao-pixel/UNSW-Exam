@@ -100,7 +100,12 @@ function CoursePageInner() {
   if (view === 'classroom') {
     return (
       <div className="mx-auto w-full max-w-[1180px] flex-1 overflow-y-auto px-5 py-8 sm:px-6 lg:py-10">
-        <ClassroomTab courseId={courseId} />
+        <ClassroomTab
+          courseId={courseId}
+          artifacts={artifacts}
+          creditBalance={creditBalance ?? 0}
+          onCreditSpent={spendCredits}
+        />
       </div>
     )
   }
