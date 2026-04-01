@@ -20,6 +20,9 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  env: {
+    DEFAULT_MODEL: process.env.DEFAULT_MODEL || 'openai/gpt-4o-mini',
+  },
 };
 
 export default nextConfig;

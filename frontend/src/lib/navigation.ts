@@ -1,4 +1,4 @@
-import { LibraryBig, Layers3, BookMarked, CalendarDays, Target, BookOpen } from 'lucide-react'
+import { LibraryBig, Layers3, BookMarked, CalendarDays, Target, BookOpen, MonitorPlay } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 export const FEATURES = [
@@ -8,6 +8,7 @@ export const FEATURES = [
   { view: 'planner',            labelKey: 'planner' },
   { view: 'quiz',               labelKey: 'quiz' },
   { view: 'course-summary',     labelKey: 'knowledge_summary' },
+  { view: 'classroom',          labelKey: 'classroom' },
 ] as const
 
 export type FeatureView = typeof FEATURES[number]['view']
@@ -19,12 +20,13 @@ export interface FeatureMeta {
 }
 
 export const FEATURE_ICON_MAP: Record<FeatureView, FeatureMeta> = {
-  resources:            { icon: LibraryBig,   tint: '#9FD3C7', bg: 'rgba(159,211,199,0.1)'  },
-  flashcards:           { icon: Layers3,      tint: '#E7D08A', bg: 'rgba(200,165,90,0.12)'  },
-  'notes-and-mistakes': { icon: BookMarked,   tint: '#A78BFA', bg: 'rgba(167,139,250,0.12)' },
-  planner:              { icon: CalendarDays, tint: '#7DD3C8', bg: 'rgba(125,211,200,0.12)' },
-  quiz:                 { icon: Target,       tint: '#87B6FF', bg: 'rgba(135,182,255,0.12)' },
-  'course-summary':     { icon: BookOpen,     tint: '#A8D8B0', bg: 'rgba(168,216,176,0.12)' },
+  resources:            { icon: LibraryBig,    tint: '#9FD3C7', bg: 'rgba(159,211,199,0.1)'  },
+  flashcards:           { icon: Layers3,       tint: '#E7D08A', bg: 'rgba(200,165,90,0.12)'  },
+  'notes-and-mistakes': { icon: BookMarked,    tint: '#A78BFA', bg: 'rgba(167,139,250,0.12)' },
+  planner:              { icon: CalendarDays,  tint: '#7DD3C8', bg: 'rgba(125,211,200,0.12)' },
+  quiz:                 { icon: Target,        tint: '#87B6FF', bg: 'rgba(135,182,255,0.12)' },
+  'course-summary':     { icon: BookOpen,      tint: '#A8D8B0', bg: 'rgba(168,216,176,0.12)' },
+  classroom:            { icon: MonitorPlay,   tint: '#F9A8D4', bg: 'rgba(249,168,212,0.12)' },
 }
 
 export const SIDEBAR_SHELL_BG =
