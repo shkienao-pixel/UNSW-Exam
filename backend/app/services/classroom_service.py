@@ -86,7 +86,7 @@ def _fetch_text(db: Client, user_id: str, course_id: str, artifact_ids: list[int
                 logger.warning("classroom extract_text failed id=%s: %s", art["id"], e)
         else:
             logger.warning("classroom extract: id=%s has no storage_path", art["id"])
-    result = "\n\n".join(parts)[:18000]
+    result = "\n\n".join(parts)[:40000]
     logger.info("classroom _fetch_text total chars=%s", len(result))
     return result
 
@@ -94,16 +94,22 @@ def _fetch_text(db: Client, user_id: str, course_id: str, artifact_ids: list[int
 # ── LLM 调用 ──────────────────────────────────────────────────────────────────
 
 _SYSTEM_PROMPT = """\
-你是一个专业的教育课件设计师。根据用户提供的课程材料，生成一个 JSON 格式的互动课堂。
+你是一位经验丰富的大学讲师，擅长将复杂课程内容转化为结构清晰、深入详细的互动课堂。
+根据用户提供的课程材料，生成一个 JSON 格式的互动课堂。
 
-要求：
-- 生成 4-6 个 slide 场景（讲解幻灯片），每个 slide 包含 heading 和 3-5 个 bullets 要点
-- 生成 1-2 个 quiz 场景（多选题测验），每个 quiz 包含 3-5 道单选题
-- 内容要准确、精炼，聚焦核心知识点
-- 所有文本使用中文
-- 严格按照下方 JSON 格式输出，不要包含任何其他文字
+【严格要求】
+- 生成 6-8 个 slide 场景，按知识结构由浅入深排列
+- 每个 slide 必须包含：
+    - heading：该节核心主题（简洁有力）
+    - subheading：背景或范围说明（1 句）
+    - bullets：4-6 个要点，每个要点本身就是完整的知识陈述（不只是关键词），包含具体数值、公式、定义或结论
+    - explanation：2-4 句连贯的段落，深入解释该节内容，阐明原理、举具体例子或说明应用场景
+- 生成 2 个 quiz 场景，分散在 slide 之间（第 3 节后和最后）
+- 每个 quiz 包含 4-5 道单选题，题目考察理解和应用（不只是记忆），每题有详细 analysis 解析
+- 所有文本使用中文，专业术语保留英文原文
+- 严格输出 JSON，不要任何 markdown 代码块或额外文字
 
-输出格式（严格 JSON，不要 markdown 代码块）：
+输出格式：
 {
   "title": "课程主题名称",
   "scenes": [
@@ -113,30 +119,35 @@ _SYSTEM_PROMPT = """\
       "title": "场景标题",
       "order": 1,
       "content": {
-        "heading": "幻灯片大标题",
-        "subheading": "副标题（可选，没有则省略此字段）",
-        "bullets": ["要点1", "要点2", "要点3"]
+        "heading": "该节核心主题",
+        "subheading": "背景或范围说明",
+        "bullets": [
+          "要点1：包含完整知识陈述和关键细节",
+          "要点2：包含具体数值、定义或推导结论",
+          "要点3：说明与其他概念的关联或对比"
+        ],
+        "explanation": "详细解释本节内容的段落，2-4句，阐明原理并举具体例子。"
       }
     },
     {
       "id": "s2",
       "type": "quiz",
-      "title": "测验标题",
+      "title": "阶段测验",
       "order": 2,
       "content": {
         "questions": [
           {
             "id": "q1",
             "type": "single",
-            "question": "题目文本",
+            "question": "考察理解或应用的题目（不只是定义背诵）",
             "options": [
-              {"label": "选项A文本", "value": "A"},
-              {"label": "选项B文本", "value": "B"},
-              {"label": "选项C文本", "value": "C"},
-              {"label": "选项D文本", "value": "D"}
+              {"label": "选项A的完整表述", "value": "A"},
+              {"label": "选项B的完整表述", "value": "B"},
+              {"label": "选项C的完整表述", "value": "C"},
+              {"label": "选项D的完整表述", "value": "D"}
             ],
             "answer": ["A"],
-            "analysis": "解析说明"
+            "analysis": "详细解析：说明为什么A正确，其他选项为何错误，并联系课程概念。"
           }
         ]
       }
@@ -166,11 +177,11 @@ def _call_gemini(content: str, gemini_key: str) -> dict:
     client = genai.Client(api_key=gemini_key)
     user_msg = f"以下是课程材料，请据此生成互动课堂：\n\n{content}"
     response = client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-pro-preview-05-06",
         config=gtypes.GenerateContentConfig(
             system_instruction=_SYSTEM_PROMPT,
-            temperature=0.4,
-            max_output_tokens=8192,
+            temperature=0.5,
+            max_output_tokens=16000,
         ),
         contents=user_msg,
     )
@@ -182,7 +193,7 @@ def _call_openai(content: str, openai_key: str) -> dict:
 
     client = openai.OpenAI(api_key=openai_key)
     resp = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": f"以下是课程材料，请据此生成互动课堂：\n\n{content}"},

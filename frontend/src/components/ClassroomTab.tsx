@@ -10,7 +10,7 @@ import {
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-interface SlideContent { heading: string; subheading?: string; bullets: string[] }
+interface SlideContent { heading: string; subheading?: string; bullets: string[]; explanation?: string }
 interface QuizOption { label: string; value: string }
 interface QuizQuestion {
   id: string; type: string; question: string
@@ -32,23 +32,37 @@ interface HistoryItem { id: string; title: string; created_at: string }
 
 function SlideViewer({ content }: { content: SlideContent }) {
   return (
-    <div className="rounded-2xl p-8 min-h-[300px] flex flex-col justify-center"
-      style={{ background: 'linear-gradient(135deg, rgba(20,22,40,0.9) 0%, rgba(10,12,28,0.95) 100%)', border: '1px solid rgba(255,255,255,0.08)' }}>
-      <h2 className="text-2xl font-bold text-white mb-2 leading-snug">{content.heading}</h2>
-      {content.subheading && (
-        <p className="text-sm mb-5" style={{ color: '#A78BFA' }}>{content.subheading}</p>
+    <div className="rounded-2xl overflow-hidden"
+      style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
+      {/* Header */}
+      <div className="px-8 pt-8 pb-6"
+        style={{ background: 'linear-gradient(135deg, rgba(20,22,40,0.95) 0%, rgba(10,12,28,0.98) 100%)' }}>
+        <h2 className="text-2xl font-bold text-white leading-snug">{content.heading}</h2>
+        {content.subheading && (
+          <p className="text-sm mt-2" style={{ color: '#A78BFA' }}>{content.subheading}</p>
+        )}
+      </div>
+      {/* Bullets */}
+      <div className="px-8 py-5" style={{ background: 'rgba(255,255,255,0.02)' }}>
+        <ul className="space-y-3">
+          {content.bullets.map((b, i) => (
+            <li key={i} className="flex items-start gap-3 text-sm" style={{ color: '#CBD5E1' }}>
+              <span className="mt-0.5 w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-xs font-bold"
+                style={{ background: 'rgba(167,139,250,0.2)', color: '#A78BFA' }}>
+                {i + 1}
+              </span>
+              <span className="leading-relaxed">{b}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      {/* Explanation */}
+      {content.explanation && (
+        <div className="px-8 py-5 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)', background: 'rgba(167,139,250,0.04)' }}>
+          <p className="text-xs font-semibold mb-2" style={{ color: '#A78BFA' }}>💡 详解</p>
+          <p className="text-sm leading-relaxed" style={{ color: '#94A3B8' }}>{content.explanation}</p>
+        </div>
       )}
-      <ul className="space-y-3 mt-4">
-        {content.bullets.map((b, i) => (
-          <li key={i} className="flex items-start gap-3 text-sm" style={{ color: '#CBD5E1' }}>
-            <span className="mt-1 w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-xs font-bold"
-              style={{ background: 'rgba(167,139,250,0.2)', color: '#A78BFA' }}>
-              {i + 1}
-            </span>
-            <span className="leading-relaxed">{b}</span>
-          </li>
-        ))}
-      </ul>
     </div>
   )
 }
