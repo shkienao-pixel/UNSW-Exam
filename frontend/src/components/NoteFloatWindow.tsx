@@ -113,17 +113,23 @@ export default function NoteFloatWindow() {
     setIsMobile(window.innerWidth < 768)
   }, [])
 
-  const [size, setSize] = useState(loadSize)
-  const [pos, setPos] = useState<{ x: number; y: number }>(() => {
-    const saved = loadPos()
-    if (saved) return saved
-    if (typeof window === 'undefined') return { x: 80, y: 80 }
-    return { x: window.innerWidth - DEFAULT_W - 24, y: window.innerHeight - DEFAULT_H - 24 }
-  })
-  const [fabPos, setFabPos] = useState(() => {
-    if (typeof window === 'undefined') return { x: 80, y: 80 }
-    return { x: window.innerWidth - 72, y: window.innerHeight - 180 }
-  })
+  const [size, setSize] = useState<{ w: number; h: number }>({ w: DEFAULT_W, h: DEFAULT_H })
+  const [pos, setPos] = useState<{ x: number; y: number }>({ x: 80, y: 80 })
+  const [fabPos, setFabPos] = useState<{ x: number; y: number }>({ x: 80, y: 80 })
+
+  // Load persisted pos/size/fabPos on client only (avoids SSR hydration mismatch)
+  useEffect(() => {
+    setSize(loadSize())
+    const savedPos = loadPos()
+    setPos(savedPos ?? { x: window.innerWidth - DEFAULT_W - 24, y: window.innerHeight - DEFAULT_H - 24 })
+    try {
+      const raw = localStorage.getItem('note_fab_pos')
+      const savedFab = raw ? (JSON.parse(raw) as { x: number; y: number }) : null
+      setFabPos(savedFab ?? { x: window.innerWidth - 72, y: window.innerHeight - 180 })
+    } catch {
+      setFabPos({ x: window.innerWidth - 72, y: window.innerHeight - 180 })
+    }
+  }, [])
 
   // BlockNote content
   const [initialContent, setInitialContent] = useState<unknown[]>([])

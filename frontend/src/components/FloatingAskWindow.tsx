@@ -397,9 +397,7 @@ export default function FloatingAskWindow() {
   } = useFloatingAsk()
 
   const [pos, setPos] = useState({ x: -1, y: -1 })
-  const [size, setSize] = useState<{ w: number; h: number }>(() =>
-    typeof window !== 'undefined' ? loadSize() : { w: DEFAULT_W, h: DEFAULT_H },
-  )
+  const [size, setSize] = useState<{ w: number; h: number }>({ w: DEFAULT_W, h: DEFAULT_H })
   const [isMobile, setIsMobile] = useState(false)
   const [sheetHeight, setSheetHeight] = useState('86dvh')
 
@@ -424,6 +422,7 @@ export default function FloatingAskWindow() {
     : { base: '14px', sm: '13px', xs: '11.5px', title: '15px' }
 
   useEffect(() => {
+    setSize(loadSize())
     const updateMobile = () => setIsMobile(window.innerWidth <= 768)
     updateMobile()
     window.addEventListener('resize', updateMobile)
