@@ -5,8 +5,9 @@ import type { Artifact } from '@/lib/types'
 import {
   Sparkles, Loader2, Play, CheckSquare, Square,
   ChevronLeft, ChevronRight, HelpCircle, FileText,
-  AlertCircle, RefreshCw, History,
+  AlertCircle, RefreshCw, History, PencilLine, Globe,
 } from 'lucide-react'
+import SimpleWhiteboard from '@/components/classroom/SimpleWhiteboard'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -17,9 +18,10 @@ interface QuizQuestion {
   options?: QuizOption[]; answer?: string[]; analysis?: string
 }
 interface QuizContent { questions: QuizQuestion[] }
+interface InteractiveContent { html?: string; url?: string }
 interface Scene {
-  id: string; type: 'slide' | 'quiz'; title: string; order: number
-  content: SlideContent | QuizContent
+  id: string; type: 'slide' | 'quiz' | 'interactive'; title: string; order: number
+  content: SlideContent | QuizContent | InteractiveContent
 }
 interface Classroom { id: string; title: string; scenes: Scene[] }
 interface JobStatus {
@@ -140,26 +142,77 @@ function QuizViewer({ content }: { content: QuizContent }) {
   )
 }
 
+// ── Interactive Viewer ────────────────────────────────────────────────────────
+
+function InteractiveViewer({ content }: { content: InteractiveContent }) {
+  const src = content.url
+    ? content.url
+    : content.html
+      ? `data:text/html;charset=utf-8,${encodeURIComponent(
+          content.html.replace(
+            '</head>',
+            '<style>html,body{margin:0;padding:0;background:#0A0C1C;color:#CBD5E1;font-family:sans-serif}</style></head>',
+          ),
+        )}`
+      : null
+
+  if (!src) {
+    return (
+      <div className="flex items-center justify-center rounded-2xl h-64"
+        style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', color: '#444' }}>
+        <p className="text-sm">暂无交互内容</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-2xl overflow-hidden"
+      style={{ border: '1px solid rgba(167,139,250,0.2)', height: 480 }}>
+      <iframe
+        src={src}
+        title="interactive-scene"
+        className="w-full h-full"
+        sandbox="allow-scripts allow-same-origin"
+        style={{ border: 'none', background: '#0A0C1C' }}
+      />
+    </div>
+  )
+}
+
 // ── Scene View ─────────────────────────────────────────────────────────────────
 
 function SceneView({ scene }: { scene: Scene }) {
+  const tagStyle =
+    scene.type === 'quiz'
+      ? { bg: 'rgba(255,215,0,0.1)', color: '#FFD700', border: 'rgba(255,215,0,0.25)' }
+      : scene.type === 'interactive'
+        ? { bg: 'rgba(52,211,153,0.1)', color: '#34D399', border: 'rgba(52,211,153,0.25)' }
+        : { bg: 'rgba(167,139,250,0.1)', color: '#A78BFA', border: 'rgba(167,139,250,0.25)' }
+
+  const tagIcon =
+    scene.type === 'quiz' ? <HelpCircle size={11} /> :
+    scene.type === 'interactive' ? <Globe size={11} /> :
+    <FileText size={11} />
+
+  const tagLabel =
+    scene.type === 'quiz' ? '测验' :
+    scene.type === 'interactive' ? '交互' :
+    '讲解'
+
   return (
     <div>
       <div className="flex items-center gap-2 mb-4">
         <span className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full"
-          style={{
-            background: scene.type === 'quiz' ? 'rgba(255,215,0,0.1)' : 'rgba(167,139,250,0.1)',
-            color: scene.type === 'quiz' ? '#FFD700' : '#A78BFA',
-            border: `1px solid ${scene.type === 'quiz' ? 'rgba(255,215,0,0.25)' : 'rgba(167,139,250,0.25)'}`,
-          }}>
-          {scene.type === 'quiz' ? <HelpCircle size={11} /> : <FileText size={11} />}
-          {scene.type === 'quiz' ? '测验' : '讲解'}
+          style={{ background: tagStyle.bg, color: tagStyle.color, border: `1px solid ${tagStyle.border}` }}>
+          {tagIcon}{tagLabel}
         </span>
         <h3 className="text-white font-semibold">{scene.title}</h3>
       </div>
       {scene.type === 'slide'
         ? <SlideViewer content={scene.content as SlideContent} />
-        : <QuizViewer content={scene.content as QuizContent} />}
+        : scene.type === 'interactive'
+          ? <InteractiveViewer content={scene.content as InteractiveContent} />
+          : <QuizViewer content={scene.content as QuizContent} />}
     </div>
   )
 }
@@ -190,6 +243,7 @@ export default function ClassroomTab({ courseId, artifacts, creditBalance, onCre
   const [error, setError] = useState<string | null>(null)
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [showHistory, setShowHistory] = useState(false)
+  const [whiteboardOpen, setWhiteboardOpen] = useState(false)
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const pdfs = artifacts.filter(a => a.status === 'approved' && a.file_type === 'pdf')
@@ -314,6 +368,7 @@ export default function ClassroomTab({ courseId, artifacts, creditBalance, onCre
   if (phase === 'viewing' && classroom) {
     const scene = scenes[sceneIdx]
     return (
+      <>
       <div className="flex gap-6">
         {/* Sidebar */}
         <div className="w-52 shrink-0 space-y-1">
@@ -350,7 +405,14 @@ export default function ClassroomTab({ courseId, artifacts, creditBalance, onCre
               style={{ background: 'rgba(255,255,255,0.04)', color: '#888', border: '1px solid rgba(255,255,255,0.07)' }}>
               <ChevronLeft size={15} /> 上一节
             </button>
-            <span className="text-xs" style={{ color: '#444' }}>{sceneIdx + 1} / {scenes.length}</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs" style={{ color: '#444' }}>{sceneIdx + 1} / {scenes.length}</span>
+              <button onClick={() => setWhiteboardOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs transition-all"
+                style={{ background: 'rgba(167,139,250,0.08)', color: '#A78BFA', border: '1px solid rgba(167,139,250,0.2)' }}>
+                <PencilLine size={13} /> 白板
+              </button>
+            </div>
             <button onClick={() => setSceneIdx(i => Math.min(scenes.length - 1, i + 1))}
               disabled={sceneIdx === scenes.length - 1}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm transition-all disabled:opacity-20"
@@ -360,6 +422,8 @@ export default function ClassroomTab({ courseId, artifacts, creditBalance, onCre
           </div>
         </div>
       </div>
+      <SimpleWhiteboard isOpen={whiteboardOpen} onClose={() => setWhiteboardOpen(false)} />
+      </>
     )
   }
 
