@@ -5,6 +5,7 @@ import {
   Check,
   Copy,
   ImagePlus,
+  Layers3,
   Loader2,
   MessageCircleMore,
   Minus,
@@ -14,16 +15,17 @@ import {
   Square,
   Trash2,
   X,
+  Zap,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
 import 'highlight.js/styles/github-dark.css'
-import { useFloatingAsk } from '@/lib/floating-ask-context'
+import { useFloatingAsk, type FloatingMessage } from '@/lib/floating-ask-context'
 
-const MIN_W = 380
-const MIN_H = 480
-const DEFAULT_W = 520
-const DEFAULT_H = 680
+const MIN_W = 400
+const MIN_H = 500
+const DEFAULT_W = 560
+const DEFAULT_H = 700
 const POS_KEY = 'floating_ask_pos'
 const SIZE_KEY = 'floating_ask_size'
 
@@ -63,58 +65,335 @@ function loadPos() {
   }
 }
 
+// ── Lightbox ──────────────────────────────────────────────────────────────────
+
 function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [onClose])
-
   return (
     <div
       className="fixed inset-0 z-[80] flex items-center justify-center p-4"
-      style={{ background: 'rgba(3,4,10,0.88)' }}
+      style={{ background: 'rgba(3,4,10,0.92)' }}
       onClick={onClose}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={src}
-        alt="preview"
-        className="rounded-2xl"
+      <img src={src} alt="preview" className="rounded-2xl"
         style={{ maxWidth: '92vw', maxHeight: '92vh', objectFit: 'contain' }}
-        onClick={event => event.stopPropagation()}
-      />
-      <button
-        onClick={onClose}
-        className="absolute right-4 top-4 rounded-full p-2"
-        style={{ background: 'rgba(255,255,255,0.1)', color: '#fff' }}
-      >
+        onClick={e => e.stopPropagation()} />
+      <button onClick={onClose} className="absolute right-4 top-4 rounded-full p-2"
+        style={{ background: 'rgba(255,255,255,0.1)', color: '#fff' }}>
         <X size={18} />
       </button>
     </div>
   )
 }
 
+// ── Quick prompts ──────────────────────────────────────────────────────────────
+
+const QUICK_CHIPS = [
+  { label: '只看答案', q: '直接给出正确答案和一句话核心原因，不用展开' },
+  { label: '逐项分析', q: '请逐项分析每个选项为什么对或错' },
+  { label: '考试版解析', q: '给出适合应试记忆的标准解析，要简洁清晰' },
+  { label: '出类似题', q: '根据这个知识点再出一道类似练习题' },
+]
+
+// ── AI Response Card ───────────────────────────────────────────────────────────
+
+function AiCard({
+  message,
+  fsBase,
+  fsSm,
+  fsXs,
+  copiedId,
+  onCopy,
+  onRetry,
+  onLightbox,
+  onQuickAction,
+}: {
+  message: FloatingMessage
+  fsBase: string
+  fsSm: string
+  fsXs: string
+  copiedId: string | null
+  onCopy: (id: string, text: string) => void
+  onRetry: () => void
+  onLightbox: (src: string) => void
+  onQuickAction: (q: string) => void
+}) {
+  const isDone = !message.streaming && !message.pending && !message.failed && message.content
+  const [expanded, setExpanded] = useState(true)
+
+  return (
+    <div className="flex gap-2.5">
+      {/* AI avatar */}
+      <div className="mt-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full"
+        style={{ background: 'rgba(255,215,0,0.14)', border: '1px solid rgba(255,215,0,0.22)' }}>
+        <Sparkles size={11} style={{ color: '#FFD700' }} />
+      </div>
+
+      <div className="min-w-0 flex-1">
+        {/* Loading states */}
+        {message.pending && (
+          <div className="flex items-center gap-2 py-2" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            <Loader2 size={13} className="animate-spin" />
+            <span style={{ fontSize: fsBase }}>正在解析图片内容…</span>
+          </div>
+        )}
+        {message.streaming && !message.content && (
+          <div className="flex items-center gap-2 py-2" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            <Loader2 size={13} className="animate-spin" />
+            <span style={{ fontSize: fsBase }}>
+              {message.streamStatus === 'slow' ? '正在组织更完整的答案…' : '正在解析…'}
+            </span>
+          </div>
+        )}
+        {message.failed && !message.content && (
+          <p style={{ fontSize: fsBase, color: '#fca5a5' }}>请求失败，请稍后重试</p>
+        )}
+
+        {/* Answer card */}
+        {message.content && (
+          <div
+            style={{
+              background: 'rgba(255,255,255,0.025)',
+              border: '1px solid rgba(255,255,255,0.07)',
+              borderLeft: '3px solid rgba(255,215,0,0.5)',
+              borderRadius: '0 14px 14px 0',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Card header */}
+            <div
+              className="flex items-center justify-between px-3 py-2"
+              style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,215,0,0.03)' }}
+            >
+              <div className="flex items-center gap-1.5">
+                <Zap size={11} style={{ color: '#FFD700' }} />
+                <span style={{ fontSize: '11px', color: 'rgba(255,215,0,0.8)', fontWeight: 600, letterSpacing: '0.04em' }}>
+                  AI 解析
+                </span>
+                {message.streaming && (
+                  <span className="inline-block h-3 w-0.5 animate-pulse rounded-sm align-middle"
+                    style={{ background: '#FFD700', marginLeft: 2 }} />
+                )}
+              </div>
+              <div className="flex items-center gap-0.5">
+                {isDone && (
+                  <button
+                    onClick={() => setExpanded(v => !v)}
+                    className="rounded-lg px-1.5 py-0.5 transition-colors hover:bg-white/8"
+                    style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)' }}
+                  >
+                    {expanded ? '收起' : '展开'}
+                  </button>
+                )}
+                {message.content && (
+                  <button
+                    onClick={() => onCopy(message.id, message.content)}
+                    className="rounded-lg p-1 transition-colors hover:bg-white/8"
+                    style={{ color: copiedId === message.id ? '#86efac' : 'rgba(255,255,255,0.3)' }}
+                  >
+                    {copiedId === message.id ? <Check size={11} /> : <Copy size={11} />}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Content body */}
+            {expanded && (
+              <div className="px-4 py-3" style={{ color: '#d4d4dc', fontSize: fsBase, lineHeight: '1.78' }}>
+                <div className="exam-prose">
+                  <ReactMarkdown
+                    rehypePlugins={[rehypeHighlight]}
+                    components={{
+                      h1: ({ children }) => (
+                        <div style={{ borderBottom: '1px solid rgba(255,215,0,0.2)', paddingBottom: '0.35em', marginTop: '1.1em', marginBottom: '0.6em' }}>
+                          <span style={{ fontSize: fsSm, fontWeight: 700, color: '#FFD700', letterSpacing: '0.02em' }}>{children}</span>
+                        </div>
+                      ),
+                      h2: ({ children }) => (
+                        <div style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.3em', marginTop: '1em', marginBottom: '0.5em' }}>
+                          <span style={{ fontSize: fsSm, fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>{children}</span>
+                        </div>
+                      ),
+                      h3: ({ children }) => (
+                        <p style={{ fontSize: fsSm, fontWeight: 600, color: 'rgba(255,255,255,0.75)', marginTop: '0.9em', marginBottom: '0.3em' }}>{children}</p>
+                      ),
+                      p: ({ children }) => (
+                        <p style={{ fontSize: fsBase, marginTop: '0.5em', marginBottom: '0.5em', color: '#d4d4dc' }}>{children}</p>
+                      ),
+                      strong: ({ children }) => (
+                        <strong style={{ color: '#f0e68c', fontWeight: 700 }}>{children}</strong>
+                      ),
+                      li: ({ children }) => (
+                        <li style={{ fontSize: fsBase, marginBottom: '0.25em', paddingLeft: '0.15em' }}>{children}</li>
+                      ),
+                      ul: ({ children }) => (
+                        <ul style={{ paddingLeft: '1.2em', marginTop: '0.4em', marginBottom: '0.4em' }}>{children}</ul>
+                      ),
+                      ol: ({ children }) => (
+                        <ol style={{ paddingLeft: '1.4em', marginTop: '0.4em', marginBottom: '0.4em' }}>{children}</ol>
+                      ),
+                      blockquote: ({ children }) => (
+                        <blockquote style={{
+                          borderLeft: '3px solid rgba(255,215,0,0.4)',
+                          paddingLeft: '0.85em',
+                          marginLeft: 0,
+                          marginTop: '0.6em',
+                          marginBottom: '0.6em',
+                          color: 'rgba(255,255,255,0.6)',
+                          fontStyle: 'italic',
+                        }}>{children}</blockquote>
+                      ),
+                      code: ({ children, className }) => {
+                        const isBlock = className?.includes('language-')
+                        if (isBlock) return <code className={className}>{children}</code>
+                        return (
+                          <code style={{
+                            background: 'rgba(255,255,255,0.08)',
+                            borderRadius: '4px',
+                            padding: '0.15em 0.4em',
+                            fontSize: '0.88em',
+                            color: '#93c5fd',
+                            fontFamily: 'ui-monospace, monospace',
+                          }}>{children}</code>
+                        )
+                      },
+                      pre: ({ children }) => (
+                        <pre style={{
+                          background: 'rgba(0,0,0,0.35)',
+                          border: '1px solid rgba(255,255,255,0.07)',
+                          borderRadius: '10px',
+                          padding: '0.85em 1em',
+                          overflowX: 'auto',
+                          marginTop: '0.6em',
+                          marginBottom: '0.6em',
+                          fontSize: '0.87em',
+                        }}>{children}</pre>
+                      ),
+                      img: ({ src, alt }) => {
+                        const source = typeof src === 'string' ? src : ''
+                        return (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={source} alt={alt ?? ''} onClick={() => source && onLightbox(source)}
+                            style={{ maxWidth: '100%', borderRadius: '10px', cursor: source ? 'zoom-in' : undefined,
+                              marginTop: '0.5em', marginBottom: '0.5em', border: '1px solid rgba(255,255,255,0.08)' }} />
+                        )
+                      },
+                    }}
+                  >
+                    {message.content}
+                  </ReactMarkdown>
+                  {message.streaming && (
+                    <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse align-middle"
+                      style={{ background: '#FFD700', borderRadius: 1 }} />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Action strip — only for completed answers */}
+            {isDone && (
+              <div
+                className="flex flex-wrap items-center gap-1.5 px-3 py-2.5"
+                style={{ borderTop: '1px solid rgba(255,255,255,0.05)', background: 'rgba(0,0,0,0.12)' }}
+              >
+                {[
+                  { label: '逐项分析', q: '请逐项分析每个选项的对错及原因' },
+                  { label: '生成闪卡', q: '把这道题的核心知识点提炼成一张便于记忆的闪卡格式' },
+                  { label: '出类似题', q: '根据这道题的知识点，再出一道类似的练习题' },
+                  { label: '易错点总结', q: '总结这道题最容易出错的地方，以及如何避免' },
+                ].map(chip => (
+                  <button
+                    key={chip.label}
+                    onClick={() => onQuickAction(chip.q)}
+                    className="rounded-full px-2.5 py-1 transition-all hover:bg-white/10"
+                    style={{
+                      fontSize: '11px',
+                      color: 'rgba(255,255,255,0.45)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      background: 'rgba(255,255,255,0.03)',
+                    }}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+                {message.failed && (
+                  <button onClick={onRetry}
+                    className="flex items-center gap-1 rounded-full px-2.5 py-1 transition-colors hover:bg-white/8"
+                    style={{ fontSize: '11px', color: '#fca5a5', border: '1px solid rgba(248,113,113,0.2)', background: 'transparent' }}>
+                    <RefreshCw size={10} /> 重试
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Empty state ────────────────────────────────────────────────────────────────
+
+const SUGGESTION_CARDS = [
+  { icon: '📌', title: '粘贴题目截图', desc: 'Ctrl+V 直接识别题目内容' },
+  { icon: '🔍', title: '解析选择题', desc: '逐项分析每个选项对错' },
+  { icon: '📝', title: '考试版解析', desc: '简洁答案 + 核心考点' },
+  { icon: '🎯', title: '生成练习题', desc: '基于当前考点出类似题' },
+]
+
+function EmptyState({ courseId, onQuickAction }: { courseId: string | null; onQuickAction: (q: string) => void }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-5 px-2 pb-6 text-center">
+      <div>
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl"
+          style={{ background: 'rgba(255,215,0,0.08)', border: '1px solid rgba(255,215,0,0.15)' }}>
+          <Sparkles size={22} style={{ color: '#FFD700', opacity: 0.75 }} />
+        </div>
+        <p className="text-sm font-semibold text-white">AI 考试解析助教</p>
+        <p className="mt-1 text-xs" style={{ color: 'rgba(255,255,255,0.38)' }}>
+          {courseId ? '结合课件 + 真题 · 给出结构化解析' : '先进入一门课程再开始提问'}
+        </p>
+      </div>
+
+      {courseId && (
+        <div className="grid w-full grid-cols-2 gap-2">
+          {SUGGESTION_CARDS.map(card => (
+            <button
+              key={card.title}
+              onClick={() => onQuickAction(card.desc)}
+              className="rounded-2xl p-3 text-left transition-all hover:bg-white/6"
+              style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
+            >
+              <div className="mb-1.5 text-base leading-none">{card.icon}</div>
+              <p style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.75)', marginBottom: '2px' }}>{card.title}</p>
+              <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)' }}>{card.desc}</p>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {courseId && (
+        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>
+          Ctrl+V 粘贴截图 · 支持多轮追问
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
+
 export default function FloatingAskWindow() {
   const {
-    isOpen,
-    isMinimized,
-    messages,
-    courseId,
-    courseName,
-    credits,
-    unreadCount,
-    isLoading,
-    prefillText,
-    minimizeWindow,
-    openWindow,
-    closeWindow,
-    clearMessages,
-    clearPrefill,
-    sendMessage,
-    stopGeneration,
+    isOpen, isMinimized, messages, courseId, courseName, credits,
+    unreadCount, isLoading, prefillText,
+    minimizeWindow, openWindow, closeWindow, clearMessages, clearPrefill,
+    sendMessage, stopGeneration,
   } = useFloatingAsk()
 
   const [pos, setPos] = useState({ x: -1, y: -1 })
@@ -141,8 +420,8 @@ export default function FloatingAskWindow() {
   const resizeStartRef = useRef({ mouseX: 0, mouseY: 0, w: 0, h: 0 })
 
   const fs = isMobile
-    ? { base: '13px', sm: '12px', xs: '11px', title: '15px' }
-    : { base: '15px', sm: '13px', xs: '12px', title: '16px' }
+    ? { base: '13px', sm: '12px', xs: '11px', title: '14px' }
+    : { base: '14px', sm: '13px', xs: '11.5px', title: '15px' }
 
   useEffect(() => {
     const updateMobile = () => setIsMobile(window.innerWidth <= 768)
@@ -154,10 +433,7 @@ export default function FloatingAskWindow() {
   useEffect(() => {
     if (pos.x !== -1 || typeof window === 'undefined') return
     const saved = loadPos()
-    const fallback = {
-      x: Math.max(20, window.innerWidth - 84),
-      y: Math.max(20, window.innerHeight - 84),
-    }
+    const fallback = { x: Math.max(20, window.innerWidth - 84), y: Math.max(20, window.innerHeight - 84) }
     const next = saved ?? fallback
     setPos(next)
     currentPosRef.current = next
@@ -167,13 +443,10 @@ export default function FloatingAskWindow() {
     if (!isMobile) return
     const viewport = window.visualViewport
     if (!viewport) return
-
     const updateHeight = () => {
       const ratio = viewport.height / window.innerHeight
-      const pct = Math.min(88, Math.max(46, Math.round(ratio * 86)))
-      setSheetHeight(`${pct}dvh`)
+      setSheetHeight(`${Math.min(88, Math.max(46, Math.round(ratio * 86)))}dvh`)
     }
-
     updateHeight()
     viewport.addEventListener('resize', updateHeight)
     return () => viewport.removeEventListener('resize', updateHeight)
@@ -195,8 +468,8 @@ export default function FloatingAskWindow() {
 
   useEffect(() => {
     if (!isOpen || isMinimized) return
-    const onPaste = (event: ClipboardEvent) => {
-      const items = event.clipboardData?.items
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items
       if (!items) return
       for (const item of Array.from(items)) {
         if (!item.type.startsWith('image/')) continue
@@ -204,44 +477,34 @@ export default function FloatingAskWindow() {
         if (!file) continue
         const reader = new FileReader()
         setImageFile(file)
-        reader.onload = loadEvent => setImagePreview((loadEvent.target?.result as string) || null)
+        reader.onload = ev => setImagePreview((ev.target?.result as string) || null)
         reader.readAsDataURL(file)
         return
       }
     }
-
     document.addEventListener('paste', onPaste)
     return () => document.removeEventListener('paste', onPaste)
   }, [isOpen, isMinimized])
 
   useEffect(() => {
-    const onMouseMove = (event: MouseEvent) => {
+    const onMouseMove = (e: MouseEvent) => {
       if (resizeDirRef.current) {
-        const dx = event.clientX - resizeStartRef.current.mouseX
-        const dy = event.clientY - resizeStartRef.current.mouseY
-        setSize(prev => {
-          const nextWidth =
-            resizeDirRef.current === 's'
-              ? prev.w
-              : clamp(resizeStartRef.current.w + dx, MIN_W, window.innerWidth - currentPosRef.current.x - 10)
-          const nextHeight =
-            resizeDirRef.current === 'e'
-              ? prev.h
-              : clamp(resizeStartRef.current.h + dy, MIN_H, window.innerHeight - currentPosRef.current.y - 10)
-          return { w: nextWidth, h: nextHeight }
-        })
+        const dx = e.clientX - resizeStartRef.current.mouseX
+        const dy = e.clientY - resizeStartRef.current.mouseY
+        setSize(prev => ({
+          w: resizeDirRef.current === 's' ? prev.w : clamp(resizeStartRef.current.w + dx, MIN_W, window.innerWidth - currentPosRef.current.x - 10),
+          h: resizeDirRef.current === 'e' ? prev.h : clamp(resizeStartRef.current.h + dy, MIN_H, window.innerHeight - currentPosRef.current.y - 10),
+        }))
         return
       }
-
       if (!isDraggingRef.current) return
       const nextPos = {
-        x: clamp(event.clientX - dragOffsetRef.current.x, 0, window.innerWidth - 68),
-        y: clamp(event.clientY - dragOffsetRef.current.y, 0, window.innerHeight - 68),
+        x: clamp(e.clientX - dragOffsetRef.current.x, 0, window.innerWidth - 68),
+        y: clamp(e.clientY - dragOffsetRef.current.y, 0, window.innerHeight - 68),
       }
       currentPosRef.current = nextPos
       setPos(nextPos)
     }
-
     const onMouseUp = () => {
       if (resizeDirRef.current) {
         resizeDirRef.current = null
@@ -252,7 +515,6 @@ export default function FloatingAskWindow() {
         localStorage.setItem(POS_KEY, JSON.stringify(currentPosRef.current))
       }
     }
-
     document.addEventListener('mousemove', onMouseMove)
     document.addEventListener('mouseup', onMouseUp)
     return () => {
@@ -261,73 +523,68 @@ export default function FloatingAskWindow() {
     }
   }, [size])
 
-  function handleFabMouseDown(event: React.MouseEvent) {
-    event.preventDefault()
-    dragStartRef.current = { x: event.clientX, y: event.clientY }
+  function handleFabMouseDown(e: React.MouseEvent) {
+    e.preventDefault()
+    dragStartRef.current = { x: e.clientX, y: e.clientY }
     isDraggingRef.current = true
-    dragOffsetRef.current = {
-      x: event.clientX - currentPosRef.current.x,
-      y: event.clientY - currentPosRef.current.y,
-    }
+    dragOffsetRef.current = { x: e.clientX - currentPosRef.current.x, y: e.clientY - currentPosRef.current.y }
   }
-
-  function handleFabMouseUp(event: React.MouseEvent) {
-    const dx = event.clientX - dragStartRef.current.x
-    const dy = event.clientY - dragStartRef.current.y
-    if (Math.hypot(dx, dy) < 6) openWindow()
+  function handleFabMouseUp(e: React.MouseEvent) {
+    if (Math.hypot(e.clientX - dragStartRef.current.x, e.clientY - dragStartRef.current.y) < 6) openWindow()
   }
-
-  function handleTitleMouseDown(event: React.MouseEvent) {
-    if ((event.target as HTMLElement).closest('button')) return
-    event.preventDefault()
+  function handleTitleMouseDown(e: React.MouseEvent) {
+    if ((e.target as HTMLElement).closest('button')) return
+    e.preventDefault()
     isDraggingRef.current = true
-    dragOffsetRef.current = {
-      x: event.clientX - currentPosRef.current.x,
-      y: event.clientY - currentPosRef.current.y,
-    }
+    dragOffsetRef.current = { x: e.clientX - currentPosRef.current.x, y: e.clientY - currentPosRef.current.y }
   }
-
-  function handleResizeMouseDown(event: React.MouseEvent, dir: ResizeDir) {
-    event.preventDefault()
-    event.stopPropagation()
+  function handleResizeMouseDown(e: React.MouseEvent, dir: ResizeDir) {
+    e.preventDefault(); e.stopPropagation()
     resizeDirRef.current = dir
-    resizeStartRef.current = { mouseX: event.clientX, mouseY: event.clientY, w: size.w, h: size.h }
+    resizeStartRef.current = { mouseX: e.clientX, mouseY: e.clientY, w: size.w, h: size.h }
   }
-
-  function handleImageSelect(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
+  function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
     setImageFile(file)
-    reader.onload = loadEvent => setImagePreview((loadEvent.target?.result as string) || null)
+    reader.onload = ev => setImagePreview((ev.target?.result as string) || null)
     reader.readAsDataURL(file)
-    event.target.value = ''
+    e.target.value = ''
   }
-
-  function clearImage() {
-    setImageFile(null)
-    setImagePreview(null)
+  function clearImage() { setImageFile(null); setImagePreview(null) }
+  function handleTextareaChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    setInput(e.target.value)
+    e.target.style.height = 'auto'
+    e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`
   }
-
-  function handleTextareaChange(event: React.ChangeEvent<HTMLTextAreaElement>) {
-    setInput(event.target.value)
-    event.target.style.height = 'auto'
-    event.target.style.height = `${Math.min(event.target.scrollHeight, 180)}px`
-  }
-
   function handleSend() {
-    const question = input.trim()
-    if ((!question && !imageFile) || isLoading || !courseId) return
-    sendMessage(question || '请分析这张图片', imageFile)
+    const q = input.trim()
+    if ((!q && !imageFile) || isLoading || !courseId) return
+    sendMessage(q || '请分析这张图片', imageFile)
     setInput('')
     clearImage()
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
   }
-
-  if (lightboxSrc) {
-    return <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
+  function handleQuickAction(q: string) {
+    if (isLoading || !courseId) return
+    sendMessage(q, null)
+    setInput('')
+  }
+  function handleCopy(id: string, text: string) {
+    navigator.clipboard.writeText(text).catch(() => {})
+    setCopiedId(id)
+    window.setTimeout(() => setCopiedId(null), 1600)
+  }
+  function handleRetry(message: FloatingMessage) {
+    const index = messages.findIndex(m => m.id === message.id)
+    const prevUser = index > 0 ? messages.slice(0, index).reverse().find(m => m.role === 'user') : null
+    if (prevUser) sendMessage(prevUser.content, null)
   }
 
+  if (lightboxSrc) return <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
+
+  // ── FAB ───────────────────────────────────────────────────────────────────
   if (!isOpen || isMinimized) {
     if (pos.x === -1) return null
     return (
@@ -337,10 +594,7 @@ export default function FloatingAskWindow() {
         title="AI 问答"
         className="fixed z-50 flex items-center justify-center rounded-full select-none"
         style={{
-          left: pos.x,
-          top: pos.y,
-          width: 58,
-          height: 58,
+          left: pos.x, top: pos.y, width: 58, height: 58,
           background: isLoading
             ? 'radial-gradient(circle at 30% 28%, rgba(255,215,0,0.28), rgba(25,23,18,0.94) 60%)'
             : 'radial-gradient(circle at 32% 28%, rgba(255,215,0,0.18), rgba(17,19,30,0.96) 60%)',
@@ -357,12 +611,8 @@ export default function FloatingAskWindow() {
         {isLoading ? <Loader2 size={22} className="animate-spin" /> : <MessageCircleMore size={22} />}
         {isLoading && (
           <button
-            onMouseDown={event => event.stopPropagation()}
-            onMouseUp={event => event.stopPropagation()}
-            onClick={event => {
-              event.stopPropagation()
-              stopGeneration()
-            }}
+            onMouseDown={e => e.stopPropagation()} onMouseUp={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); stopGeneration() }}
             className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full"
             style={{ background: '#ef4444', color: '#fff', border: '2px solid rgba(20,22,30,0.9)' }}
           >
@@ -370,253 +620,116 @@ export default function FloatingAskWindow() {
           </button>
         )}
         {!isLoading && unreadCount > 0 && (
-          <span
-            className="absolute -right-1 -top-1 flex h-[18px] w-[18px] items-center justify-center rounded-full font-bold"
-            style={{ background: '#ef4444', color: '#fff', fontSize: 10 }}
-          >
+          <span className="absolute -right-1 -top-1 flex h-[18px] w-[18px] items-center justify-center rounded-full font-bold"
+            style={{ background: '#ef4444', color: '#fff', fontSize: 10 }}>
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
-        <span
-          className="pointer-events-none absolute inset-1 rounded-full"
-          style={{ border: '1px solid rgba(255,255,255,0.05)' }}
-        />
+        <span className="pointer-events-none absolute inset-1 rounded-full"
+          style={{ border: '1px solid rgba(255,255,255,0.05)' }} />
       </div>
     )
   }
 
+  // ── Inner content ──────────────────────────────────────────────────────────
+
   const innerContent = (
     <>
+      {/* Header */}
       <div
-        className={`relative flex items-center gap-3 px-4 py-3.5 ${isMobile ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'}`}
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}
+        className={`relative flex items-center gap-2.5 px-4 py-3 ${isMobile ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'}`}
+        style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}
         onMouseDown={isMobile ? undefined : handleTitleMouseDown}
       >
-        <div
-          className="pointer-events-none absolute inset-x-0 top-0 h-16"
-          style={{ background: 'radial-gradient(circle at top, rgba(255,215,0,0.16), transparent 72%)' }}
-        />
-        <div
-          className="flex h-8 w-8 items-center justify-center rounded-2xl"
-          style={{ background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.2)' }}
-        >
-          <Sparkles size={14} style={{ color: '#FFD700' }} />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-12"
+          style={{ background: 'radial-gradient(ellipse at top, rgba(255,215,0,0.1), transparent 70%)' }} />
+        <div className="flex h-7 w-7 items-center justify-center rounded-xl"
+          style={{ background: 'rgba(255,215,0,0.1)', border: '1px solid rgba(255,215,0,0.18)' }}>
+          <Layers3 size={13} style={{ color: '#FFD700' }} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-white" style={{ fontSize: fs.title }}>
-            AI 问答
-          </p>
-          <p className="truncate text-[11px]" style={{ color: 'rgba(255,255,255,0.42)' }}>
-            {courseName ? `${courseName} · 可继续追问和贴图` : '基于课程资料的上下文问答'}
+          <p className="font-semibold text-white leading-tight" style={{ fontSize: fs.title }}>AI 解析助教</p>
+          <p className="truncate" style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.38)', marginTop: '1px' }}>
+            {courseName || '结合课件 · 带来源回答'}
           </p>
         </div>
         {credits !== null && (
-          <span
-            className="rounded-full px-2.5 py-1"
-            style={{
-              fontSize: fs.xs,
-              color: credits < 40 ? '#fca5a5' : '#d4d4d8',
-              background: 'rgba(255,255,255,0.04)',
-              border: `1px solid ${credits < 40 ? 'rgba(248,113,113,0.25)' : 'rgba(255,255,255,0.08)'}`,
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
+          <span className="rounded-full px-2 py-0.5" style={{
+            fontSize: fs.xs, color: credits < 40 ? '#fca5a5' : 'rgba(255,255,255,0.4)',
+            background: 'rgba(255,255,255,0.04)', border: `1px solid ${credits < 40 ? 'rgba(248,113,113,0.2)' : 'rgba(255,255,255,0.07)'}`,
+            fontVariantNumeric: 'tabular-nums',
+          }}>
             {credits} 分
           </span>
         )}
         {isLoading && (
-          <button
-            onClick={stopGeneration}
-            className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium"
-            style={{ background: 'rgba(239,68,68,0.15)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.28)' }}
-          >
-            <Square size={10} />
-            停止
+          <button onClick={stopGeneration}
+            className="flex items-center gap-1 rounded-full px-2 py-1"
+            style={{ fontSize: '11px', background: 'rgba(239,68,68,0.12)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.22)' }}>
+            <Square size={9} /> 停止
           </button>
         )}
         {messages.length > 0 && !isLoading && (
-          <button
-            onClick={clearMessages}
-            className="rounded-xl p-1.5 transition-colors hover:bg-white/8"
-            style={{ color: 'rgba(255,255,255,0.36)' }}
-          >
-            <Trash2 size={14} />
+          <button onClick={clearMessages} className="rounded-xl p-1.5 transition-colors hover:bg-white/8"
+            style={{ color: 'rgba(255,255,255,0.32)' }}>
+            <Trash2 size={13} />
           </button>
         )}
-        <button
-          onClick={minimizeWindow}
-          className="rounded-xl p-1.5 transition-colors hover:bg-white/8"
-          style={{ color: 'rgba(255,255,255,0.36)' }}
-        >
-          <Minus size={14} />
+        <button onClick={minimizeWindow} className="rounded-xl p-1.5 transition-colors hover:bg-white/8"
+          style={{ color: 'rgba(255,255,255,0.32)' }}>
+          <Minus size={13} />
         </button>
-        <button
-          onClick={closeWindow}
-          className="rounded-xl p-1.5 transition-colors hover:bg-white/8"
-          style={{ color: 'rgba(255,255,255,0.36)' }}
-        >
-          <X size={14} />
+        <button onClick={closeWindow} className="rounded-xl p-1.5 transition-colors hover:bg-white/8"
+          style={{ color: 'rgba(255,255,255,0.32)' }}>
+          <X size={13} />
         </button>
       </div>
 
+      {/* Messages */}
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
         {messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-4 pb-8 text-center">
-            <div
-              className="flex h-14 w-14 items-center justify-center rounded-3xl"
-              style={{ background: 'rgba(255,215,0,0.08)', border: '1px solid rgba(255,215,0,0.15)' }}
-            >
-              <MessageCircleMore size={24} style={{ color: '#FFD700', opacity: 0.72 }} />
-            </div>
-            <div>
-              <p className="text-sm text-white">{courseId ? '直接提问，AI 会结合课件和真题回答' : '先进入一门课程再提问'}</p>
-              <p className="mt-2 text-xs" style={{ color: 'rgba(255,255,255,0.42)' }}>
-                支持多轮追问、截图粘贴、带来源回答
-              </p>
-            </div>
-            {courseId && (
-              <div
-                className="rounded-full px-3 py-1.5 text-xs"
-                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.46)' }}
-              >
-                Ctrl+V 粘贴截图，或拖着右下角图标去做题
-              </div>
-            )}
-          </div>
+          <EmptyState courseId={courseId} onQuickAction={handleQuickAction} />
         ) : (
-          <div className="space-y-5">
+          <div className="flex flex-col gap-4">
             {messages.map(message => (
               <div key={message.id}>
                 {message.role === 'user' ? (
+                  /* User message */
                   <div className="flex flex-col items-end gap-2">
                     {message.imagePreview && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={message.imagePreview}
-                        alt="user upload"
-                        className="max-h-[180px] max-w-[240px] cursor-zoom-in rounded-2xl object-cover"
-                        style={{ border: '1px solid rgba(255,255,255,0.1)' }}
+                        src={message.imagePreview} alt="user upload"
+                        className="cursor-zoom-in rounded-2xl object-cover"
+                        style={{ maxHeight: 160, maxWidth: 220, border: '1px solid rgba(255,255,255,0.1)' }}
                         onClick={() => setLightboxSrc(message.imagePreview!)}
                       />
                     )}
                     {message.content && (
-                      <div
-                        className="max-w-[88%] whitespace-pre-wrap rounded-[22px] px-4 py-3"
+                      <div className="max-w-[88%] rounded-[18px] px-3.5 py-2.5"
                         style={{
-                          fontSize: fs.base,
-                          lineHeight: '1.65',
-                          color: '#f5f5f5',
-                          background: 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.05))',
+                          fontSize: fs.base, lineHeight: '1.65', color: '#f0f0f0',
+                          background: 'linear-gradient(135deg, rgba(255,255,255,0.09), rgba(255,255,255,0.05))',
                           border: '1px solid rgba(255,255,255,0.1)',
-                        }}
-                      >
+                          whiteSpace: 'pre-wrap',
+                        }}>
                         {message.content}
                       </div>
                     )}
                   </div>
                 ) : (
-                  <div className="flex gap-3">
-                    <div
-                      className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full"
-                      style={{ background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.2)' }}
-                    >
-                      <Sparkles size={12} style={{ color: '#FFD700' }} />
-                    </div>
-
-                    <div className="min-w-0 flex-1 space-y-2">
-                      {message.pending ? (
-                        <div className="flex items-center gap-2 py-1" style={{ color: 'rgba(255,255,255,0.52)' }}>
-                          <Loader2 size={14} className="animate-spin" />
-                          <span style={{ fontSize: fs.base }}>正在解析图片内容…</span>
-                        </div>
-                      ) : message.streaming && !message.content ? (
-                        <div className="flex items-center gap-2 py-1" style={{ color: 'rgba(255,255,255,0.52)' }}>
-                          <Loader2 size={14} className="animate-spin" />
-                          <span style={{ fontSize: fs.base }}>
-                            {message.streamStatus === 'generating' ? '正在生成回答…' : '正在组织更完整的答案…'}
-                          </span>
-                        </div>
-                      ) : message.failed && !message.content ? (
-                        <p style={{ fontSize: fs.base, color: '#fca5a5' }}>请求失败，请稍后再试</p>
-                      ) : (
-                        <div
-                          className="rounded-[24px] px-4 py-3.5"
-                          style={{
-                            background: 'rgba(255,255,255,0.03)',
-                            border: '1px solid rgba(255,255,255,0.06)',
-                          }}
-                        >
-                          <div
-                            className="prose prose-invert max-w-none"
-                            style={{ color: '#d4d4dc', fontSize: fs.base, lineHeight: '1.8' }}
-                          >
-                            <ReactMarkdown
-                              rehypePlugins={[rehypeHighlight]}
-                              components={{
-                                p: ({ children }) => (
-                                  <p style={{ fontSize: fs.base, marginTop: '0.6em', marginBottom: '0.6em' }}>{children}</p>
-                                ),
-                                li: ({ children }) => <li style={{ fontSize: fs.base }}>{children}</li>,
-                                img: ({ src, alt }) => {
-                                  const source = typeof src === 'string' ? src : ''
-                                  return (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img
-                                      src={source}
-                                      alt={alt ?? 'assistant image'}
-                                      style={{ maxWidth: '100%', borderRadius: '0.75rem', cursor: source ? 'zoom-in' : undefined }}
-                                      onClick={() => source && setLightboxSrc(source)}
-                                    />
-                                  )
-                                },
-                              }}
-                            >
-                              {message.content}
-                            </ReactMarkdown>
-                            {message.streaming && (
-                              <span
-                                className="ml-0.5 inline-block h-4 w-0.5 animate-pulse align-middle"
-                                style={{ background: '#FFD700', borderRadius: 1 }}
-                              />
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {!message.streaming && !message.pending && (
-                        <div className="flex items-center gap-1 pt-0.5">
-                          {message.content && (
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(message.content).catch(() => {})
-                                setCopiedId(message.id)
-                                window.setTimeout(() => setCopiedId(null), 1600)
-                              }}
-                              className="flex items-center gap-1 rounded-full px-2.5 py-1 transition-colors hover:bg-white/8"
-                              style={{ fontSize: fs.xs, color: copiedId === message.id ? '#86efac' : 'rgba(255,255,255,0.4)' }}
-                            >
-                              {copiedId === message.id ? <Check size={11} /> : <Copy size={11} />}
-                              {copiedId === message.id ? '已复制' : '复制'}
-                            </button>
-                          )}
-                          {message.failed && (
-                            <button
-                              onClick={() => {
-                                const index = messages.findIndex(item => item.id === message.id)
-                                const prevUser = index > 0 ? messages.slice(0, index).reverse().find(item => item.role === 'user') : null
-                                if (prevUser) sendMessage(prevUser.content, null)
-                              }}
-                              className="flex items-center gap-1 rounded-full px-2.5 py-1 transition-colors hover:bg-white/8"
-                              style={{ fontSize: fs.xs, color: '#fca5a5' }}
-                            >
-                              <RefreshCw size={11} />
-                              重试
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  /* AI message */
+                  <AiCard
+                    message={message}
+                    fsBase={fs.base}
+                    fsSm={fs.sm}
+                    fsXs={fs.xs}
+                    copiedId={copiedId}
+                    onCopy={handleCopy}
+                    onRetry={() => handleRetry(message)}
+                    onLightbox={setLightboxSrc}
+                    onQuickAction={handleQuickAction}
+                  />
                 )}
               </div>
             ))}
@@ -625,109 +738,96 @@ export default function FloatingAskWindow() {
         )}
       </div>
 
-      <div
-        className="flex-shrink-0 px-3 pb-3 pt-2"
-        style={{ borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.08)' }}
-      >
+      {/* Input area */}
+      <div className="flex-shrink-0 px-3 pb-3 pt-2"
+        style={{ borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.1)' }}>
+
+        {/* Quick chips — show when input empty and has messages or courseId */}
+        {!input && !imageFile && courseId && messages.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5 px-1">
+            {QUICK_CHIPS.map(chip => (
+              <button
+                key={chip.label}
+                onClick={() => handleQuickAction(chip.q)}
+                disabled={isLoading}
+                className="rounded-full px-2.5 py-1 transition-all hover:bg-white/10 disabled:opacity-40"
+                style={{
+                  fontSize: '11px', color: 'rgba(255,255,255,0.5)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'rgba(255,255,255,0.03)',
+                }}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Image preview */}
         {imagePreview && (
-          <div
-            className="mb-2 flex items-center gap-2 rounded-2xl px-3 py-2"
-            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
-          >
+          <div className="mb-2 flex items-center gap-2 rounded-2xl px-3 py-2"
+            style={{ background: 'rgba(255,215,0,0.06)', border: '1px solid rgba(255,215,0,0.15)' }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={imagePreview}
-              alt="upload"
-              className="h-10 w-10 cursor-zoom-in rounded-xl object-cover"
-              onClick={() => setLightboxSrc(imagePreview)}
-            />
-            <span className="min-w-0 flex-1 truncate" style={{ fontSize: fs.sm, color: 'rgba(255,255,255,0.46)' }}>
+            <img src={imagePreview} alt="upload"
+              className="h-9 w-9 cursor-zoom-in rounded-xl object-cover"
+              onClick={() => setLightboxSrc(imagePreview)} />
+            <span className="min-w-0 flex-1 truncate" style={{ fontSize: fs.sm, color: 'rgba(255,255,255,0.5)' }}>
               {imageFile?.name ?? '截图'}
             </span>
-            <button
-              onClick={clearImage}
-              className="rounded-lg p-1 transition-colors hover:bg-white/8"
-              style={{ color: 'rgba(255,255,255,0.42)' }}
-            >
-              <X size={13} />
+            <button onClick={clearImage} className="rounded-lg p-1 hover:bg-white/8" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              <X size={12} />
             </button>
           </div>
         )}
 
-        <div
-          className="relative overflow-hidden rounded-[24px]"
-          style={{
-            background: 'linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))',
-            border: '1px solid rgba(255,255,255,0.1)',
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
-          }}
-        >
-          <input
-            ref={imageInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleImageSelect}
-          />
-
+        {/* Textarea */}
+        <div className="relative overflow-hidden rounded-[20px]" style={{
+          background: 'rgba(255,255,255,0.055)',
+          border: `1px solid ${input || imageFile ? 'rgba(255,215,0,0.25)' : 'rgba(255,255,255,0.09)'}`,
+          transition: 'border-color 0.15s',
+        }}>
+          <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
           <textarea
             ref={textareaRef}
             rows={1}
             disabled={!courseId}
             className="w-full resize-none bg-transparent outline-none"
             style={{
-              fontSize: fs.base,
-              color: '#f5f5f5',
-              padding: '14px 52px 14px 48px',
-              lineHeight: '1.6',
-              maxHeight: 180,
-              overflowY: 'auto',
+              fontSize: fs.base, color: '#f0f0f0',
+              padding: '13px 50px 13px 44px',
+              lineHeight: '1.6', maxHeight: 160, overflowY: 'auto',
             }}
             placeholder={
-              !courseId
-                ? '先进入课程再提问'
-                : isLoading
-                  ? '生成中，可最小化继续做题…'
-                  : '提问，或 Ctrl+V 粘贴截图'
+              !courseId ? '先进入课程再提问' :
+              isLoading ? '生成中，可最小化继续做题…' :
+              '提问，或 Ctrl+V 粘贴截图'
             }
             value={input}
             onChange={handleTextareaChange}
-            onKeyDown={event => {
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault()
-                handleSend()
-              }
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
             }}
           />
-
-          <button
-            onClick={() => imageInputRef.current?.click()}
-            disabled={isLoading || !courseId}
-            className="absolute bottom-3 left-3 rounded-xl p-1.5 transition-colors hover:bg-white/8"
-            style={{ color: imagePreview ? '#FFD700' : 'rgba(255,255,255,0.4)' }}
-          >
-            <ImagePlus size={15} />
+          <button onClick={() => imageInputRef.current?.click()} disabled={isLoading || !courseId}
+            className="absolute bottom-2.5 left-2.5 rounded-xl p-1.5 transition-colors hover:bg-white/8 disabled:opacity-30"
+            style={{ color: imagePreview ? '#FFD700' : 'rgba(255,255,255,0.38)' }}>
+            <ImagePlus size={14} />
           </button>
-
           {isLoading ? (
-            <button
-              onClick={stopGeneration}
-              className="absolute bottom-3 right-3 rounded-xl p-1.5"
-              style={{ background: 'rgba(239,68,68,0.15)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.25)' }}
-            >
-              <Square size={14} />
+            <button onClick={stopGeneration}
+              className="absolute bottom-2.5 right-2.5 rounded-xl p-1.5"
+              style={{ background: 'rgba(239,68,68,0.15)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.22)' }}>
+              <Square size={13} />
             </button>
           ) : (
-            <button
-              onClick={handleSend}
+            <button onClick={handleSend}
               disabled={(!input.trim() && !imageFile) || !courseId}
-              className="absolute bottom-3 right-3 rounded-xl p-1.5 transition-all disabled:cursor-not-allowed"
+              className="absolute bottom-2.5 right-2.5 rounded-xl p-1.5 transition-all disabled:cursor-not-allowed"
               style={{
-                background: (input.trim() || imageFile) && courseId ? 'rgba(255,215,0,0.92)' : 'rgba(255,255,255,0.06)',
-                color: (input.trim() || imageFile) && courseId ? '#111' : 'rgba(255,255,255,0.32)',
-              }}
-            >
-              <Send size={14} />
+                background: (input.trim() || imageFile) && courseId ? 'rgba(255,215,0,0.9)' : 'rgba(255,255,255,0.06)',
+                color: (input.trim() || imageFile) && courseId ? '#111' : 'rgba(255,255,255,0.28)',
+              }}>
+              <Send size={13} />
             </button>
           )}
         </div>
@@ -735,81 +835,57 @@ export default function FloatingAskWindow() {
     </>
   )
 
+  // ── Render ─────────────────────────────────────────────────────────────────
+
   return (
     <>
       {lightboxSrc && <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
 
       {isMobile ? (
         <>
-          <div
-            className="fixed inset-0 z-40"
-            style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)' }}
-            onClick={minimizeWindow}
-          />
-          <div
-            className="fixed z-50 flex flex-col overflow-hidden"
-            style={{
-              left: 0,
-              right: 0,
-              bottom: 0,
-              height: sheetHeight,
-              borderRadius: '24px 24px 0 0',
-              background: 'linear-gradient(180deg, rgba(18,20,33,0.99), rgba(9,11,20,0.99))',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderBottom: 'none',
-              boxShadow: '0 -20px 60px rgba(0,0,0,0.46)',
-              paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-            }}
-          >
+          <div className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.52)', backdropFilter: 'blur(2px)' }}
+            onClick={minimizeWindow} />
+          <div className="fixed z-50 flex flex-col overflow-hidden" style={{
+            left: 0, right: 0, bottom: 0, height: sheetHeight,
+            borderRadius: '22px 22px 0 0',
+            background: 'linear-gradient(180deg, rgba(14,16,28,0.99), rgba(7,9,18,0.99))',
+            border: '1px solid rgba(255,255,255,0.08)', borderBottom: 'none',
+            boxShadow: '0 -20px 60px rgba(0,0,0,0.5)',
+            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          }}>
             <div className="flex flex-shrink-0 justify-center pt-2.5 pb-1">
-              <div className="h-1 w-10 rounded-full" style={{ background: 'rgba(255,255,255,0.15)' }} />
+              <div className="h-1 w-10 rounded-full" style={{ background: 'rgba(255,255,255,0.14)' }} />
             </div>
             {innerContent}
           </div>
         </>
       ) : (
-        <div
-          className="fixed z-50 flex flex-col overflow-hidden rounded-[28px]"
-          style={{
-            left: pos.x < 0 ? 'auto' : pos.x,
-            right: pos.x < 0 ? 20 : undefined,
-            top: pos.y < 0 ? 'auto' : pos.y,
-            bottom: pos.y < 0 ? 20 : undefined,
-            width: size.w,
-            height: size.h,
-            minWidth: MIN_W,
-            minHeight: MIN_H,
-            background: 'linear-gradient(180deg, rgba(18,20,33,0.97), rgba(9,11,20,0.98))',
-            border: '1px solid rgba(255,255,255,0.08)',
-            backdropFilter: 'blur(24px)',
-            WebkitBackdropFilter: 'blur(24px)',
-            boxShadow: '0 32px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04)',
-            userSelect: 'none',
-          }}
-        >
+        <div className="fixed z-50 flex flex-col overflow-hidden" style={{
+          left: pos.x < 0 ? 'auto' : pos.x,
+          right: pos.x < 0 ? 20 : undefined,
+          top: pos.y < 0 ? 'auto' : pos.y,
+          bottom: pos.y < 0 ? 20 : undefined,
+          width: size.w, height: size.h,
+          minWidth: MIN_W, minHeight: MIN_H,
+          borderRadius: 24,
+          background: 'linear-gradient(180deg, rgba(14,16,28,0.97), rgba(7,9,18,0.98))',
+          border: '1px solid rgba(255,255,255,0.08)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          boxShadow: '0 32px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04)',
+          userSelect: 'none',
+        }}>
           {innerContent}
-          <div
-            onMouseDown={event => handleResizeMouseDown(event, 'e')}
-            style={{ position: 'absolute', right: 0, top: 0, width: 5, height: '100%', cursor: 'ew-resize', zIndex: 10 }}
-          />
-          <div
-            onMouseDown={event => handleResizeMouseDown(event, 's')}
-            style={{ position: 'absolute', left: 0, bottom: 0, width: '100%', height: 5, cursor: 'ns-resize', zIndex: 10 }}
-          />
-          <div
-            onMouseDown={event => handleResizeMouseDown(event, 'se')}
-            style={{
-              position: 'absolute',
-              right: 0,
-              bottom: 0,
-              width: 18,
-              height: 18,
-              cursor: 'nwse-resize',
-              zIndex: 11,
-              background: 'linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.12) 50%)',
-              borderRadius: '0 0 28px 0',
-            }}
-          />
+          <div onMouseDown={e => handleResizeMouseDown(e, 'e')}
+            style={{ position: 'absolute', right: 0, top: 0, width: 5, height: '100%', cursor: 'ew-resize', zIndex: 10 }} />
+          <div onMouseDown={e => handleResizeMouseDown(e, 's')}
+            style={{ position: 'absolute', left: 0, bottom: 0, width: '100%', height: 5, cursor: 'ns-resize', zIndex: 10 }} />
+          <div onMouseDown={e => handleResizeMouseDown(e, 'se')} style={{
+            position: 'absolute', right: 0, bottom: 0, width: 18, height: 18,
+            cursor: 'nwse-resize', zIndex: 11,
+            background: 'linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.1) 50%)',
+            borderRadius: '0 0 24px 0',
+          }} />
         </div>
       )}
     </>
