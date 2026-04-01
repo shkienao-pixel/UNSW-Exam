@@ -1,5 +1,9 @@
 // Stub: PBL generation is not used in ExamMaster
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function generatePBLContent(..._args: any[]): Promise<any> {
+export async function generatePBLContent(
+  _input: unknown,
+  _model: unknown,
+  _options?: { onProgress?: (msg: string) => void },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any> {
   return null;
 }
