@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { FileText, X, Check, Loader2, BookOpen } from 'lucide-react'
+import { FileText, X, Check, Loader2, NotebookPen } from 'lucide-react'
 import { useNoteFloat } from '@/lib/note-float-context'
 import { api } from '@/lib/api'
 import DynamicBlockNoteEditor from '@/components/notes/DynamicBlockNoteEditor'
@@ -90,19 +90,19 @@ function NoteFab({ onClick, pos, onDragEnd }: {
       style={{
         left: fabPos.x,
         top:  fabPos.y,
-        width:  44,
-        height: 44,
-        borderRadius: 10,
-        background: 'rgba(12,14,22,0.88)',
-        border: '1px solid rgba(255,255,255,0.10)',
-        boxShadow: '0 4px 16px rgba(0,0,0,0.40)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
+        width:  48,
+        height: 48,
+        borderRadius: '50%',
+        background: 'rgba(14,16,26,0.92)',
+        border: '1px solid rgba(167,139,250,0.35)',
+        boxShadow: '0 6px 20px rgba(0,0,0,0.45)',
+        backdropFilter: 'blur(14px)',
+        WebkitBackdropFilter: 'blur(14px)',
         cursor: 'grab',
-        color: 'rgba(200,200,220,0.70)',
+        color: '#A78BFA',
       }}
     >
-      <BookOpen size={18} strokeWidth={1.6} />
+      <NotebookPen size={20} strokeWidth={1.7} />
     </button>
   )
 }
