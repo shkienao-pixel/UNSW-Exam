@@ -496,3 +496,139 @@ body {
   background-clip: text;
   animation: shimmer 3s linear infinite;
 }
+
+/* ── BlockNote editor — notebook float window overrides ──────────────────────── */
+
+/* Editor root background & padding */
+.note-editor-area .bn-editor {
+  background: transparent !important;
+  padding: 16px 4px 32px !important;
+  min-height: 100%;
+}
+
+/* Block padding — tighter, document-like */
+.note-editor-area .bn-block-outer {
+  padding: 0 !important;
+}
+
+.note-editor-area .bn-block {
+  margin-bottom: 1px !important;
+}
+
+/* ── Typography — shrink headings, improve readability ──────────────────── */
+
+.note-editor-area [data-content-type="heading"][data-level="1"] {
+  font-size: 1.45rem !important;
+  font-weight: 650 !important;
+  line-height: 1.35 !important;
+  letter-spacing: -0.01em !important;
+  color: rgba(238,238,252,0.92) !important;
+  margin-bottom: 2px !important;
+}
+
+.note-editor-area [data-content-type="heading"][data-level="2"] {
+  font-size: 1.15rem !important;
+  font-weight: 620 !important;
+  line-height: 1.4 !important;
+  color: rgba(220,220,240,0.88) !important;
+}
+
+.note-editor-area [data-content-type="heading"][data-level="3"] {
+  font-size: 0.97rem !important;
+  font-weight: 600 !important;
+  line-height: 1.45 !important;
+  color: rgba(200,200,225,0.80) !important;
+}
+
+/* Paragraph — comfortable reading */
+.note-editor-area [data-content-type="paragraph"] {
+  font-size: 0.9rem !important;
+  line-height: 1.72 !important;
+  color: rgba(190,192,215,0.84) !important;
+}
+
+/* Bullet & numbered lists */
+.note-editor-area [data-content-type="bulletListItem"],
+.note-editor-area [data-content-type="numberedListItem"] {
+  font-size: 0.9rem !important;
+  line-height: 1.68 !important;
+  color: rgba(190,192,215,0.84) !important;
+}
+
+/* Quote block */
+.note-editor-area [data-content-type="quote"] {
+  border-left: 2px solid rgba(200,165,90,0.35) !important;
+  padding-left: 12px !important;
+  color: rgba(170,172,200,0.72) !important;
+  font-style: italic !important;
+  font-size: 0.88rem !important;
+}
+
+/* Code block */
+.note-editor-area [data-content-type="codeBlock"] pre,
+.note-editor-area [data-content-type="codeBlock"] {
+  background: rgba(255,255,255,0.04) !important;
+  border: 1px solid rgba(255,255,255,0.07) !important;
+  border-radius: 6px !important;
+  font-size: 0.82rem !important;
+  color: rgba(200,210,190,0.90) !important;
+}
+
+/* ── Image block — de-emphasise upload placeholder ──────────────────────── */
+
+/* The "Add image" / empty image block: make it a subtle inline button */
+.note-editor-area .bn-image-placeholder,
+.note-editor-area [data-content-type="image"] .bn-file-default-preview {
+  background: rgba(255,255,255,0.025) !important;
+  border: 1px dashed rgba(255,255,255,0.10) !important;
+  border-radius: 6px !important;
+  padding: 10px 14px !important;
+  min-height: unset !important;
+  color: rgba(180,180,210,0.40) !important;
+  font-size: 0.82rem !important;
+}
+
+/* Shrink upload icon if present */
+.note-editor-area .bn-file-default-preview svg,
+.note-editor-area .bn-image-placeholder svg {
+  width: 18px !important;
+  height: 18px !important;
+  opacity: 0.35 !important;
+}
+
+/* ── Slash menu & toolbar — ensure above the floating window ────────────── */
+
+.bn-menu-dropdown,
+.bn-slash-menu,
+.bn-formatting-toolbar,
+.bn-side-menu,
+[data-radix-popper-content-wrapper] {
+  z-index: 9999 !important;
+}
+
+/* ── Drag handle sidebar — fix z-index inside float window ─────────────── */
+
+.note-editor-area .bn-side-menu {
+  z-index: 9999 !important;
+}
+
+/* ── Placeholder text — subtler ─────────────────────────────────────────── */
+
+.note-editor-area .bn-editor [data-placeholder]::before,
+.note-editor-area .bn-inline-content:empty::before {
+  color: rgba(255,255,255,0.14) !important;
+  font-style: normal !important;
+}
+
+/* ── Selection highlight ─────────────────────────────────────────────────── */
+
+.note-editor-area .ProseMirror ::selection {
+  background: rgba(200,165,90,0.18) !important;
+}
+
+/* ── Horizontal rule ────────────────────────────────────────────────────── */
+
+.note-editor-area [data-content-type="horizontalRule"] hr {
+  border-color: rgba(255,255,255,0.07) !important;
+  margin: 12px 0 !important;
+}
