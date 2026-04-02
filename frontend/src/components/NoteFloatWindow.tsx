@@ -406,6 +406,7 @@ export default function NoteFloatWindow() {
           style={{
             flex: 1,
             overflowY: 'auto',
+            overflowX: 'hidden',
           }}
         >
           {contentLoaded ? (
