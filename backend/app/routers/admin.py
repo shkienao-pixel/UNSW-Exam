@@ -977,3 +977,71 @@ def delete_api_key(
     invalidate_cache(provider)
 
     return {"ok": True, "deleted_id": key_id, "provider": provider}
+
+
+# ── Credit Orders (充值订单管理) ───────────────────────────────────────────────
+
+@router.get("/credit-orders")
+def admin_list_credit_orders(
+    status: str | None = None,
+    _: None = Depends(_require_admin),
+    supabase: Client = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """返回所有充值订单，含用户邮箱。可按 status 筛选（pending / paid）。"""
+    q = supabase.table("credit_orders").select(
+        "id, user_id, credits_amount, price_cents, currency, status, "
+        "stripe_session_id, stripe_payment_intent, created_at, paid_at"
+    ).order("created_at", desc=True).limit(500)
+
+    if status:
+        q = q.eq("status", status)
+
+    orders = q.execute().data or []
+    if not orders:
+        return []
+
+    # 批量获取用户邮箱
+    user_ids = list({o["user_id"] for o in orders if o.get("user_id")})
+    email_map: dict[str, str] = {}
+    try:
+        users_resp = supabase.auth.admin.list_users()
+        for u in (users_resp or []):
+            if u.id in user_ids:
+                email_map[u.id] = u.email or ""
+    except Exception:
+        pass
+
+    for o in orders:
+        o["user_email"] = email_map.get(o["user_id"], "")
+
+    return orders
+
+
+@router.post("/credit-orders/{order_id}/mark-paid")
+def admin_mark_order_paid(
+    order_id: int,
+    _: None = Depends(_require_admin),
+    supabase: Client = Depends(get_db),
+) -> dict[str, Any]:
+    """手动将订单标记为已付款并补发积分（webhook 漏发时使用）。"""
+    row = supabase.table("credit_orders").select("*").eq("id", order_id).limit(1).execute()
+    if not row.data:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    order = row.data[0]
+    if order["status"] == "paid":
+        raise HTTPException(status_code=409, detail="Order already paid")
+
+    supabase.table("credit_orders").update({
+        "status": "paid",
+        "paid_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", order_id).execute()
+
+    from app.services import credit_service
+    credit_service.earn(
+        supabase, order["user_id"], order["credits_amount"],
+        "purchase", ref_id=str(order["stripe_session_id"] or order_id),
+        note=f"管理员手动补发 {order['credits_amount']} 积分"
+    )
+
+    return {"ok": True, "order_id": order_id, "credits_granted": order["credits_amount"]}

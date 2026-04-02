@@ -91,7 +91,7 @@ export interface Invite { id: string; code: string; note: string | null; max_use
 export interface ApiKey { id: number; provider: 'openai' | 'gemini' | 'deepseek'; label: string; is_active: boolean; created_at: string; updated_at: string }
 export interface AdminUploadItem { id: number; file: File; status: 'pending' | 'uploading' | 'done' | 'error'; error?: string }
 
-export type Tab = 'courses' | 'artifacts' | 'users' | 'invites' | 'api-keys' | 'feedback' | 'course-content' | 'planner'
+export type Tab = 'courses' | 'artifacts' | 'users' | 'invites' | 'api-keys' | 'feedback' | 'course-content' | 'planner' | 'credit-orders'
 
 // ── Shared styles ──────────────────────────────────────────────────────────────
 
