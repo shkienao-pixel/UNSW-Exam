@@ -405,6 +405,8 @@ export default function FloatingAskWindow() {
   const [isMobile, setIsMobile] = useState(false)
   const [sheetHeight, setSheetHeight] = useState('86dvh')
 
+  const [showFabHint, setShowFabHint] = useState(false)
+
   const [input, setInput] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
@@ -430,6 +432,7 @@ export default function FloatingAskWindow() {
     const updateMobile = () => setIsMobile(window.innerWidth <= 768)
     updateMobile()
     window.addEventListener('resize', updateMobile)
+    if (!localStorage.getItem('fab_hint_seen')) setShowFabHint(true)
     return () => window.removeEventListener('resize', updateMobile)
   }, [])
 
@@ -593,43 +596,61 @@ export default function FloatingAskWindow() {
     return (
       <div
         onMouseDown={handleFabMouseDown}
-        onMouseUp={handleFabMouseUp}
-        title="AI 问答"
-        className="fixed z-50 flex items-center justify-center rounded-full select-none"
-        style={{
-          left: pos.x, top: pos.y, width: 58, height: 58,
-          background: isLoading
-            ? 'radial-gradient(circle at 30% 28%, rgba(255,215,0,0.28), rgba(25,23,18,0.94) 60%)'
-            : 'radial-gradient(circle at 32% 28%, rgba(255,215,0,0.18), rgba(17,19,30,0.96) 60%)',
-          border: `1px solid ${isLoading ? 'rgba(255,215,0,0.58)' : 'rgba(255,215,0,0.32)'}`,
-          color: '#FFD700',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          cursor: 'grab',
-          boxShadow: isLoading
-            ? '0 0 24px rgba(255,215,0,0.2), 0 20px 40px rgba(0,0,0,0.42)'
-            : '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)',
+        onMouseUp={e => {
+          if (showFabHint) { localStorage.setItem('fab_hint_seen', '1'); setShowFabHint(false) }
+          handleFabMouseUp(e)
         }}
+        title="AI 问答"
+        className="fixed z-50 select-none"
+        style={{ left: pos.x, top: pos.y, width: 58, height: 58, cursor: 'grab' }}
       >
-        {isLoading ? <Loader2 size={22} className="animate-spin" /> : <MessageCircleMore size={22} />}
-        {isLoading && (
-          <button
-            onMouseDown={e => e.stopPropagation()} onMouseUp={e => e.stopPropagation()}
-            onClick={e => { e.stopPropagation(); stopGeneration() }}
-            className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full"
-            style={{ background: '#ef4444', color: '#fff', border: '2px solid rgba(20,22,30,0.9)' }}
-          >
-            <Square size={9} />
-          </button>
+        {/* pulse ring — only on first visit */}
+        {showFabHint && !isLoading && (
+          <span className="absolute inset-0 rounded-full animate-ping"
+            style={{ background: 'rgba(255,215,0,0.25)', animationDuration: '1.4s' }} />
         )}
-        {!isLoading && unreadCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-[18px] w-[18px] items-center justify-center rounded-full font-bold"
-            style={{ background: '#ef4444', color: '#fff', fontSize: 10 }}>
-            {unreadCount > 9 ? '9+' : unreadCount}
-          </span>
+        <div
+          className="absolute inset-0 flex items-center justify-center rounded-full"
+          style={{
+            background: isLoading
+              ? 'radial-gradient(circle at 30% 28%, rgba(255,215,0,0.28), rgba(25,23,18,0.94) 60%)'
+              : 'radial-gradient(circle at 32% 28%, rgba(255,215,0,0.18), rgba(17,19,30,0.96) 60%)',
+            border: `1px solid ${isLoading ? 'rgba(255,215,0,0.58)' : 'rgba(255,215,0,0.32)'}`,
+            color: '#FFD700',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            boxShadow: isLoading
+              ? '0 0 24px rgba(255,215,0,0.2), 0 20px 40px rgba(0,0,0,0.42)'
+              : '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)',
+          }}
+        >
+          {isLoading ? <Loader2 size={22} className="animate-spin" /> : <MessageCircleMore size={22} />}
+          {isLoading && (
+            <button
+              onMouseDown={e => e.stopPropagation()} onMouseUp={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); stopGeneration() }}
+              className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full"
+              style={{ background: '#ef4444', color: '#fff', border: '2px solid rgba(20,22,30,0.9)' }}
+            >
+              <Square size={9} />
+            </button>
+          )}
+          {!isLoading && unreadCount > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-[18px] w-[18px] items-center justify-center rounded-full font-bold"
+              style={{ background: '#ef4444', color: '#fff', fontSize: 10 }}>
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
+          <span className="pointer-events-none absolute inset-1 rounded-full"
+            style={{ border: '1px solid rgba(255,255,255,0.05)' }} />
+        </div>
+        {/* AI 助教 label */}
+        {showFabHint && (
+          <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-center"
+            style={{ bottom: -22, fontSize: 11, color: '#FFD700', fontWeight: 600, letterSpacing: '0.02em', textShadow: '0 1px 4px rgba(0,0,0,0.7)' }}>
+            AI 助教
+          </div>
         )}
-        <span className="pointer-events-none absolute inset-1 rounded-full"
-          style={{ border: '1px solid rgba(255,255,255,0.05)' }} />
       </div>
     )
   }

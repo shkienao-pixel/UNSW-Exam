@@ -244,6 +244,7 @@ export default function ClassroomTab({ courseId, artifacts, creditBalance, onCre
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [showHistory, setShowHistory] = useState(false)
   const [whiteboardOpen, setWhiteboardOpen] = useState(false)
+  const [showRegenConfirm, setShowRegenConfirm] = useState(false)
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const pdfs = artifacts.filter(a => a.status === 'approved' && a.file_type === 'pdf')
@@ -387,12 +388,33 @@ export default function ClassroomTab({ courseId, artifacts, creditBalance, onCre
             </button>
           ))}
           <div className="pt-4">
-            <button onClick={() => { setPhase('idle'); setClassroom(null) }}
+            <button onClick={() => setShowRegenConfirm(true)}
               className="w-full text-xs py-2 rounded-xl transition-all"
               style={{ background: 'rgba(255,255,255,0.03)', color: '#444', border: '1px solid rgba(255,255,255,0.06)' }}>
               重新生成
             </button>
           </div>
+          {showRegenConfirm && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
+              <div className="rounded-2xl p-6 space-y-4 max-w-xs w-full mx-4"
+                style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <p className="text-sm text-white font-medium">确认重新生成？</p>
+                <p className="text-xs" style={{ color: '#666' }}>当前课堂内容将被清除，系统将重新生成新的课堂。</p>
+                <div className="flex gap-2 pt-1">
+                  <button onClick={() => setShowRegenConfirm(false)}
+                    className="flex-1 py-2 rounded-xl text-xs transition-all"
+                    style={{ background: 'rgba(255,255,255,0.05)', color: '#888', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    取消
+                  </button>
+                  <button onClick={() => { setShowRegenConfirm(false); setPhase('idle'); setClassroom(null) }}
+                    className="flex-1 py-2 rounded-xl text-xs font-medium transition-all"
+                    style={{ background: 'rgba(167,139,250,0.15)', color: '#A78BFA', border: '1px solid rgba(167,139,250,0.3)' }}>
+                    确认重新生成
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Main content */}

@@ -155,6 +155,30 @@ function DotMenu({
 
 // ── 单张资料卡片 ──────────────────────────────────────────────────────────────
 
+function PdfDrawer({ url, title, onClose }: { url: string; title: string; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(6px)' }}>
+      <div className="flex items-center justify-between px-4 py-2.5 shrink-0"
+        style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', background: '#111' }}>
+        <span className="text-sm font-medium truncate max-w-[70%]" style={{ color: '#ddd' }}>{title}</span>
+        <div className="flex items-center gap-2">
+          <a href={url} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all hover:opacity-80"
+            style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}>
+            <ExternalLink size={12} /> 新标签页
+          </a>
+          <button onClick={onClose}
+            className="flex items-center justify-center w-8 h-8 rounded-lg transition-all hover:opacity-80"
+            style={{ background: 'rgba(255,255,255,0.06)', color: '#888' }}>
+            <X size={16} />
+          </button>
+        </div>
+      </div>
+      <iframe src={url} title={title} className="flex-1 w-full border-0" style={{ minHeight: 0 }} />
+    </div>
+  )
+}
+
 function ArtifactCard({
   artifact,
   currentUserId,
@@ -166,10 +190,12 @@ function ArtifactCard({
   onUnlock: (a: Artifact) => void
   onEditDocType: (a: Artifact) => void
 }) {
+  const [pdfOpen, setPdfOpen] = useState(false)
   const isOwner = artifact.uploaded_by === currentUserId
   const isLocked = artifact.is_locked
   const isCode   = artifact.file_type === 'python' || artifact.file_type === 'notebook'
   const isUrl    = artifact.file_type === 'url'
+  const isPdf    = artifact.file_type === 'pdf'
 
   const docColor = DOC_TYPE_COLORS[artifact.doc_type] ?? '#888'
 
@@ -256,16 +282,32 @@ function ArtifactCard({
             <span style={{ fontSize: '11px', color: 'rgba(255,215,0,0.6)', fontVariantNumeric: 'tabular-nums' }}>50 ✦</span>
           </button>
         ) : artifact.storage_url ? (
-          <a
-            href={artifact.storage_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-semibold transition-all hover:opacity-85"
-            style={{ background: 'rgba(255,215,0,0.14)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.30)', textDecoration: 'none' }}
-          >
-            <ExternalLink size={13} />
-            <span>打开阅读</span>
-          </a>
+          <>
+            {pdfOpen && (
+              <PdfDrawer url={artifact.storage_url} title={artifact.file_name} onClose={() => setPdfOpen(false)} />
+            )}
+            {isPdf ? (
+              <button
+                onClick={() => setPdfOpen(true)}
+                className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-semibold transition-all hover:opacity-85"
+                style={{ background: 'rgba(255,215,0,0.14)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.30)' }}
+              >
+                <FileText size={13} />
+                <span>在线阅读</span>
+              </button>
+            ) : (
+              <a
+                href={artifact.storage_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-semibold transition-all hover:opacity-85"
+                style={{ background: 'rgba(255,215,0,0.14)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.30)', textDecoration: 'none' }}
+              >
+                <ExternalLink size={13} />
+                <span>打开阅读</span>
+              </a>
+            )}
+          </>
         ) : (
           <span className="text-xs" style={{ color: '#444' }}>暂无下载链接</span>
         )}

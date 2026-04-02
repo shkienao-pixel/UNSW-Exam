@@ -238,6 +238,8 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
   const [mistakeMap, setMistakeMap] = useState<Record<string, FlashcardMistake>>({})
   const [isSliding, setIsSliding] = useState(false)
   const [slideDir, setSlideDir] = useState<'left' | 'right'>('left')
+  const [forgottenHint, setForgottenHint] = useState(false)
+  const [showingMistakes, setShowingMistakes] = useState(false)
 
   // refs for keyboard handler to read latest state without stale closure
   const stateRef = useRef({ cardIndex, flipped, revealed, chosen, cards, finished })
@@ -387,12 +389,30 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
           <select
             className="input-glass mt-1 w-full flex-none text-xs py-1 sm:mt-0"
             style={{ width: 'min(100%, 240px)' }}
-            value={selectedOutputId ?? ''}
-            onChange={e => { const o = outputs.find(x => x.id === Number(e.target.value)); if (o) loadCards(o) }}>
+            value={showingMistakes ? 'mistakes' : (selectedOutputId ?? '')}
+            onChange={e => {
+              if (e.target.value === 'mistakes') {
+                api.flashcardMistakes.list(courseId, 'active').then(rows => {
+                  const fc: Flashcard[] = rows.map(r =>
+                    r.card_type === 'mcq'
+                      ? { type: 'mcq' as const, question: r.card_front, options: [], answer: r.card_back }
+                      : { type: 'vocab' as const, front: r.card_front, back: r.card_back }
+                  )
+                  setCards(fc)
+                  setShowingMistakes(true)
+                  setCardIndex(0); setFlipped(false); setChosen(null); setRevealed(false); setFinished(false)
+                  setRemembered(0); setForgotten(0)
+                }).catch(() => {})
+              } else {
+                const o = outputs.find(x => x.id === Number(e.target.value))
+                if (o) { setShowingMistakes(false); loadCards(o) }
+              }
+            }}>
+            <option value="mistakes">📌 全部错题</option>
             {outputs.map(o => (
               <option key={o.id} value={o.id}>
                 {new Date(o.created_at).toLocaleDateString('zh-CN')}
-                {selectedOutputId === o.id && cards.length > 0 ? ` (${cards.length})` : ''}
+                {!showingMistakes && selectedOutputId === o.id && cards.length > 0 ? ` (${cards.length})` : ''}
               </option>
             ))}
           </select>
@@ -576,6 +596,16 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                     </div>
                   </div>
 
+                  {/* 没记住 hint toast */}
+                  {forgottenHint && (
+                    <div className="text-center">
+                      <span className="inline-block text-xs px-3 py-1.5 rounded-full"
+                        style={{ background: 'rgba(255,68,68,0.1)', color: '#ff8d8d', border: '1px solid rgba(255,68,68,0.2)' }}>
+                        已记录 · 下次复习时会再次出现
+                      </span>
+                    </div>
+                  )}
+
                   {/* Vocab navigation */}
                   <div className="flex gap-2 justify-center flex-wrap">
                     <button onClick={prev} disabled={cardIndex === 0}
@@ -594,6 +624,8 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                         <button onClick={() => {
                           setForgotten(f => f + 1)
                           void recordFlashcardMistake(card, cardIndex)
+                          setForgottenHint(true)
+                          setTimeout(() => setForgottenHint(false), 2500)
                           next()
                         }}
                           className="px-4 py-2 rounded-full text-sm"
