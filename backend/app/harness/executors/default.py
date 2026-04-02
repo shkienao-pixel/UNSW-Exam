@@ -31,6 +31,9 @@ class DefaultExecutor:
         request: GenerationRequest,
         context: ResolvedContext,
     ) -> GenerationResult:
+        if request.job_type == "exam_mock":
+            return self._execute_exam_mock(db, request)
+
         fn = _GEN_FN.get(request.job_type)
         if fn is None:
             raise ValueError(f"DefaultExecutor: unsupported job_type={request.job_type!r}")
@@ -46,5 +49,20 @@ class DefaultExecutor:
             content=output.get("content", ""),
             model_used=output.get("model_used", "unknown"),
             sources=output.get("sources", []),
+            output_id=output.get("id"),
+        )
+
+    def _execute_exam_mock(self, db: Client, request: GenerationRequest) -> GenerationResult:
+        from app.services import exam_service
+        body = SimpleNamespace(
+            num_mcq=request.extra.get("num_mcq", 10),
+            num_short=request.extra.get("num_short", 5),
+            session_id=request.extra.get("session_id", ""),
+        )
+        output = exam_service.run_mock_generation(db, request.user_id, request.course_id, body)
+        return GenerationResult(
+            content="",
+            model_used="exam_mock",
+            sources=[],
             output_id=output.get("id"),
         )

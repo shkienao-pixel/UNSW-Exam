@@ -6,7 +6,6 @@ import asyncio
 import logging
 import os
 import socket
-from types import SimpleNamespace
 from typing import Any
 
 from supabase import Client
@@ -14,36 +13,16 @@ from supabase import Client
 from app.core.config import get_settings
 from app.core.exceptions import InsufficientCreditsError
 from app.core.supabase_client import get_supabase
-from app.services import credit_service, exam_service, generate_service, job_service
+from app.services import credit_service, job_service
 
 logger = logging.getLogger(__name__)
 
-_GEN_FN = {
-    "quiz":       generate_service.run_quiz,
-    "flashcards": generate_service.run_flashcards,
-    "exam_mock":  exam_service.run_mock_generation,
-}
-
-# job_type → credit type（与 credit_service.COSTS 中的 key 对应）
+# job_type → credit type（用于失败退款，与 credit_service.COSTS 中的 key 对应）
 _JOB_CREDIT_TYPE: dict[str, str] = {
     "quiz":       "gen_quiz",
     "flashcards": "gen_flashcards",
     "exam_mock":  "gen_exam_mock",
 }
-
-
-def _payload_to_body(payload: dict[str, Any]) -> SimpleNamespace:
-    """Convert persisted payload JSON to the body object expected by generate_service."""
-    return SimpleNamespace(
-        scope_set_id=payload.get("scope_set_id"),
-        artifact_ids=payload.get("artifact_ids"),
-        num_questions=int(payload.get("num_questions", 10)),
-        exclude_topics=list(payload.get("exclude_topics") or []),
-        # exam_mock fields
-        num_mcq=int(payload.get("num_mcq", 10)),
-        num_short=int(payload.get("num_short", 5)),
-        session_id=payload.get("session_id", ""),
-    )
 
 
 async def _run_job(db: Client, job: dict[str, Any], worker_id: str) -> None:
@@ -53,17 +32,16 @@ async def _run_job(db: Client, job: dict[str, Any], worker_id: str) -> None:
     course_id = str(job.get("course_id", ""))
     payload = job.get("request_payload") or {}
 
-    # exam_mock 暂不迁移到 Harness（其逻辑与 exam_service 强耦合）
-    if job_type == "exam_mock":
-        await _run_job_legacy(db, job, worker_id)
-        return
-
-    if job_type not in _GEN_FN:
-        await asyncio.to_thread(job_service.fail_job, db, job_id, f"Unsupported job_type: {job_type}")
-        return
-
     from app.harness.factory import make_generation_harness
     from app.harness.types import GenerationRequest
+
+    extra: dict[str, Any] = {}
+    if job_type == "exam_mock":
+        extra = {
+            "num_mcq":    int(payload.get("num_mcq", 10)),
+            "num_short":  int(payload.get("num_short", 5)),
+            "session_id": payload.get("session_id", ""),
+        }
 
     request = GenerationRequest(
         user_id=user_id,
@@ -74,6 +52,7 @@ async def _run_job(db: Client, job: dict[str, Any], worker_id: str) -> None:
         artifact_ids=payload.get("artifact_ids"),
         num_questions=int(payload.get("num_questions", 10)),
         exclude_topics=list(payload.get("exclude_topics") or []),
+        extra=extra,
     )
     harness = make_generation_harness(job_type, mode="async_job")
 
@@ -90,73 +69,6 @@ async def _run_job(db: Client, job: dict[str, Any], worker_id: str) -> None:
             job_service.fail_job, db, job_id,
             f"积分不足：当前 {e.balance} 积分，需要 {e.required} 积分"
         )
-    except Exception as exc:
-        logger.error("generation job failed worker=%s job=%s err=%s", worker_id, job_id, exc, exc_info=True)
-        if credit_spent and credit_type:
-            cost = credit_service.COSTS.get(credit_type, 1)
-            try:
-                await asyncio.to_thread(
-                    credit_service.earn, db, user_id, cost, "refund", job_id,
-                    f"{credit_type} 生成失败退款"
-                )
-            except Exception as refund_err:
-                logger.error("credit refund failed job=%s: %s", job_id, refund_err)
-        safe_msg = f"{type(exc).__name__}: 生成失败，请重试或联系管理员"
-        await asyncio.to_thread(job_service.fail_job, db, job_id, safe_msg)
-
-
-async def _run_job_legacy(db: Client, job: dict[str, Any], worker_id: str) -> None:
-    """exam_mock 的原始执行路径（暂未迁移到 Harness）。"""
-    job_id = job["id"]
-    job_type = str(job.get("job_type", ""))
-    user_id = str(job.get("user_id", ""))
-    course_id = str(job.get("course_id", ""))
-    payload = job.get("request_payload") or {}
-    credit_type = _JOB_CREDIT_TYPE.get(job_type)
-
-    credit_spent = False
-    try:
-        body = _payload_to_body(payload if isinstance(payload, dict) else {})
-
-        if credit_type:
-            cost = credit_service.COSTS.get(credit_type, 1)
-            already_charged = False
-            try:
-                txn_check = await asyncio.to_thread(
-                    lambda: db.table("credit_transactions")
-                               .select("id")
-                               .eq("ref_id", job_id)
-                               .eq("type", credit_type)
-                               .limit(1)
-                               .execute()
-                )
-                already_charged = bool(txn_check.data)
-            except Exception as chk_err:
-                logger.warning("credit pre-check failed job=%s: %s", job_id, chk_err)
-
-            if already_charged:
-                credit_spent = True
-            else:
-                try:
-                    await asyncio.to_thread(
-                        credit_service.spend, db, user_id, cost, credit_type, job_id
-                    )
-                    credit_spent = True
-                except InsufficientCreditsError as e:
-                    await asyncio.to_thread(
-                        job_service.fail_job, db, job_id,
-                        f"积分不足：当前 {e.balance} 积分，需要 {e.required} 积分"
-                    )
-                    return
-
-        output = await asyncio.to_thread(_GEN_FN[job_type], db, user_id, course_id, body)
-        if output.get("id") is not None:
-            await asyncio.to_thread(job_service.finish_job, db, job_id, output["id"])
-        else:
-            from app.services.job_service import _patch
-            await asyncio.to_thread(_patch, db, job_id, {"status": "done"})
-        logger.info("generation job done worker=%s job=%s output=%s", worker_id, job_id, output.get("id"))
-
     except Exception as exc:
         logger.error("generation job failed worker=%s job=%s err=%s", worker_id, job_id, exc, exc_info=True)
         if credit_spent and credit_type:

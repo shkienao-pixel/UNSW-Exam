@@ -4,7 +4,7 @@ import type { LucideIcon } from 'lucide-react'
 export const FEATURES = [
   { view: 'resources',          labelKey: 'files',              featured: true },
   { view: 'flashcards',         labelKey: 'flashcards',         featured: true },
-  { view: 'notes-and-mistakes', labelKey: 'notes_and_mistakes', featured: true },
+  { view: 'notes-and-mistakes', labelKey: 'mistakes', featured: true },
   { view: 'planner',            labelKey: 'planner' },
   { view: 'quiz',               labelKey: 'quiz' },
   { view: 'course-summary',     labelKey: 'knowledge_summary' },

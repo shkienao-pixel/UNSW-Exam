@@ -17,10 +17,10 @@ import { useEnrollment } from '@/hooks/useEnrollment'
 import { useCredits } from '@/hooks/useCredits'
 import { emitFlashcardMistakesChanged } from '@/lib/ui-sync'
 import {
-  FileText, Upload, Loader2, History,
+  FileText, Upload, Loader2,
   ChevronDown, ChevronRight, BookOpen, RotateCcw,
-  ExternalLink, Trash2, Sparkles,
-  Code, Lock, Target, Layers3, ListTree,
+  ExternalLink, Sparkles,
+  Code, Lock, Target, Layers3,
 } from 'lucide-react'
 import MistakesView from '@/components/MistakesView'
 import InsufficientCreditsModal from '@/components/InsufficientCreditsModal'
@@ -50,8 +50,6 @@ function CoursePageInner() {
   const { course, artifacts, setArtifacts, scopeSets, loading, reload: reloadCourse } = useCourseData(courseId)
   const { isEnrolled, setIsEnrolled, term: enrollTerm, cost: enrollCost } = useEnrollment(courseId, role)
   const { balance: creditBalance, deduct: spendCredits } = useCredits(!!role && role !== 'guest')
-
-  const [outputs, setOutputs] = useState<Output[]>([])
 
   // Keep floating AI window in sync with this course
   useEffect(() => {
@@ -119,7 +117,6 @@ function CoursePageInner() {
       {view === 'notes-and-mistakes' && <MistakesView courseId={courseId} />}
       {view === 'quiz'               && <ExamTab courseId={courseId} />}
 
-      {view === 'outputs'    && <OutputsTab courseId={courseId} outputs={outputs} setOutputs={setOutputs} />}
       {view === 'resources'  && (
         role === 'guest' ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -182,11 +179,31 @@ interface QuizSource {
 
 function QuizTab({ courseId }: { courseId: string }) {
   const { t } = useLang()
+  const { trackGeneration } = useGeneration()
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  const generateButton = (
+    <button
+      onClick={() => trackGeneration({
+        label: t('gen_quiz'),
+        viewLink: `/courses/${courseId}?view=quiz`,
+        promise: api.generate.quiz(courseId, {}),
+        onSuccess: () => setRefreshKey(k => k + 1),
+      })}
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all hover:opacity-85"
+      style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}
+    >
+      <Sparkles size={12} /> {t('gen_quiz')} · 100 ✦
+    </button>
+  )
+
   return (
     <TypedOutputsView
+      key={refreshKey}
       courseId={courseId} outputType="quiz"
       icon={<Target size={20} style={{ color: '#FFD700' }} />} title={t('quiz_title')} subtitle={t('quiz_sub')}
       emptyTitle={t('empty_quiz')} emptyLinkLabel={t('empty_quiz_btn')}
+      headerExtra={generateButton}
       renderContent={output => {
         let questions: QuizQuestion[] = []
         let sources: QuizSource[] = []
@@ -223,6 +240,7 @@ function flashcardMistakeKey(outputId: number, cardIndex: number) {
 
 function FlashcardsTab({ courseId }: { courseId: string }) {
   const { t, lang } = useLang()
+  const { trackGeneration } = useGeneration()
   const [outputs, setOutputs] = useState<Output[]>([])
   const [selectedOutputId, setSelectedOutputId] = useState<number | null>(null)
   const [cards, setCards] = useState<Flashcard[]>([])
@@ -385,38 +403,56 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
           </h2>
           <p className="text-sm mt-0.5" style={{ color: '#555' }}>{t('flashcards_sub')}</p>
         </div>
-        {outputs.length > 0 && (
-          <select
-            className="input-glass mt-1 w-full flex-none text-xs py-1 sm:mt-0"
-            style={{ width: 'min(100%, 240px)' }}
-            value={showingMistakes ? 'mistakes' : (selectedOutputId ?? '')}
-            onChange={e => {
-              if (e.target.value === 'mistakes') {
-                api.flashcardMistakes.list(courseId, 'active').then(rows => {
-                  const fc: Flashcard[] = rows.map(r =>
-                    r.card_type === 'mcq'
-                      ? { type: 'mcq' as const, question: r.card_front, options: [], answer: r.card_back }
-                      : { type: 'vocab' as const, front: r.card_front, back: r.card_back }
-                  )
-                  setCards(fc)
-                  setShowingMistakes(true)
-                  setCardIndex(0); setFlipped(false); setChosen(null); setRevealed(false); setFinished(false)
-                  setRemembered(0); setForgotten(0)
-                }).catch(() => {})
-              } else {
-                const o = outputs.find(x => x.id === Number(e.target.value))
-                if (o) { setShowingMistakes(false); loadCards(o) }
-              }
-            }}>
-            <option value="mistakes">📌 全部错题</option>
-            {outputs.map(o => (
-              <option key={o.id} value={o.id}>
-                {new Date(o.created_at).toLocaleDateString('zh-CN')}
-                {!showingMistakes && selectedOutputId === o.id && cards.length > 0 ? ` (${cards.length})` : ''}
-              </option>
-            ))}
-          </select>
-        )}
+        <div className="flex items-center gap-2 mt-1 sm:mt-0 flex-wrap justify-end">
+          <button
+            onClick={() => trackGeneration({
+              label: t('gen_flashcards'),
+              viewLink: `/courses/${courseId}?view=flashcards`,
+              promise: api.generate.flashcards(courseId, {}),
+              onSuccess: (output) => {
+                setOutputs(prev => [output, ...prev])
+                setShowingMistakes(false)
+                loadCards(output)
+              },
+            })}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all hover:opacity-85 flex-shrink-0"
+            style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}
+          >
+            <Sparkles size={12} /> {t('gen_flashcards')} · 100 ✦
+          </button>
+          {outputs.length > 0 && (
+            <select
+              className="input-glass text-xs py-1"
+              style={{ width: 'min(100%, 200px)' }}
+              value={showingMistakes ? 'mistakes' : (selectedOutputId ?? '')}
+              onChange={e => {
+                if (e.target.value === 'mistakes') {
+                  api.flashcardMistakes.list(courseId, 'active').then(rows => {
+                    const fc: Flashcard[] = rows.map(r =>
+                      r.card_type === 'mcq'
+                        ? { type: 'mcq' as const, question: r.card_front, options: [], answer: r.card_back }
+                        : { type: 'vocab' as const, front: r.card_front, back: r.card_back }
+                    )
+                    setCards(fc)
+                    setShowingMistakes(true)
+                    setCardIndex(0); setFlipped(false); setChosen(null); setRevealed(false); setFinished(false)
+                    setRemembered(0); setForgotten(0)
+                  }).catch(() => {})
+                } else {
+                  const o = outputs.find(x => x.id === Number(e.target.value))
+                  if (o) { setShowingMistakes(false); loadCards(o) }
+                }
+              }}>
+              <option value="mistakes">📌 全部错题</option>
+              {outputs.map(o => (
+                <option key={o.id} value={o.id}>
+                  {new Date(o.created_at).toLocaleDateString('zh-CN')}
+                  {!showingMistakes && selectedOutputId === o.id && cards.length > 0 ? ` (${cards.length})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
 
       {outputs.length === 0 ? (
@@ -741,130 +777,6 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
   )
 }
 
-
-// ── 历史输出 Tab ──────────────────────────────────────────────────────────────
-
-const OUTPUT_TYPE_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string; bg: string }> = {
-  summary:    { label: '知识摘要', icon: <FileText size={16} style={{ color: '#60A5FA' }} />, color: '#60A5FA', bg: 'rgba(96,165,250,0.08)'  },
-  quiz:       { label: '模拟题目', icon: <Target size={16} style={{ color: '#34D399' }} />, color: '#34D399', bg: 'rgba(52,211,153,0.08)'  },
-  outline:    { label: '课程大纲', icon: <ListTree size={16} style={{ color: '#A78BFA' }} />, color: '#A78BFA', bg: 'rgba(167,139,250,0.08)' },
-  flashcards: { label: '闪卡套组', icon: <Layers3 size={16} style={{ color: '#F59E0B' }} />, color: '#F59E0B', bg: 'rgba(245,158,11,0.08)'  },
-}
-
-function OutputsTab({ courseId, outputs, setOutputs }: {
-  courseId: string; outputs: Output[]
-  setOutputs: React.Dispatch<React.SetStateAction<Output[]>>
-}) {
-  const { t } = useLang()
-  const [loadingList, setLoadingList] = useState(true)
-  const [selected, setSelected] = useState<Output | null>(null)
-  const [typeFilter, setTypeFilter] = useState<string>('all')
-
-  useEffect(() => {
-    api.outputs.list(courseId)
-      .then(data => { setOutputs(data); if (data.length > 0) setSelected(data[0]) })
-      .finally(() => setLoadingList(false))
-  }, [courseId, setOutputs])
-
-  async function handleDelete(id: number) {
-    if (!confirm('确定删除该记录？')) return
-    await api.outputs.delete(courseId, id)
-    setOutputs(prev => { const next = prev.filter(o => o.id !== id); if (selected?.id === id) setSelected(next[0] ?? null); return next })
-  }
-
-  function selectType(type: string) {
-    setTypeFilter(type)
-    const latest = outputs.find(o => type === 'all' || o.output_type === type)
-    if (latest) setSelected(latest)
-  }
-
-  const filtered = typeFilter === 'all' ? outputs : outputs.filter(o => o.output_type === typeFilter)
-
-  if (loadingList) return <div className="flex justify-center py-16"><Loader2 className="animate-spin" style={{ color: '#FFD700' }} size={24} /></div>
-
-  return (
-    <div className="space-y-5">
-      <div>
-        <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-          <History size={22} style={{ color: '#FFD700' }} /> {t('history_title')}
-        </h2>
-        <p className="text-sm mt-0.5" style={{ color: '#555' }}>{t('history_sub')}</p>
-      </div>
-
-      {outputs.length === 0 ? (
-        <div className="text-center py-16 glass rounded-2xl" style={{ color: '#444' }}>
-          <History size={40} className="mx-auto mb-3 opacity-20" />
-          <p className="text-sm">{t('history_empty')}</p>
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {Object.entries(OUTPUT_TYPE_CONFIG).map(([type, cfg]) => {
-              const typeOutputs = outputs.filter(o => o.output_type === type)
-              const latest = typeOutputs[0]; const isActive = typeFilter === type
-              return (
-                <button key={type} onClick={() => selectType(type)}
-                  className="text-left p-4 rounded-xl transition-all"
-                  style={{ background: isActive ? cfg.bg : 'rgba(255,255,255,0.03)', border: `1px solid ${isActive ? cfg.color : 'rgba(255,255,255,0.06)'}` }}>
-                  <div className="mb-2 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-white/[0.03]">
-                    {cfg.icon}
-                  </div>
-                  <div className="text-sm font-semibold text-white mb-0.5">{cfg.label}</div>
-                  {typeOutputs.length > 0
-                    ? <div className="text-xs" style={{ color: cfg.color }}>{typeOutputs.length} 份</div>
-                    : <div className="text-xs" style={{ color: '#444' }}>暂无</div>}
-                  {latest && <div className="text-xs mt-0.5" style={{ color: '#555' }}>{new Date(latest.created_at).toLocaleDateString('zh-CN')}</div>}
-                </button>
-              )
-            })}
-          </div>
-
-          <div className="flex gap-4">
-            <div className="w-52 flex-shrink-0 space-y-1.5">
-              <button onClick={() => selectType('all')}
-                className="w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium transition-all mb-2"
-                style={{ background: typeFilter === 'all' ? 'rgba(255,215,0,0.1)' : 'transparent', color: typeFilter === 'all' ? '#FFD700' : '#555', border: `1px solid ${typeFilter === 'all' ? 'rgba(255,215,0,0.3)' : 'rgba(255,255,255,0.06)'}` }}>
-                {t('history_all')} ({outputs.length})
-              </button>
-              {filtered.map(o => {
-                const cfg = OUTPUT_TYPE_CONFIG[o.output_type]
-                return (
-                  <div key={o.id} className="p-3 rounded-xl cursor-pointer transition-all"
-                    style={{ background: selected?.id === o.id ? 'rgba(255,215,0,0.07)' : 'rgba(255,255,255,0.03)', border: `1px solid ${selected?.id === o.id ? 'rgba(255,215,0,0.3)' : 'rgba(255,255,255,0.06)'}` }}
-                    onClick={() => setSelected(o)}>
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="inline-flex items-center gap-1.5 text-xs font-medium" style={{ color: cfg?.color ?? '#FFD700' }}>
-                        {cfg?.icon} {cfg?.label ?? o.output_type}
-                      </span>
-                      <button onClick={e => { e.stopPropagation(); handleDelete(o.id) }} style={{ color: '#FF4444', opacity: 0.6 }}>
-                        <Trash2 size={11} />
-                      </button>
-                    </div>
-                    <p className="text-xs mt-1.5" style={{ color: '#555' }}>
-                      {new Date(o.created_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
-                )
-              })}
-            </div>
-            <div className="flex-1 glass p-5 rounded-xl overflow-auto" style={{ minHeight: '400px' }}>
-              {selected
-                ? <div>
-                    <div className="flex items-center gap-2 mb-4 pb-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                      <span className="text-lg">{OUTPUT_TYPE_CONFIG[selected.output_type]?.icon}</span>
-                      <span className="text-sm font-semibold text-white">{OUTPUT_TYPE_CONFIG[selected.output_type]?.label ?? selected.output_type}</span>
-                      <span className="text-xs ml-auto" style={{ color: '#555' }}>{new Date(selected.created_at).toLocaleString('zh-CN')}</span>
-                    </div>
-                    <OutputDisplay output={selected} courseId={courseId} />
-                  </div>
-                : <div className="flex items-center justify-center h-full text-sm" style={{ color: '#444' }}>← 选择左侧记录查看内容</div>}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
 
 // ── 文件上传 Tab ──────────────────────────────────────────────────────────────
 
