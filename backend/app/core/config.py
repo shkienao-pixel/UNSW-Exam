@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     # Same value as SUPABASE_JWT_SECRET in your Supabase project settings
     jwt_secret: str = ""
 
+    # Stripe
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_publishable_key: str = ""
+
     # Guest account (server-side only — must NOT be NEXT_PUBLIC_*)
     guest_email: str = ""
     guest_password: str = ""
