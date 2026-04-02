@@ -285,9 +285,9 @@ export default function NoteFloatWindow() {
 
       <div style={{
         ...windowStyle,
-        background: 'rgba(10,11,18,0.96)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        boxShadow: '0 24px 64px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.04) inset',
+        background: 'rgba(22,24,36,0.98)',
+        border: '1px solid rgba(255,255,255,0.13)',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.60), 0 1px 0 rgba(255,255,255,0.06) inset',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
         display: 'flex',
@@ -406,7 +406,6 @@ export default function NoteFloatWindow() {
           style={{
             flex: 1,
             overflowY: 'auto',
-            overflowX: 'hidden',
           }}
         >
           {contentLoaded ? (
