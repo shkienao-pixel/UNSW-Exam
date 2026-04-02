@@ -284,17 +284,54 @@ function CreditsPageInner() {
             <span>{t('credits_estimator_cost')}</span>
             <span>{t('credits_estimator_value')}</span>
           </div>
+          {/* 分组：轻量生成 */}
+          <div className="grid grid-cols-[1.1fr_0.65fr_1.8fr] gap-3 px-4 py-2 text-[11px] uppercase tracking-[0.1em]"
+            style={{ background: 'rgba(255,255,255,0.02)', borderTop: '1px solid rgba(255,255,255,0.06)', color: 'rgba(200,165,90,0.6)' }}>
+            <span className="col-span-3">轻量生成</span>
+          </div>
           {[
             [t('credits_estimator_item_1'), t('credits_estimator_cost_1'), t('credits_estimator_value_1')],
             [t('credits_estimator_item_2'), t('credits_estimator_cost_2'), t('credits_estimator_value_2')],
             [t('credits_estimator_item_3'), t('credits_estimator_cost_3'), t('credits_estimator_value_3')],
+          ].map(([name, cost, value]) => (
+            <div key={name} className="grid grid-cols-[1.1fr_0.65fr_1.8fr] gap-3 px-4 py-3 text-sm"
+              style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              <span className="text-white/74">{name}</span>
+              <span className="font-medium text-[#e6cf98]">{cost}</span>
+              <span className="text-white/56">{value}</span>
+            </div>
+          ))}
+          {/* 分组：问答与解锁 */}
+          <div className="grid grid-cols-[1.1fr_0.65fr_1.8fr] gap-3 px-4 py-2 text-[11px] uppercase tracking-[0.1em]"
+            style={{ background: 'rgba(255,255,255,0.02)', borderTop: '1px solid rgba(255,255,255,0.06)', color: 'rgba(200,165,90,0.6)' }}>
+            <span className="col-span-3">问答 & 解锁</span>
+          </div>
+          {[
             [t('credits_estimator_item_4'), t('credits_estimator_cost_4'), t('credits_estimator_value_4')],
-          ].map(([name, cost, value], idx) => (
-            <div
-              key={name}
-              className="grid grid-cols-[1.1fr_0.65fr_1.8fr] gap-3 px-4 py-3 text-sm"
-              style={{ borderTop: idx === 0 ? 'none' : '1px solid rgba(255,255,255,0.06)' }}
-            >
+            [t('credits_estimator_item_5'), t('credits_estimator_cost_5'), t('credits_estimator_value_5')],
+            [t('credits_estimator_item_6'), t('credits_estimator_cost_6'), t('credits_estimator_value_6')],
+          ].map(([name, cost, value]) => (
+            <div key={name} className="grid grid-cols-[1.1fr_0.65fr_1.8fr] gap-3 px-4 py-3 text-sm"
+              style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              <span className="text-white/74">{name}</span>
+              <span className="font-medium text-[#e6cf98]">{cost}</span>
+              <span className="text-white/56">{value}</span>
+            </div>
+          ))}
+          {/* 分组：深度备考 */}
+          <div className="grid grid-cols-[1.1fr_0.65fr_1.8fr] gap-3 px-4 py-2 text-[11px] uppercase tracking-[0.1em]"
+            style={{ background: 'rgba(255,255,255,0.02)', borderTop: '1px solid rgba(255,255,255,0.06)', color: 'rgba(200,165,90,0.6)' }}>
+            <span className="col-span-3">深度备考</span>
+          </div>
+          {[
+            [t('credits_estimator_item_7'), t('credits_estimator_cost_7'), t('credits_estimator_value_7')],
+            [t('credits_estimator_item_8'), t('credits_estimator_cost_8'), t('credits_estimator_value_8')],
+            [t('credits_estimator_item_9'), t('credits_estimator_cost_9'), t('credits_estimator_value_9')],
+            [t('credits_estimator_item_10'), t('credits_estimator_cost_10'), t('credits_estimator_value_10')],
+            [t('credits_estimator_item_11'), t('credits_estimator_cost_11'), t('credits_estimator_value_11')],
+          ].map(([name, cost, value]) => (
+            <div key={name} className="grid grid-cols-[1.1fr_0.65fr_1.8fr] gap-3 px-4 py-3 text-sm"
+              style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
               <span className="text-white/74">{name}</span>
               <span className="font-medium text-[#e6cf98]">{cost}</span>
               <span className="text-white/56">{value}</span>
