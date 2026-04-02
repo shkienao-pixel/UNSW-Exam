@@ -19,18 +19,14 @@ from app.services import credit_service, exam_service, generate_service, job_ser
 logger = logging.getLogger(__name__)
 
 _GEN_FN = {
-    "summary":    generate_service.run_summary,
     "quiz":       generate_service.run_quiz,
-    "outline":    generate_service.run_outline,
     "flashcards": generate_service.run_flashcards,
     "exam_mock":  exam_service.run_mock_generation,
 }
 
 # job_type → credit type（与 credit_service.COSTS 中的 key 对应）
 _JOB_CREDIT_TYPE: dict[str, str] = {
-    "summary":    "gen_summary",
     "quiz":       "gen_quiz",
-    "outline":    "gen_outline",
     "flashcards": "gen_flashcards",
     "exam_mock":  "gen_exam_mock",
 }

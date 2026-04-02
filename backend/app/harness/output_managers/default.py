@@ -12,9 +12,7 @@ logger = logging.getLogger(__name__)
 
 # job_type → credit_service.COSTS 中对应的 key
 _CREDIT_TYPE_MAP: dict[str, str] = {
-    "summary":    "gen_summary",
     "quiz":       "gen_quiz",
-    "outline":    "gen_outline",
     "flashcards": "gen_flashcards",
     "ask":        "gen_ask",
     "exam_mock":  "gen_exam_mock",

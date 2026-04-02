@@ -214,43 +214,6 @@ def _get_openai_key(supabase: Client) -> str:
 
 # ── Core generation functions ─────────────────────────────────────────────────
 
-def run_summary(db: Client, user_id: str, course_id: str, body) -> dict:
-    """Generate summary. Returns the output dict (contains 'id')."""
-    art_ids = _resolve_artifact_ids(
-        db, user_id, course_id,
-        body.scope_set_id, body.artifact_ids,
-        priority_doc_types=["lecture"],
-        fallback_doc_types=["tutorial"],
-    )
-    ctx, sources = _get_context(db, user_id, course_id, art_ids)
-    if not ctx.strip():
-        raise AppError("No content found — please wait for files to be indexed or upload approved files")
-
-    openai_key = _get_openai_key(db)
-    system = (
-        "You are a rigorous academic knowledge extractor and study assistant. "
-        "Summarize the course materials into clear, structured study notes using ## headings and bullet points. "
-        "CRITICAL FILTERING RULES — you MUST exclude the following from the output:\n"
-        "  - Course duration, class hours, or timetable information (e.g. '2 hours', '3 units')\n"
-        "  - Instructor, tutor, or lecturer names (e.g. 'Tutor: Plum', 'Lecturer: Dr. Smith')\n"
-        "  - Administrative details: exam dates, grading schemes, submission deadlines, attendance policies\n"
-        "  - Course introduction or overview slides that describe what the course IS rather than what it TEACHES\n"
-        "Only extract core concepts, algorithms, formulas, definitions, and theoretical knowledge. "
-        "Respond in the same language as the content."
-    )
-    try:
-        content = _chat(system, f"Course materials:\n\n{ctx}", openai_key)
-        content += _sources_note(sources)
-    except Exception as exc:
-        logger.error("run_summary LLM failed: %s", exc, exc_info=True)
-        raise AppError(f"摘要生成失败：{str(exc)[:120]}，请稍后重试")
-
-    return create_output(
-        db, user_id, course_id, "summary", content,
-        scope_set_id=body.scope_set_id, model_used="gpt-5.4",
-    )
-
-
 def run_quiz(db: Client, user_id: str, course_id: str, body) -> dict:
     """Generate quiz questions. Returns the output dict (contains 'id')."""
     art_ids = _resolve_artifact_ids(
@@ -341,44 +304,6 @@ Format:
     content = json.dumps({"questions": questions, "sources": sources}, ensure_ascii=False)
     return create_output(
         db, user_id, course_id, "quiz", content,
-        scope_set_id=body.scope_set_id, model_used="gpt-5.4",
-    )
-
-
-def run_outline(db: Client, user_id: str, course_id: str, body) -> dict:
-    """Generate course outline. Returns the output dict (contains 'id')."""
-    art_ids = _resolve_artifact_ids(
-        db, user_id, course_id,
-        body.scope_set_id, body.artifact_ids,
-        priority_doc_types=["revision"],
-        fallback_doc_types=None,
-    )
-    ctx, _ = _get_context(db, user_id, course_id, art_ids)
-    if not ctx.strip():
-        raise AppError("未找到「复习总结」类型的文件。请在管理后台上传复习资料并将 doc_type 设为「复习总结 (revision)」后重试。")
-
-    openai_key = _get_openai_key(db)
-    system = (
-        "You are a strict academic knowledge extractor for computer science courses. "
-        "Create a hierarchical study outline using nested markdown (## headings, ### subheadings, bullet points). "
-        "CRITICAL FILTERING RULES — you MUST NEVER include:\n"
-        "  - Course duration, hours, or scheduling (e.g. '2 hours', '3 weeks')\n"
-        "  - Instructor, tutor, or lecturer names (e.g. 'Tutor: Plum', 'Lecturer: Dr. Smith')\n"
-        "  - Administrative details: exam schedules, grading criteria, attendance, deadlines\n"
-        "  - Course introduction slides describing meta-information about the course itself\n"
-        "ONLY extract: core algorithms, technical concepts, formulas, definitions, theoretical principles. "
-        "Base the outline STRICTLY on the provided course content. "
-        "Do NOT add topics not present in the provided text. "
-        "Respond in the same language as the content."
-    )
-    try:
-        content = _chat(system, f"Course content:\n\n{ctx}", openai_key)
-    except Exception as exc:
-        logger.error("run_outline LLM failed: %s", exc, exc_info=True)
-        raise AppError(f"大纲生成失败：{str(exc)[:120]}，请稍后重试")
-
-    return create_output(
-        db, user_id, course_id, "outline", content,
         scope_set_id=body.scope_set_id, model_used="gpt-5.4",
     )
 

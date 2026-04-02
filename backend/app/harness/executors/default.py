@@ -13,9 +13,7 @@ logger = logging.getLogger(__name__)
 
 # job_type → generate_service 中对应的生成函数
 _GEN_FN = {
-    "summary":    generate_service.run_summary,
     "quiz":       generate_service.run_quiz,
-    "outline":    generate_service.run_outline,
     "flashcards": generate_service.run_flashcards,
 }
 

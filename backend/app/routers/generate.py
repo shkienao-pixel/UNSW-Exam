@@ -122,20 +122,6 @@ def get_job_status(
 
 # 鈹€鈹€ Async POST endpoints 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
-@router.post("/{course_id}/generate/summary")
-async def gen_summary(
-    course_id: str,
-    body: GenerateRequest,
-    current_user: dict = Depends(get_current_user),
-    supabase: Client  = Depends(get_db),
-) -> dict[str, Any]:
-    """Kick off async summary generation. Returns {job_id} immediately."""
-    _deny_guest(current_user)
-    get_course(supabase, course_id)
-    job_id = _enqueue_generation_job(supabase, current_user["id"], course_id, "summary", body)
-    return {"job_id": job_id}
-
-
 @router.post("/{course_id}/generate/quiz")
 async def gen_quiz(
     course_id: str,
@@ -147,20 +133,6 @@ async def gen_quiz(
     _deny_guest(current_user)
     get_course(supabase, course_id)
     job_id = _enqueue_generation_job(supabase, current_user["id"], course_id, "quiz", body)
-    return {"job_id": job_id}
-
-
-@router.post("/{course_id}/generate/outline")
-async def gen_outline(
-    course_id: str,
-    body: GenerateRequest,
-    current_user: dict = Depends(get_current_user),
-    supabase: Client  = Depends(get_db),
-) -> dict[str, Any]:
-    """Kick off async outline generation. Returns {job_id} immediately."""
-    _deny_guest(current_user)
-    get_course(supabase, course_id)
-    job_id = _enqueue_generation_job(supabase, current_user["id"], course_id, "outline", body)
     return {"job_id": job_id}
 
 

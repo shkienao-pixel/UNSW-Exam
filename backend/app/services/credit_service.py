@@ -2,7 +2,7 @@
 
 积分类型（type 字段）：
   Earn: welcome_bonus | artifact_approved | feedback_adopted | admin_grant | purchase | refund
-  Spend: gen_flashcards | gen_quiz | gen_summary | gen_outline | gen_plan | gen_ask | unlock_upload | unlock_all
+  Spend: gen_flashcards | gen_quiz | gen_plan | gen_ask | unlock_upload | unlock_all | enroll_course | exam_past_unlock | gen_exam_mock | gen_classroom
 """
 from __future__ import annotations
 
@@ -18,22 +18,21 @@ logger = logging.getLogger(__name__)
 
 # ── 消费定价表 ────────────────────────────────────────────────
 COSTS: dict[str, int] = {
-    "gen_flashcards":  100,
-    "gen_quiz":        100,
-    "gen_summary":     1,
-    "gen_outline":     5,
-    "gen_plan":        5,
+    "gen_flashcards":   100,
+    "gen_quiz":         100,
+    # 考试计划解锁（一次性）
+    "gen_plan":         200,
     # Gemini 3.1 Pro 直接生成，单次 20 积分
-    "gen_ask":         20,
+    "gen_ask":          20,
     # 单文件深度解析（解锁 + 考点提取）
-    "unlock_upload":   50,
-    "enroll_course":   100,
+    "unlock_upload":    50,
+    "enroll_course":    100,
     # 真题解锁（一次性，永久访问）
     "exam_past_unlock": 150,
     # 模拟题生成
-    "gen_exam_mock":   100,
+    "gen_exam_mock":    100,
     # 互动课堂生成
-    "gen_classroom":   300,
+    "gen_classroom":    300,
 }
 
 

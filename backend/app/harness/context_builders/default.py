@@ -16,9 +16,7 @@ logger = logging.getLogger(__name__)
 # doc_type routing 表：job_type → (priority_doc_types, fallback_doc_types)
 # 新增 job_type 只需在此处加一行，无需修改其他代码
 _DOC_TYPE_ROUTING: dict[str, tuple[list[str] | None, list[str] | None]] = {
-    "summary":    (["lecture"], ["tutorial"]),
     "quiz":       (["past_exam"], None),
-    "outline":    (["revision"], None),
     "flashcards": (["lecture"], ["tutorial"]),
     "exam_mock":  (["past_exam"], None),
     "ask":        (None, None),   # ask 由 context_mode 控制，走专属分支

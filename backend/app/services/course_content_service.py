@@ -9,7 +9,7 @@ from supabase import Client
 
 logger = logging.getLogger(__name__)
 
-UNLOCK_COSTS = {"summary": 200, "outline": 300}
+UNLOCK_COSTS = {"summary": 300, "outline": 300}
 
 
 # ── CRUD ─────────────────────────────────────────────────────────────────────
