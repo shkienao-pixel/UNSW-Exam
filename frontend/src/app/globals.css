@@ -502,7 +502,8 @@ body {
 /* Editor root background & padding */
 .note-editor-area .bn-editor {
   background: transparent !important;
-  padding: 16px 4px 32px !important;
+  /* 左侧留 54px 给 BlockNote 侧边栏（拖拽点 + 加号按钮），避免被 overflow-x:hidden 裁掉 */
+  padding: 16px 8px 32px 54px !important;
   min-height: 100%;
 }
 
