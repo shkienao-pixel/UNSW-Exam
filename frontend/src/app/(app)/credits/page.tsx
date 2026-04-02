@@ -153,6 +153,56 @@ function CreditsPageInner() {
         </div>
       </section>
 
+      {/* ── AI 模型引擎展示 ── */}
+      <section className="mt-8 rounded-[28px] border border-white/8 bg-white/[0.025] p-6 sm:p-8">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c8a55a]/70">{t('credits_models_label')}</p>
+            <p className="mt-1.5 max-w-[560px] text-sm leading-7 text-white/50">{t('credits_models_desc')}</p>
+          </div>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          {/* GPT-5.4 */}
+          <div className="flex items-center gap-3.5 rounded-[18px] border border-[#10a37f]/20 bg-[#10a37f]/6 px-4 py-3.5">
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#10a37f]/15">
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none">
+                <path d="M22.28 9.98a5.26 5.26 0 0 0-.45-4.32 5.32 5.32 0 0 0-5.72-2.56A5.28 5.28 0 0 0 12.13 1a5.32 5.32 0 0 0-5.07 3.68 5.28 5.28 0 0 0-3.53 2.56 5.33 5.33 0 0 0 .65 6.24 5.26 5.26 0 0 0 .45 4.32 5.32 5.32 0 0 0 5.72 2.56A5.28 5.28 0 0 0 14.34 23a5.32 5.32 0 0 0 5.07-3.68 5.28 5.28 0 0 0 3.53-2.56 5.33 5.33 0 0 0-.66-6.78z" fill="#10a37f"/>
+              </svg>
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white">GPT-5.4</p>
+              <p className="mt-0.5 text-[11px] text-white/40">OpenAI · 深度推理 & 生成</p>
+            </div>
+          </div>
+          {/* Gemini 3.1 Pro */}
+          <div className="flex items-center gap-3.5 rounded-[18px] border border-[#4285f4]/20 bg-[#4285f4]/6 px-4 py-3.5">
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#4285f4]/15">
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" fill="#4285f4"/>
+                <path d="M12 2a10 10 0 0 1 0 20A10 10 0 0 1 12 2zm0 1.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17z" fill="#4285f4" opacity=".3"/>
+                <path d="M12 6.5c-3.03 0-5.5 2.47-5.5 5.5s2.47 5.5 5.5 5.5 5.5-2.47 5.5-5.5-2.47-5.5-5.5-5.5zm0 9a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" fill="#4285f4"/>
+              </svg>
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white">Gemini 3.1 Pro</p>
+              <p className="mt-0.5 text-[11px] text-white/40">Google · 多模态问答</p>
+            </div>
+          </div>
+          {/* Claude 4.6 */}
+          <div className="flex items-center gap-3.5 rounded-[18px] border border-[#d97757]/20 bg-[#d97757]/6 px-4 py-3.5">
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#d97757]/15">
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none">
+                <path d="M17.3 3.6c-1.1-.4-2.3-.2-3.2.5l-9 7.2c-.8.6-1.2 1.6-1.1 2.6.1.9.7 1.8 1.5 2.2l2.5 1.3-1.1 3.2c-.2.7.1 1.4.7 1.8.3.2.6.2.9.2.4 0 .8-.1 1.1-.4l9.7-8.3c.8-.7 1.2-1.7 1-2.7-.1-1-.7-1.9-1.6-2.4l-1.7-.9.9-2.7c.3-.8 0-1.7-.6-2.1z" fill="#d97757"/>
+              </svg>
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white">Claude 4.6</p>
+              <p className="mt-0.5 text-[11px] text-white/40">Anthropic · 长上下文分析</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="mt-8">
         <h2 className="text-2xl font-semibold tracking-[-0.03em] text-white">{t('credits_packages_title')}</h2>
         <p className="mt-1 text-sm text-white/42">{t('credits_packages_sub')}</p>
@@ -238,6 +288,7 @@ function CreditsPageInner() {
             [t('credits_estimator_item_1'), t('credits_estimator_cost_1'), t('credits_estimator_value_1')],
             [t('credits_estimator_item_2'), t('credits_estimator_cost_2'), t('credits_estimator_value_2')],
             [t('credits_estimator_item_3'), t('credits_estimator_cost_3'), t('credits_estimator_value_3')],
+            [t('credits_estimator_item_4'), t('credits_estimator_cost_4'), t('credits_estimator_value_4')],
           ].map(([name, cost, value], idx) => (
             <div
               key={name}

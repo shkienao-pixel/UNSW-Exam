@@ -1,0 +1,1 @@
+"""Output manager implementations."""

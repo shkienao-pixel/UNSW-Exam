@@ -19,7 +19,10 @@ import {
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
+import rehypeKatex from 'rehype-katex'
+import remarkMath from 'remark-math'
 import 'highlight.js/styles/github-dark.css'
+import 'katex/dist/katex.min.css'
 import { useFloatingAsk, type FloatingMessage } from '@/lib/floating-ask-context'
 
 const MIN_W = 400
@@ -207,7 +210,8 @@ function AiCard({
               <div className="px-4 py-3" style={{ color: '#d4d4dc', fontSize: fsBase, lineHeight: '1.78' }}>
                 <div className="exam-prose">
                   <ReactMarkdown
-                    rehypePlugins={[rehypeHighlight]}
+                    remarkPlugins={[remarkMath]}
+                    rehypePlugins={[rehypeHighlight, rehypeKatex]}
                     components={{
                       h1: ({ children }) => (
                         <div style={{ borderBottom: '1px solid rgba(255,215,0,0.2)', paddingBottom: '0.35em', marginTop: '1.1em', marginBottom: '0.6em' }}>
@@ -636,7 +640,7 @@ export default function FloatingAskWindow() {
     <>
       {/* Header */}
       <div
-        className={`relative flex items-center gap-2.5 px-4 py-3 ${isMobile ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'}`}
+        className={`relative flex items-center gap-2.5 px-4 py-3 ${isMobile ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'} select-none`}
         style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}
         onMouseDown={isMobile ? undefined : handleTitleMouseDown}
       >
@@ -872,7 +876,6 @@ export default function FloatingAskWindow() {
           backdropFilter: 'blur(24px)',
           WebkitBackdropFilter: 'blur(24px)',
           boxShadow: '0 32px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04)',
-          userSelect: 'none',
         }}>
           {innerContent}
           <div onMouseDown={e => handleResizeMouseDown(e, 'e')}

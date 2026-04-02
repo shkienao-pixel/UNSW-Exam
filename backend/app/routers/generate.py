@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -35,14 +35,8 @@ from supabase import Client
 
 from app.core.config import get_settings
 from app.core.dependencies import get_current_user, get_db
-from app.services.course_service import (
-    get_course,
-    get_scope_set,
-)
-from app.services.artifact_service import filter_accessible_artifact_ids, get_all_accessible_artifact_ids
-from app.services.rag_service import get_artifact_ids_by_doc_type, get_course_chunks_sampled
+from app.services.course_service import get_course
 from app.services import job_service, generate_service
-from app.services.credit_service import credit_guard
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -75,15 +69,6 @@ class TranslateRequest(BaseModel):
     target_lang: str = "en"  # 'en' or 'zh'
 
 
-def _serialize_generate_payload(body: GenerateRequest) -> dict[str, Any]:
-    return {
-        "scope_set_id": body.scope_set_id,
-        "artifact_ids": body.artifact_ids,
-        "num_questions": body.num_questions,
-        "exclude_topics": body.exclude_topics,
-    }
-
-
 def _deny_guest(current_user: dict) -> None:
     """guest 账号不允许调用生成接口。"""
     if current_user.get("is_guest"):
@@ -104,7 +89,12 @@ def _enqueue_generation_job(
         course_id,
         job_type,
         max_inflight=max_inflight,
-        request_payload=_serialize_generate_payload(body),
+        request_payload={
+            "scope_set_id": body.scope_set_id,
+            "artifact_ids": body.artifact_ids,
+            "num_questions": body.num_questions,
+            "exclude_topics": body.exclude_topics,
+        },
     )
     if not job_id:
         raise HTTPException(
@@ -200,122 +190,48 @@ def ask_question(
     """4-stage multi-model RAG Q&A with optional visual aid.
 
     Pipeline:
-      Stage 1 鈥?Supabase pgvector / ChromaDB : retrieve top-8 chunks (bilingual)
-      Stage 2 鈥?GPT-4o-mini (judge)          : filter irrelevant chunks
-      Stage 3 鈥?Gemini 2.0 Flash             : generate grounded answer
-                 鈹斺啋 GPT-4o fallback if Gemini key missing or call fails
-      Stage 4 鈥?Imagen 3 (optional)          : diagram for complex/abstract topics
+      Stage 1 — Supabase pgvector / ChromaDB : retrieve top-8 chunks (bilingual)
+      Stage 2 — GPT-4o-mini (judge)          : filter irrelevant chunks
+      Stage 3 — Gemini 3.1 Pro               : generate grounded answer
+                 └→ GPT-4o fallback if Gemini key missing or call fails
+      Stage 4 — Imagen 3 (optional)          : diagram for complex/abstract topics
+
+    Execution is delegated to GenerationHarness (harness/factory.py).
     """
+    from app.core.exceptions import InsufficientCreditsError
+    from app.harness.factory import make_generation_harness
+    from app.harness.types import GenerationRequest
+
     _deny_guest(current_user)
     get_course(supabase, course_id)
 
-    uid = current_user["id"]
-    art_ids: list[int] | None = None
-    if body.scope_set_id:
-        scope = get_scope_set(supabase, uid, body.scope_set_id)
-        ids = scope.get("artifact_ids") or []
-        art_ids = filter_accessible_artifact_ids(supabase, uid, ids) if ids else None
-    elif body.context_mode == "revision":
-        revision_ids = get_artifact_ids_by_doc_type(supabase, course_id, ["revision"])
-        if not revision_ids:
-            logger.info("context_mode=revision but no revision files found for course %s, falling back to all content", course_id)
-        art_ids = filter_accessible_artifact_ids(supabase, uid, revision_ids) if revision_ids else None
-    else:
-        # context_mode=all：限制为当前用户可访问的文件
-        accessible = get_all_accessible_artifact_ids(supabase, uid, course_id)
-        art_ids = accessible if accessible else None
-
-    from app.services.llm_key_service import get_api_key
-    openai_key: str  = get_api_key("openai", supabase) or get_settings().openai_api_key
-    gemini_key: Optional[str] = get_api_key("gemini", supabase)
-
-    from app.services.gemini_service import (
-        gpt_filter_chunks,
-        gemini_generate_answer,
-        should_generate_image,
-        gemini_generate_image,
+    request = GenerationRequest(
+        user_id=current_user["id"],
+        course_id=course_id,
+        job_type="ask",
+        scope_set_id=body.scope_set_id,
+        question=body.question,
+        context_mode=body.context_mode,
+        history=[{"role": m.role, "content": m.content} for m in (body.history or [])],
+        course_name=body.course_name,
     )
 
-    from app.services.rag_service import search_chunks
-    chunks = search_chunks(supabase, course_id, body.question, top_k=8, artifact_ids=art_ids)
+    harness = make_generation_harness("ask", mode="sync")
+    try:
+        result = harness.run_sync(supabase, request)
+    except InsufficientCreditsError:
+        raise
+    except Exception as exc:
+        logger.error("ask_question failed course=%s err=%s", course_id, exc, exc_info=True)
+        raise
 
-    sources: list[dict] = []
-    if chunks:
-        seen: set[int] = set()
-        for c in chunks:
-            aid = c["artifact_id"]
-            if aid not in seen:
-                seen.add(aid)
-                sources.append({
-                    "artifact_id": aid,
-                    "file_name":   c.get("file_name", ""),
-                    "storage_url": c.get("storage_url", ""),
-                })
-
-    with credit_guard(supabase, current_user["id"], "gen_ask"):
-        if chunks:
-            filtered_context = gpt_filter_chunks(body.question, chunks, openai_key)
-        else:
-            logger.info("No indexed chunks found, falling back to direct extraction")
-            ctx, sources = generate_service._fallback_extract(
-                supabase, current_user["id"], course_id, art_ids, max_chars=60_000
-            )
-            if not ctx.strip():
-                return {
-                    "question":   body.question,
-                    "answer":     "No course material is available yet. Please wait for file approval/indexing.",
-                    "sources":    [],
-                    "image_url":  None,
-                    "model_used": "none",
-                }
-            filtered_context = ctx
-
-        answer = ""
-        model_used = "gpt-5.4"
-
-        history = [{"role": m.role, "content": m.content} for m in (body.history or [])]
-
-        if gemini_key:
-            answer = gemini_generate_answer(body.question, filtered_context, gemini_key, history=history)
-            if answer:
-                model_used = "gemini-3.1-pro-preview"
-
-        if not answer:
-            system = (
-                "You are a knowledgeable course tutor. "
-                "Answer the student's question based the course material excerpts provided. "
-                "Be clear and educational. Synthesize information across multiple sources. "
-                "Respond in the same language as the question. "
-                "Do NOT add a sources section."
-            )
-            context_msg = (
-                f"Course material:\n\n{filtered_context}\n\n---\n\nQuestion: {body.question}"
-                if filtered_context.strip()
-                else body.question
-            )
-            answer = generate_service._chat(system, context_msg, openai_key)
-            model_used = "gpt-5.4"
-
-        image_url: Optional[str] = None
-        if gemini_key and should_generate_image(body.question, answer):
-            logger.info("Generating visual aid for query=%r", body.question[:60])
-            image_url = gemini_generate_image(
-                query=body.question,
-                answer=answer,
-                gemini_key=gemini_key,
-                supabase=supabase,
-                bucket=get_settings().supabase_storage_bucket,
-            )
-            if image_url:
-                answer += f"\n\n---\n\n![杈呭姪鍥捐В]({image_url})"
-
-        return {
-            "question":   body.question,
-            "answer":     answer,
-            "sources":    sources,
-            "image_url":  image_url,
-            "model_used": model_used,
-        }
+    return {
+        "question":   body.question,
+        "answer":     result.content,
+        "sources":    result.sources,
+        "image_url":  result.extra.get("image_url"),
+        "model_used": result.model_used,
+    }
 
 
 @router.post("/{course_id}/generate/ask/stream")
@@ -337,7 +253,7 @@ def ask_question_stream(
     get_course(supabase, course_id)
 
     from app.services.llm_key_service import get_api_key
-    gemini_key: Optional[str] = get_api_key("gemini", supabase)
+    gemini_key: str | None = get_api_key("gemini", supabase)
 
     from app.services.gemini_service import gemini_generate_answer_stream
     from app.services.credit_service import spend, earn, COSTS

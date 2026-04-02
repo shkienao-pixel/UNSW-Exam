@@ -633,3 +633,22 @@ body {
   border-color: rgba(255,255,255,0.07) !important;
   margin: 12px 0 !important;
 }
+
+/* ── KaTeX dark theme override ──────────────────────────────────────────── */
+
+.exam-prose .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.5em 0;
+  margin: 0.6em 0;
+  color: #e2e8f0;
+}
+
+.exam-prose .katex {
+  color: #e2e8f0;
+  font-size: 1.05em;
+}
+
+.exam-prose .katex-display > .katex {
+  white-space: normal;
+}

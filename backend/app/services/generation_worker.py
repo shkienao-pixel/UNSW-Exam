@@ -56,18 +56,72 @@ async def _run_job(db: Client, job: dict[str, Any], worker_id: str) -> None:
     user_id = str(job.get("user_id", ""))
     course_id = str(job.get("course_id", ""))
     payload = job.get("request_payload") or {}
-    credit_type = _JOB_CREDIT_TYPE.get(job_type)
+
+    # exam_mock 暂不迁移到 Harness（其逻辑与 exam_service 强耦合）
+    if job_type == "exam_mock":
+        await _run_job_legacy(db, job, worker_id)
+        return
 
     if job_type not in _GEN_FN:
         await asyncio.to_thread(job_service.fail_job, db, job_id, f"Unsupported job_type: {job_type}")
         return
 
+    from app.harness.factory import make_generation_harness
+    from app.harness.types import GenerationRequest
+
+    request = GenerationRequest(
+        user_id=user_id,
+        course_id=course_id,
+        job_type=job_type,
+        job_id=job_id,
+        scope_set_id=payload.get("scope_set_id"),
+        artifact_ids=payload.get("artifact_ids"),
+        num_questions=int(payload.get("num_questions", 10)),
+        exclude_topics=list(payload.get("exclude_topics") or []),
+    )
+    harness = make_generation_harness(job_type, mode="async_job")
+
+    credit_type = _JOB_CREDIT_TYPE.get(job_type)
+    credit_spent = False
+    try:
+        # 幂等扣费在 DefaultOutputManager.persist() 内完成
+        result = await harness.run_async(db, request)
+        credit_spent = True  # persist() 内已扣费
+        logger.info("generation job done worker=%s job=%s output=%s", worker_id, job_id, result.output_id)
+
+    except InsufficientCreditsError as e:
+        await asyncio.to_thread(
+            job_service.fail_job, db, job_id,
+            f"积分不足：当前 {e.balance} 积分，需要 {e.required} 积分"
+        )
+    except Exception as exc:
+        logger.error("generation job failed worker=%s job=%s err=%s", worker_id, job_id, exc, exc_info=True)
+        if credit_spent and credit_type:
+            cost = credit_service.COSTS.get(credit_type, 1)
+            try:
+                await asyncio.to_thread(
+                    credit_service.earn, db, user_id, cost, "refund", job_id,
+                    f"{credit_type} 生成失败退款"
+                )
+            except Exception as refund_err:
+                logger.error("credit refund failed job=%s: %s", job_id, refund_err)
+        safe_msg = f"{type(exc).__name__}: 生成失败，请重试或联系管理员"
+        await asyncio.to_thread(job_service.fail_job, db, job_id, safe_msg)
+
+
+async def _run_job_legacy(db: Client, job: dict[str, Any], worker_id: str) -> None:
+    """exam_mock 的原始执行路径（暂未迁移到 Harness）。"""
+    job_id = job["id"]
+    job_type = str(job.get("job_type", ""))
+    user_id = str(job.get("user_id", ""))
+    course_id = str(job.get("course_id", ""))
+    payload = job.get("request_payload") or {}
+    credit_type = _JOB_CREDIT_TYPE.get(job_type)
+
     credit_spent = False
     try:
         body = _payload_to_body(payload if isinstance(payload, dict) else {})
 
-        # 在实际生成时才扣积分（不是入队时）
-        # 先检查是否已扣（job 被 reclaim 重试时避免二次扣费）
         if credit_type:
             cost = credit_service.COSTS.get(credit_type, 1)
             already_charged = False
@@ -86,7 +140,6 @@ async def _run_job(db: Client, job: dict[str, Any], worker_id: str) -> None:
 
             if already_charged:
                 credit_spent = True
-                logger.info("job %s: credits already charged (reclaim retry), skipping spend", job_id)
             else:
                 try:
                     await asyncio.to_thread(
@@ -101,17 +154,15 @@ async def _run_job(db: Client, job: dict[str, Any], worker_id: str) -> None:
                     return
 
         output = await asyncio.to_thread(_GEN_FN[job_type], db, user_id, course_id, body)
-        # exam_mock returns {"id": None} — no outputs row, finish without output_id
         if output.get("id") is not None:
             await asyncio.to_thread(job_service.finish_job, db, job_id, output["id"])
         else:
             from app.services.job_service import _patch
             await asyncio.to_thread(_patch, db, job_id, {"status": "done"})
-        logger.info("generation job done worker=%s job=%s output=%s", worker_id, job_id, output["id"])
+        logger.info("generation job done worker=%s job=%s output=%s", worker_id, job_id, output.get("id"))
 
     except Exception as exc:
         logger.error("generation job failed worker=%s job=%s err=%s", worker_id, job_id, exc, exc_info=True)
-        # 生成失败时退款（如果已扣）
         if credit_spent and credit_type:
             cost = credit_service.COSTS.get(credit_type, 1)
             try:
@@ -121,7 +172,6 @@ async def _run_job(db: Client, job: dict[str, Any], worker_id: str) -> None:
                 )
             except Exception as refund_err:
                 logger.error("credit refund failed job=%s: %s", job_id, refund_err)
-        # 不将原始异常（可能含 API key 片段）直接存入 DB，仅记录类型
         safe_msg = f"{type(exc).__name__}: 生成失败，请重试或联系管理员"
         await asyncio.to_thread(job_service.fail_job, db, job_id, safe_msg)
 
