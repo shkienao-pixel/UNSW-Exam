@@ -5,7 +5,7 @@ import { RefreshCw, ExternalLink, CheckCircle, AlertCircle, Clock } from 'lucide
 import { adminReq, Spinner, Empty, ErrorBox, Toast, rowStyle, cardStyle } from './_shared'
 
 interface CreditOrder {
-  id: number
+  id: string
   user_id: string
   user_email: string
   credits_amount: number
@@ -32,7 +32,7 @@ export function CreditOrdersTab({ secret }: { secret: string }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'pending'>('all')
-  const [markingId, setMarkingId] = useState<number | null>(null)
+  const [markingId, setMarkingId] = useState<string | null>(null)
   const [toast, setToast] = useState('')
 
   const load = useCallback(async () => {

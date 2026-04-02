@@ -1019,7 +1019,7 @@ def admin_list_credit_orders(
 
 @router.post("/credit-orders/{order_id}/mark-paid")
 def admin_mark_order_paid(
-    order_id: int,
+    order_id: str,
     _: None = Depends(_require_admin),
     supabase: Client = Depends(get_db),
 ) -> dict[str, Any]:
