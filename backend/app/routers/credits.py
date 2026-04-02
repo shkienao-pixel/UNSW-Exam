@@ -164,7 +164,8 @@ def create_checkout(
     stripe.api_key = settings.stripe_secret_key
 
     session = stripe.checkout.Session.create(
-        payment_method_types=["card"],
+        payment_method_types=["card", "alipay", "wechat_pay"],
+        payment_method_options={"wechat_pay": {"client": "web"}},
         line_items=[{
             "price_data": {
                 "currency": "aud",
