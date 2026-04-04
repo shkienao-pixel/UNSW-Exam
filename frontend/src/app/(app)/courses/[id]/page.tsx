@@ -23,6 +23,7 @@ import {
   Code, Lock, Target, Layers3,
 } from 'lucide-react'
 import MistakesView from '@/components/MistakesView'
+import ElectricBorder from '@/components/ElectricBorder'
 import InsufficientCreditsModal from '@/components/InsufficientCreditsModal'
 import ReactMarkdown from 'react-markdown'
 
@@ -544,7 +545,14 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
               {card.type === 'vocab' && (
                 <div className="space-y-4">
                   {/* flip card wrapper — perspective 在此层设置 */}
-                  <div className="mx-auto w-full max-w-[640px]"
+                  <ElectricBorder
+                    color="#c8a55a"
+                    speed={0.1}
+                    chaos={0.01}
+                    borderRadius={50}
+                    className="mx-auto w-full max-w-[640px]"
+                  >
+                  <div
                     style={{ perspective: '1000px', WebkitPerspective: '1000px', cursor: 'pointer', userSelect: 'none' }}
                     onClick={() => setFlipped(f => !f)}>
                     {/* flip-box: preserve-3d，需要显式高度以防布局塌陷 */}
@@ -631,6 +639,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                       </div>
                     </div>
                   </div>
+                  </ElectricBorder>
 
                   {/* 没记住 hint toast */}
                   {forgottenHint && (
@@ -686,6 +695,13 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
               {/* ── MCQ card ── */}
               {card.type === 'mcq' && (
                 <div className="space-y-4">
+                  <ElectricBorder
+                    color="#c8a55a"
+                    speed={0.1}
+                    chaos={0.01}
+                    borderRadius={26}
+                    className="w-full"
+                  >
                   <div className="rounded-[26px] border border-white/8 bg-white/[0.03] p-6 shadow-[0_20px_56px_rgba(0,0,0,0.22)] space-y-4">
                     <p className="font-semibold text-white text-[1.05rem] leading-snug">{biText(card.question, biMode)}</p>
                     <div className="space-y-2.5">
@@ -735,6 +751,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                       </div>
                     )}
                   </div>
+                  </ElectricBorder>
 
                   {/* MCQ navigation */}
                   <div className="flex gap-2 justify-center flex-wrap">
