@@ -20,19 +20,17 @@ import { CreditOrdersTab } from './CreditOrdersTab'
 
 function getTabs(t: (key: any) => string): { id: Tab; label: string; icon: React.ReactNode }[] {
   return [
-    { id: 'courses', label: t('admin_tab_courses'), icon: <BookOpen size={15} /> },
-    { id: 'artifacts', label: t('admin_tab_artifacts'), icon: <FileText size={15} /> },
-    { id: 'users', label: t('admin_tab_users'), icon: <Users size={15} /> },
-    { id: 'invites', label: t('admin_tab_invites'), icon: <Ticket size={15} /> },
-    { id: 'api-keys', label: t('admin_tab_api_keys'), icon: <Key size={15} /> },
-    { id: 'feedback', label: t('admin_tab_feedback'), icon: <MessageSquare size={15} /> },
-    { id: 'course-content', label: t('admin_tab_course_content'), icon: <BookOpen size={15} /> },
-    { id: 'planner', label: '考试计划', icon: <CalendarDays size={15} /> },
-    { id: 'credit-orders', label: '充值管理', icon: <CreditCard size={15} /> },
+    { id: 'courses',        label: t('admin_tab_courses'),        icon: <BookOpen size={14} /> },
+    { id: 'artifacts',      label: t('admin_tab_artifacts'),      icon: <FileText size={14} /> },
+    { id: 'users',          label: t('admin_tab_users'),          icon: <Users size={14} /> },
+    { id: 'invites',        label: t('admin_tab_invites'),        icon: <Ticket size={14} /> },
+    { id: 'api-keys',       label: t('admin_tab_api_keys'),       icon: <Key size={14} /> },
+    { id: 'feedback',       label: t('admin_tab_feedback'),       icon: <MessageSquare size={14} /> },
+    { id: 'course-content', label: t('admin_tab_course_content'), icon: <BookOpen size={14} /> },
+    { id: 'planner',        label: '考试计划',                    icon: <CalendarDays size={14} /> },
+    { id: 'credit-orders',  label: '充值管理',                    icon: <CreditCard size={14} /> },
   ]
 }
-
-// ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>('courses')
@@ -42,152 +40,123 @@ export default function AdminPage() {
   const { t, lang, setLang } = useLang()
   const tabs = getTabs(t)
 
+  // ── Login screen ────────────────────────────────────────────────────────────
   if (!secret) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-8"
-        style={{
-          background:
-            'radial-gradient(circle at top, rgba(20,28,42,0.72), transparent 28%), radial-gradient(circle at 85% 10%, rgba(200,165,90,0.08), transparent 18%), linear-gradient(180deg, #050608 0%, #080b12 50%, #050608 100%)',
-        }}>
-        <div className="w-full max-w-md rounded-[28px] p-8 space-y-6 fade-in-up"
-          style={{
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            boxShadow: '0 24px 80px rgba(0,0,0,0.45)',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
-          }}>
-          <div>
-            <div className="mb-4 flex items-center justify-between">
-              <ExamMasterLogo height={28} />
-              <button
-                onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
-                className="rounded-full border border-white/12 px-3 py-1 text-xs text-white/62 transition hover:bg-white/[0.05]"
-              >
-                {lang === 'zh' ? 'English Version' : '中文'}
-              </button>
-            </div>
+      <div className="flex min-h-screen items-center justify-center bg-[#050608] p-6">
+        <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,rgba(20,28,42,0.78),transparent_30%),radial-gradient(circle_at_85%_10%,rgba(200,165,90,0.07),transparent_18%)]" />
 
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                style={{ background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.25)' }}>
-                <Shield size={20} style={{ color: '#FFD700' }} />
-              </div>
-              <div className="text-xl font-bold" style={{ color: '#FFD700' }}>{t('admin_title')}</div>
-            </div>
-            <p className="text-sm" style={{ color: 'rgba(255,255,255,0.52)' }}>{t('admin_enter_desc')}</p>
-            <p className="text-xs mt-1 font-mono" style={{ color: 'rgba(255,255,255,0.3)' }}>API: {API}</p>
+        <div className="relative w-full max-w-sm space-y-6 rounded-[28px] border border-white/8 bg-[rgba(11,13,18,0.92)] p-8 shadow-[0_24px_80px_rgba(0,0,0,0.5)] backdrop-blur-2xl">
+          <div className="flex items-center justify-between">
+            <ExamMasterLogo height={26} />
+            <button
+              onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+              className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/42 transition hover:border-white/16 hover:text-white/70"
+            >
+              {lang === 'zh' ? 'EN' : '中文'}
+            </button>
           </div>
 
-          <div className="relative">
-            <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'rgba(255,255,255,0.42)' }} />
-            <input
-              type="password"
-              value={secretInput}
-              onChange={e => setSecretInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && setSecret(secretInput.trim())}
-              placeholder={t('admin_secret_ph')}
-              className="w-full pl-9 pr-4 py-3 rounded-xl text-sm outline-none transition-all duration-150"
-              style={{
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                color: '#e0e0e0',
-              }}
-              onFocus={e => {
-                e.currentTarget.style.border = '1px solid rgba(255,215,0,0.5)'
-                e.currentTarget.style.boxShadow = '0 0 12px rgba(255,215,0,0.08)'
-              }}
-              onBlur={e => {
-                e.currentTarget.style.border = '1px solid rgba(255,255,255,0.1)'
-                e.currentTarget.style.boxShadow = 'none'
-              }}
-            />
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#c8a55a]/25 bg-[#c8a55a]/10">
+              <Shield size={18} className="text-[#c8a55a]" />
+            </div>
+            <div>
+              <p className="text-base font-semibold text-white">{t('admin_title')}</p>
+              <p className="text-xs text-white/38">{t('admin_enter_desc')}</p>
+            </div>
           </div>
-          <button onClick={() => setSecret(secretInput.trim())}
-            className="w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all duration-150"
-            style={{
-              background: 'linear-gradient(135deg, rgba(255,215,0,0.22), rgba(255,215,0,0.12))',
-              color: '#FFD700',
-              border: '1px solid rgba(255,215,0,0.35)',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'linear-gradient(135deg, rgba(255,215,0,0.32), rgba(255,215,0,0.18))')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'linear-gradient(135deg, rgba(255,215,0,0.22), rgba(255,215,0,0.12))')}>
-            <Zap size={15} />
-            {t('admin_enter_btn')}
-          </button>
+
+          <div className="space-y-3">
+            <div className="relative">
+              <Lock size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
+              <input
+                type="password"
+                value={secretInput}
+                onChange={e => setSecretInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && setSecret(secretInput.trim())}
+                placeholder={t('admin_secret_ph')}
+                className="w-full rounded-xl border border-white/10 bg-white/[0.05] py-2.5 pl-9 pr-4 text-sm text-white/88 outline-none placeholder:text-white/24 focus:border-[#c8a55a]/40"
+              />
+            </div>
+            <button
+              onClick={() => setSecret(secretInput.trim())}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#c8a55a]/25 bg-[#c8a55a]/10 py-2.5 text-sm font-medium text-[#e6cf98] transition hover:bg-[#c8a55a]/16"
+            >
+              <Zap size={14} />
+              {t('admin_enter_btn')}
+            </button>
+          </div>
+
+          <p className="text-center font-mono text-[10px] text-white/18">{API}</p>
         </div>
       </div>
     )
   }
 
+  // ── Main layout ─────────────────────────────────────────────────────────────
   return (
-    <div
-      className="mx-auto flex min-h-screen w-full max-w-[1240px] flex-col px-5 py-8 sm:px-6 lg:py-10"
-      style={{
-        background:
-          'radial-gradient(circle at top, rgba(20,28,42,0.62), transparent 26%), radial-gradient(circle at 84% 12%, rgba(200,165,90,0.08), transparent 20%)',
-      }}
-    >
-      <div className="mb-6 flex items-center justify-between rounded-[24px] border border-white/8 bg-white/[0.03] px-5 py-4">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-            style={{ background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.22)' }}>
-            <Shield size={16} style={{ color: '#FFD700' }} />
+    <div className="min-h-screen bg-[#050608]">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,rgba(20,28,42,0.62),transparent_26%),radial-gradient(circle_at_84%_12%,rgba(200,165,90,0.07),transparent_20%)]" />
+
+      <div className="relative mx-auto flex min-h-screen max-w-[1280px] flex-col px-5 py-8 sm:px-6">
+        {/* Top bar */}
+        <div className="mb-5 flex items-center justify-between rounded-[20px] border border-white/8 bg-white/[0.03] px-5 py-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#c8a55a]/22 bg-[#c8a55a]/10">
+              <Shield size={15} className="text-[#c8a55a]" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">{t('admin_title')}</p>
+              <p className="text-[11px] text-white/34">{t('admin_sub')}</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-bold" style={{ color: '#FFD700' }}>{t('admin_title')}</h1>
-            <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.42)' }}>{t('admin_sub')}</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+              className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/42 transition hover:border-white/16 hover:text-white/70"
+            >
+              {lang === 'zh' ? 'EN' : '中文'}
+            </button>
+            <button
+              onClick={() => setSecret('')}
+              className="rounded-lg border border-white/8 px-3 py-1.5 text-xs text-white/30 transition hover:border-red-500/30 hover:text-red-400"
+            >
+              {t('admin_logout')}
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
-            className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/62 transition hover:bg-white/[0.05]"
-          >
-            {lang === 'zh' ? 'English Version' : '中文'}
-          </button>
-          <button onClick={() => setSecret('')}
-            className="text-xs px-3 py-1.5 rounded-lg transition-all duration-150"
-            style={{ color: '#555', border: '1px solid rgba(255,255,255,0.07)' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#ff7070'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,112,112,0.3)' }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#555'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.07)' }}>
-            {t('admin_logout')}
-          </button>
+
+        {/* Tab nav */}
+        <div className="mb-5 flex flex-wrap gap-1 rounded-[18px] border border-white/8 bg-white/[0.02] p-1.5">
+          {tabs.map(item => (
+            <button
+              key={item.id}
+              onClick={() => setTab(item.id)}
+              className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium transition ${
+                tab === item.id
+                  ? 'border border-[#c8a55a]/22 bg-[#c8a55a]/10 text-[#e6cf98]'
+                  : 'border border-transparent text-white/36 hover:text-white/62'
+              }`}
+            >
+              {item.icon}
+              {item.label}
+            </button>
+          ))}
         </div>
-      </div>
 
-      {/* Tab Navigation */}
-      <div className="mb-6 flex gap-1 rounded-xl border border-white/8 bg-white/[0.03] p-1 flex-wrap">
-        {tabs.map(item => (
-          <button key={item.id} onClick={() => setTab(item.id)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 relative"
-            style={{
-              background: tab === item.id ? 'rgba(255,215,0,0.1)' : 'transparent',
-              color: tab === item.id ? '#FFD700' : '#444',
-              border: tab === item.id ? '1px solid rgba(255,215,0,0.25)' : '1px solid transparent',
-              textShadow: tab === item.id ? '0 0 12px rgba(255,215,0,0.4)' : 'none',
-            }}
-            onMouseEnter={e => { if (tab !== item.id) { (e.currentTarget as HTMLElement).style.color = '#888' } }}
-            onMouseLeave={e => { if (tab !== item.id) { (e.currentTarget as HTMLElement).style.color = '#444' } }}>
-            {item.icon} {item.label}
-            {tab === item.id && (
-              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full"
-                style={{ background: '#FFD700', boxShadow: '0 0 6px rgba(255,215,0,0.6)' }} />
-            )}
-          </button>
-        ))}
-      </div>
-
-      <div className="rounded-[24px] border border-white/8 bg-white/[0.03] p-5 shadow-[0_20px_64px_rgba(0,0,0,0.26)]">
-        <div style={{ display: tab === 'courses'        ? undefined : 'none' }}><CoursesTab        secret={secret} onCoursesChanged={() => setCoursesVersion(v => v + 1)} /></div>
-        <div style={{ display: tab === 'artifacts'      ? undefined : 'none' }}><ArtifactsTab      secret={secret} coursesVersion={coursesVersion} /></div>
-        <div style={{ display: tab === 'users'          ? undefined : 'none' }}><UsersTab          secret={secret} /></div>
-        <div style={{ display: tab === 'invites'        ? undefined : 'none' }}><InvitesTab        secret={secret} /></div>
-        <div style={{ display: tab === 'api-keys'       ? undefined : 'none' }}><ApiKeysTab        secret={secret} /></div>
-        <div style={{ display: tab === 'feedback'       ? undefined : 'none' }}><FeedbackTab       secret={secret} /></div>
-        <div style={{ display: tab === 'course-content' ? undefined : 'none' }}><CourseContentTab  secret={secret} /></div>
-        <div style={{ display: tab === 'planner'        ? undefined : 'none' }}><PlannerBlueprintTab secret={secret} /></div>
-        <div style={{ display: tab === 'credit-orders'  ? undefined : 'none' }}><CreditOrdersTab     secret={secret} /></div>
+        {/* Content */}
+        <div className="flex-1 rounded-[24px] border border-white/8 bg-white/[0.025] p-5 shadow-[0_20px_64px_rgba(0,0,0,0.22)]">
+          <div style={{ display: tab === 'courses'        ? undefined : 'none' }}><CoursesTab        secret={secret} onCoursesChanged={() => setCoursesVersion(v => v + 1)} /></div>
+          <div style={{ display: tab === 'artifacts'      ? undefined : 'none' }}><ArtifactsTab      secret={secret} coursesVersion={coursesVersion} /></div>
+          <div style={{ display: tab === 'users'          ? undefined : 'none' }}><UsersTab          secret={secret} /></div>
+          <div style={{ display: tab === 'invites'        ? undefined : 'none' }}><InvitesTab        secret={secret} /></div>
+          <div style={{ display: tab === 'api-keys'       ? undefined : 'none' }}><ApiKeysTab        secret={secret} /></div>
+          <div style={{ display: tab === 'feedback'       ? undefined : 'none' }}><FeedbackTab       secret={secret} /></div>
+          <div style={{ display: tab === 'course-content' ? undefined : 'none' }}><CourseContentTab  secret={secret} /></div>
+          <div style={{ display: tab === 'planner'        ? undefined : 'none' }}><PlannerBlueprintTab secret={secret} /></div>
+          <div style={{ display: tab === 'credit-orders'  ? undefined : 'none' }}><CreditOrdersTab   secret={secret} /></div>
+        </div>
       </div>
     </div>
   )

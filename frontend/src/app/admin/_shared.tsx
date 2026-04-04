@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Loader2, XCircle, Trash2, Plus, CheckCircle } from 'lucide-react'
 import { CubesLoader } from '@/components/Cubes'
 
@@ -94,22 +94,29 @@ export interface AdminUploadItem { id: number; file: File; status: 'pending' | '
 
 export type Tab = 'courses' | 'artifacts' | 'users' | 'invites' | 'api-keys' | 'feedback' | 'course-content' | 'planner' | 'credit-orders'
 
-// ── Shared styles ──────────────────────────────────────────────────────────────
+// ── Shared style tokens (for tabs that still use inline styles) ───────────────
 
 export const inputStyle: React.CSSProperties = {
-  background: 'rgba(255,255,255,0.06)',
+  background: 'rgba(255,255,255,0.05)',
   border: '1px solid rgba(255,255,255,0.1)',
-  color: '#e0e0e0',
+  color: 'rgba(255,255,255,0.88)',
+  borderRadius: 10,
+  padding: '8px 12px',
+  fontSize: 13,
+  outline: 'none',
+  width: '100%',
 }
 
 export const rowStyle: React.CSSProperties = {
   background: 'rgba(255,255,255,0.025)',
   border: '1px solid rgba(255,255,255,0.07)',
+  borderRadius: 14,
 }
 
 export const cardStyle: React.CSSProperties = {
   background: 'rgba(255,255,255,0.03)',
   border: '1px solid rgba(255,255,255,0.07)',
+  borderRadius: 16,
 }
 
 // ── Shared UI primitives ───────────────────────────────────────────────────────
@@ -119,13 +126,15 @@ export function Spinner() {
 }
 
 export function Empty({ text }: { text: string }) {
-  return <p className="text-center py-8 text-sm" style={{ color: '#444' }}>{text}</p>
+  return (
+    <p className="py-8 text-center text-sm text-white/28">{text}</p>
+  )
 }
 
 export function ErrorBox({ msg }: { msg: string }) {
   return (
-    <div className="p-3 rounded-xl text-sm flex items-center gap-2" style={{ background: 'rgba(255,80,80,0.08)', color: '#ff8080', border: '1px solid rgba(255,80,80,0.2)' }}>
-      <XCircle size={14} /> {msg}
+    <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/8 px-4 py-3 text-sm text-red-400">
+      <XCircle size={14} className="shrink-0" /> {msg}
     </div>
   )
 }
@@ -134,34 +143,24 @@ export function ActionBtn({ onClick, loading = false, disabled = false, icon, ch
   onClick: () => void; loading?: boolean; disabled?: boolean; icon?: React.ReactNode; children: React.ReactNode
 }) {
   return (
-    <button onClick={onClick} disabled={loading || disabled}
-      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-150"
-      style={{
-        background: loading || disabled ? 'rgba(255,215,0,0.08)' : 'linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,215,0,0.1))',
-        color: '#FFD700',
-        border: '1px solid rgba(255,215,0,0.35)',
-        opacity: loading || disabled ? 0.5 : 1,
-        cursor: loading || disabled ? 'not-allowed' : 'pointer',
-      }}
-      onMouseEnter={e => { if (!loading && !disabled) (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(255,215,0,0.28), rgba(255,215,0,0.16))' }}
-      onMouseLeave={e => { if (!loading && !disabled) (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,215,0,0.1))' }}>
-      {loading ? <Loader2 size={14} className="animate-spin" /> : icon}
+    <button
+      onClick={onClick}
+      disabled={loading || disabled}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-[#c8a55a]/25 bg-[#c8a55a]/10 px-3.5 py-2 text-xs font-medium text-[#e6cf98] transition hover:bg-[#c8a55a]/16 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {loading ? <Loader2 size={13} className="animate-spin" /> : icon}
       {children}
     </button>
   )
 }
 
 export function DeleteBtn({ onClick }: { onClick: () => void }) {
-  const [hov, setHov] = useState(false)
   return (
-    <button onClick={onClick}
-      className="p-1.5 rounded-lg flex-shrink-0 transition-all duration-150"
-      style={{
-        color: hov ? '#ff6b6b' : '#444',
-        background: hov ? 'rgba(255,107,107,0.1)' : 'transparent',
-      }}
-      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}>
-      <Trash2 size={14} />
+    <button
+      onClick={onClick}
+      className="rounded-lg p-1.5 text-white/24 transition hover:bg-red-500/10 hover:text-red-400"
+    >
+      <Trash2 size={13} />
     </button>
   )
 }
@@ -172,9 +171,8 @@ export function Toast({ message, onDone }: { message: string; onDone: () => void
     return () => clearTimeout(t)
   }, [onDone])
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-2xl text-sm font-medium flex items-center gap-2 shadow-2xl"
-      style={{ background: 'rgba(20,20,36,0.97)', border: '1px solid rgba(74,222,128,0.4)', color: '#4ade80', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}>
-      <CheckCircle size={15} /> {message}
+    <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 flex items-center gap-2 rounded-2xl border border-emerald-500/30 bg-[rgba(11,13,18,0.97)] px-5 py-3 text-sm font-medium text-emerald-400 shadow-[0_8px_32px_rgba(0,0,0,0.6)]">
+      <CheckCircle size={14} /> {message}
     </div>
   )
 }
