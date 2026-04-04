@@ -7,6 +7,7 @@ attribute vec2 a_pos;
 void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }
 `
 
+// screen blend mode: 输出颜色直接叠亮背景，黑色完全透明，深色背景可见
 const FRAG = `
 precision highp float;
 uniform float u_time;
@@ -39,36 +40,37 @@ float fbm(vec2 p) {
 
 void main() {
   vec2 uv = gl_FragCoord.xy / u_res;
-  uv.x   *= u_res.x / u_res.y;
+  float ar = u_res.x / u_res.y;
+  uv.x *= ar;
 
   float t = u_time * 0.07;
 
-  vec2 q = vec2(fbm(uv + t * 0.6),
+  vec2 q = vec2(fbm(uv + t * 0.5),
                 fbm(uv + vec2(5.2, 1.3)));
 
   vec2 r = vec2(fbm(uv + 4.0 * q + vec2(1.7, 9.2) + t * 0.15),
                 fbm(uv + 4.0 * q + vec2(8.3, 2.8) + t * 0.13));
 
   float f = fbm(uv + 4.0 * r + t * 0.05);
-  f = f * 0.5 + 0.5;
+  f = clamp(f * 0.5 + 0.5, 0.0, 1.0);
 
-  /* deep blue-violet streaks */
-  vec3 cold = vec3(0.04, 0.06, 0.22);
-  /* warm amber accent — matches #c8a55a */
-  vec3 warm = vec3(0.28, 0.18, 0.04);
-  /* near-black base */
-  vec3 base = vec3(0.01, 0.01, 0.03);
+  // 蓝紫色流体 (screen 模式下这些颜色会发光)
+  vec3 cold = vec3(0.05, 0.12, 0.65);
+  // 深紫
+  vec3 deep = vec3(0.18, 0.04, 0.45);
+  // 琥珀金 — 品牌色 #c8a55a
+  vec3 warm = vec3(0.55, 0.35, 0.05);
 
-  vec3 col = mix(base, cold, clamp(f * 1.8, 0.0, 1.0));
-  col = mix(col, warm,  clamp(length(r) * 0.55 - 0.1, 0.0, 1.0));
+  vec3 col = mix(deep, cold, clamp(f * 1.6, 0.0, 1.0));
+  col = mix(col, warm, clamp(length(r) * 0.5 - 0.05, 0.0, 1.0));
 
-  /* vignette */
-  vec2 cv = uv - vec2(u_res.x / u_res.y * 0.5, 0.5);
-  col *= 1.0 - 0.55 * dot(cv, cv);
+  // vignette: 边缘减弱，中心保留
+  vec2 cv = uv - vec2(ar * 0.5, 0.5);
+  float vig = 1.0 - smoothstep(0.3, 1.1, dot(cv, cv) * 1.2);
+  col *= vig;
 
-  /* output: colour + alpha so it overlays the existing bg */
-  float alpha = 0.38 + 0.18 * f;
-  gl_FragColor = vec4(col, alpha);
+  // screen blend mode: alpha=1，让 CSS mix-blend-mode:screen 做叠加
+  gl_FragColor = vec4(col * 0.72, 1.0);
 }
 `
 
@@ -76,6 +78,9 @@ function compileShader(gl: WebGLRenderingContext, type: number, src: string) {
   const s = gl.createShader(type)!
   gl.shaderSource(s, src)
   gl.compileShader(s)
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    console.error('[LiquidEther] shader error:', gl.getShaderInfoLog(s))
+  }
   return s
 }
 
@@ -86,13 +91,17 @@ export default function LiquidEther({ className }: { className?: string }) {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    const gl = canvas.getContext('webgl', { premultipliedAlpha: false, alpha: true })
+    const gl = canvas.getContext('webgl', { alpha: false })
     if (!gl) return
 
     const prog = gl.createProgram()!
     gl.attachShader(prog, compileShader(gl, gl.VERTEX_SHADER,   VERT))
     gl.attachShader(prog, compileShader(gl, gl.FRAGMENT_SHADER, FRAG))
     gl.linkProgram(prog)
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      console.error('[LiquidEther] link error:', gl.getProgramInfoLog(prog))
+      return
+    }
     gl.useProgram(prog)
 
     const buf = gl.createBuffer()
@@ -105,16 +114,13 @@ export default function LiquidEther({ className }: { className?: string }) {
     const uTime = gl.getUniformLocation(prog, 'u_time')
     const uRes  = gl.getUniformLocation(prog, 'u_res')
 
-    gl.enable(gl.BLEND)
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
-
     let raf: number
-    let start = performance.now()
+    const start = performance.now()
 
     function resize() {
-      const w = canvas!.clientWidth  * devicePixelRatio
-      const h = canvas!.clientHeight * devicePixelRatio
-      if (canvas!.width !== w || canvas!.height !== h) {
+      const w = Math.round(canvas!.clientWidth  * devicePixelRatio)
+      const h = Math.round(canvas!.clientHeight * devicePixelRatio)
+      if (w > 0 && h > 0 && (canvas!.width !== w || canvas!.height !== h)) {
         canvas!.width  = w
         canvas!.height = h
         gl!.viewport(0, 0, w, h)
@@ -145,7 +151,7 @@ export default function LiquidEther({ className }: { className?: string }) {
     <canvas
       ref={canvasRef}
       className={className}
-      style={{ display: 'block' }}
+      style={{ display: 'block', width: '100%', height: '100%', mixBlendMode: 'screen' }}
     />
   )
 }
