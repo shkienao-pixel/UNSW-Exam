@@ -437,20 +437,20 @@ function frameLoop(ts){
 requestAnimationFrame(frameLoop);
 window.addEventListener('resize', ()=>location.reload());
 
-// ── Liquid Ether WebGL overlay ────────────────────────────────────────────
+// ── Liquid Ether WebGL overlay (mouse-reactive) ───────────────────────────
 (function(){
   const cv = document.getElementById('liquidEther');
   const gl = cv.getContext('webgl', {alpha:false});
   if(!gl) return;
 
-  const vert = `
-    attribute vec2 p;
-    void main(){gl_Position=vec4(p,0.,1.);}
-  `;
+  const vert = `attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}`;
+
   const frag = `
     precision highp float;
     uniform float t;
     uniform vec2  r;
+    uniform vec2  mouse;  /* normalised [0,1], Y-up */
+    uniform float vel;    /* mouse speed 0-1 */
 
     vec2 h(vec2 p){
       p=vec2(dot(p,vec2(127.1,311.7)),dot(p,vec2(269.5,183.3)));
@@ -467,27 +467,42 @@ window.addEventListener('resize', ()=>location.reload());
       return v;
     }
     void main(){
-      vec2 uv=gl_FragCoord.xy/r;
       float ar=r.x/r.y;
+      vec2 uv=gl_FragCoord.xy/r;
       uv.x*=ar;
-      float s=t*.065;
-      vec2 q=vec2(fbm(uv+s*.5),fbm(uv+vec2(5.2,1.3)));
-      vec2 rr=vec2(fbm(uv+4.*q+vec2(1.7,9.2)+s*.15),fbm(uv+4.*q+vec2(8.3,2.8)+s*.13));
-      float f=clamp(fbm(uv+4.*rr+s*.05)*.5+.5,0.,1.);
 
-      /* screen 模式: 黑=透明，颜色叠亮背景，不遮挡原有画面 */
-      vec3 blue  =vec3(.03,.08,.52);
-      vec3 purple=vec3(.14,.03,.38);
-      vec3 amber =vec3(.42,.26,.04);  /* #c8a55a 系 */
+      /* 鼠标坐标转换到同一空间 */
+      vec2 m=vec2(mouse.x*ar, mouse.y);
+      float md=length(uv-m);
+
+      /* 影响半径：静止时 0.38，快速移动扩大到 0.58 */
+      float radius=0.38+vel*0.20;
+      float mi=smoothstep(radius,0.0,md);
+      mi=clamp(mi,0.,1.);
+
+      float s=t*0.065;
+      /* 鼠标附近扰动 UV，制造液态感 */
+      vec2 uvd=uv+vec2(n(uv*3.+s),n(uv*3.+vec2(3.1,1.7)+s))*0.06*mi;
+
+      vec2 q=vec2(fbm(uvd+s*0.5), fbm(uvd+vec2(5.2,1.3)));
+      vec2 rr=vec2(fbm(uvd+4.*q+vec2(1.7,9.2)+s*0.15),
+                   fbm(uvd+4.*q+vec2(8.3,2.8)+s*0.13));
+      float f=clamp(fbm(uvd+4.*rr+s*0.05)*0.5+0.5, 0.,1.);
+
+      vec3 blue  =vec3(0.04, 0.14, 0.72);
+      vec3 purple=vec3(0.20, 0.04, 0.55);
+      vec3 amber =vec3(0.58, 0.34, 0.05);
 
       vec3 col=mix(purple,blue,clamp(f*1.7,0.,1.));
-      col=mix(col,amber,clamp(length(rr)*.48-.06,0.,1.));
+      col=mix(col,amber,clamp(length(rr)*0.48-0.06,0.,1.));
 
-      /* 边缘 vignette，让特效集中在中心 */
-      vec2 cv2=uv-vec2(ar*.5,.5);
-      col*=1.-smoothstep(.28,1.05,dot(cv2,cv2)*1.4);
+      /* 核心公式：远离鼠标接近全黑(≈透明) ，靠近发光
+         base=0.0  → screen blend 完全不影响背景
+         peak=0.60 → 鼠标正下方有明显发光            */
+      float intensity=mi*0.60 + vel*mi*0.25;
+      col*=intensity;
 
-      gl_FragColor=vec4(col*.68,1.);
+      gl_FragColor=vec4(col,1.);
     }
   `;
 
@@ -507,20 +522,48 @@ window.addEventListener('resize', ()=>location.reload());
   gl.enableVertexAttribArray(loc);
   gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
 
-  const uT=gl.getUniformLocation(prog,'t');
-  const uR=gl.getUniformLocation(prog,'r');
-  const t0=performance.now();
+  const uT =gl.getUniformLocation(prog,'t');
+  const uR =gl.getUniformLocation(prog,'r');
+  const uM =gl.getUniformLocation(prog,'mouse');
+  const uV =gl.getUniformLocation(prog,'vel');
+  const t0 =performance.now();
+
+  /* 鼠标追踪，带平滑插值 */
+  let mx=0.5,my=0.5,tx=0.5,ty=0.5,pmx=0.5,pmy=0.5,vel=0;
+
+  document.addEventListener('mousemove',function(e){
+    tx=e.clientX/window.innerWidth;
+    ty=1-e.clientY/window.innerHeight; /* WebGL Y 轴朝上 */
+  });
+  document.addEventListener('touchmove',function(e){
+    if(e.touches.length){
+      tx=e.touches[0].clientX/window.innerWidth;
+      ty=1-e.touches[0].clientY/window.innerHeight;
+    }
+  },{passive:true});
 
   function resize(){
     const w=Math.round(cv.clientWidth*devicePixelRatio);
     const h=Math.round(cv.clientHeight*devicePixelRatio);
-    if(w>0&&h>0&&(cv.width!==w||cv.height!==h)){cv.width=w;cv.height=h;gl.viewport(0,0,w,h);}
+    if(w>0&&h>0&&(cv.width!==w||cv.height!==h)){
+      cv.width=w;cv.height=h;gl.viewport(0,0,w,h);
+    }
   }
 
   function draw(){
     resize();
-    gl.uniform1f(uT,(performance.now()-t0)*.001);
+    /* 平滑鼠标 */
+    mx+=(tx-mx)*0.07;
+    my+=(ty-my)*0.07;
+    /* 速度 */
+    const spd=Math.hypot(mx-pmx,my-pmy)*60;
+    vel+=(Math.min(spd*6,1)-vel)*0.12;
+    pmx=mx;pmy=my;
+
+    gl.uniform1f(uT,(performance.now()-t0)*0.001);
     gl.uniform2f(uR,cv.width,cv.height);
+    gl.uniform2f(uM,mx,my);
+    gl.uniform1f(uV,vel);
     gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     requestAnimationFrame(draw);
   }
