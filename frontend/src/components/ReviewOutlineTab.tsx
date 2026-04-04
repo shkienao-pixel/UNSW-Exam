@@ -26,6 +26,7 @@ import {
   Zap, MessageSquare, PlayCircle, ListTree,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { GlowButton } from '@/components/GlowButton'
 
 // ── Outline parser ─────────────────────────────────────────────────────────────
 
@@ -961,13 +962,13 @@ export default function ReviewOutlineTab({ courseId }: Props) {
       <ListTree size={52} className="mx-auto opacity-30" style={{ color: '#A78BFA' }} />
       <p className="text-xl font-bold text-white">复习大纲</p>
       <p className="text-sm" style={{ color: '#777' }}>按 Week 拆分的复习节点，支持打勾进度与考试规划</p>
-      <button
+      <GlowButton
         onClick={handleUnlock} disabled={unlocking}
         className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm"
         style={{ background: 'rgba(167,139,250,0.15)', color: '#A78BFA', border: '1px solid rgba(167,139,250,0.3)' }}>
         {unlocking ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
         {unlocking ? '解锁中...' : `解锁复习大纲 ${creditsRequired} ✦`}
-      </button>
+      </GlowButton>
       <p className="text-xs" style={{ color: '#444' }}>一次解锁，永久可用</p>
     </div>
   )

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Lock, Star, ArrowLeft, Loader2, CheckCircle2 } from 'lucide-react'
 import { api } from '@/lib/api'
+import { GlowButton } from '@/components/GlowButton'
 
 const GOLD = '#c8a55a'
 const GOLD_LIGHT = '#e6cf98'
@@ -109,7 +110,7 @@ export default function CourseLockedScreen({
               )}
 
               {/* Enroll button */}
-              <button onClick={handleEnroll} disabled={loading}
+              <GlowButton onClick={handleEnroll} disabled={loading}
                 className="w-full py-3.5 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 transition-all"
                 style={{
                   background: loading ? 'rgba(200,165,90,0.1)' : 'linear-gradient(135deg,rgba(200,165,90,0.28),rgba(200,165,90,0.14))',
@@ -119,7 +120,7 @@ export default function CourseLockedScreen({
                 }}>
                 {loading ? <Loader2 size={16} className="animate-spin" /> : <Star size={16} />}
                 {loading ? '选课中…' : `选课解锁 — ${cost} ✦`}
-              </button>
+              </GlowButton>
             </>
           )}
         </div>

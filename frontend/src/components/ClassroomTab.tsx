@@ -8,6 +8,7 @@ import {
   AlertCircle, RefreshCw, History, PencilLine, Globe,
 } from 'lucide-react'
 import SimpleWhiteboard from '@/components/classroom/SimpleWhiteboard'
+import { GlowButton } from '@/components/GlowButton'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -123,12 +124,12 @@ function QuizViewer({ content }: { content: QuizContent }) {
         )
       })}
       {!submitted ? (
-        <button onClick={() => setSubmitted(true)}
+        <GlowButton onClick={() => setSubmitted(true)}
           disabled={Object.keys(answers).length < content.questions.length}
           className="w-full py-3 rounded-xl text-sm font-semibold transition-all disabled:opacity-40"
           style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.3)' }}>
           提交答案
-        </button>
+        </GlowButton>
       ) : (
         <div className="text-center py-3 space-y-2">
           <p className="text-2xl font-bold" style={{ color: score === content.questions.length ? '#22C55E' : '#FFD700' }}>
@@ -406,11 +407,11 @@ export default function ClassroomTab({ courseId, artifacts, creditBalance, onCre
                     style={{ background: 'rgba(255,255,255,0.05)', color: '#888', border: '1px solid rgba(255,255,255,0.08)' }}>
                     取消
                   </button>
-                  <button onClick={() => { setShowRegenConfirm(false); setPhase('idle'); setClassroom(null) }}
+                  <GlowButton onClick={() => { setShowRegenConfirm(false); setPhase('idle'); setClassroom(null) }}
                     className="flex-1 py-2 rounded-xl text-xs font-medium transition-all"
                     style={{ background: 'rgba(167,139,250,0.15)', color: '#A78BFA', border: '1px solid rgba(167,139,250,0.3)' }}>
                     确认重新生成
-                  </button>
+                  </GlowButton>
                 </div>
               </div>
             </div>
@@ -520,7 +521,7 @@ export default function ClassroomTab({ courseId, artifacts, creditBalance, onCre
         </div>
       )}
 
-      <button
+      <GlowButton
         onClick={startGeneration}
         disabled={selected.size === 0 || creditBalance < COST || pdfs.length === 0}
         className="flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
@@ -528,7 +529,7 @@ export default function ClassroomTab({ courseId, artifacts, creditBalance, onCre
         {creditBalance < COST
           ? <><RefreshCw size={15} /> 积分不足（需 {COST}，当前 {creditBalance}）</>
           : <><Play size={15} /> 生成互动课堂（{COST} 积分）</>}
-      </button>
+      </GlowButton>
     </div>
   )
 }

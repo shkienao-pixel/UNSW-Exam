@@ -9,6 +9,7 @@ import {
   ArrowLeft, BookMarked, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { api } from '@/lib/api'
+import { GlowButton } from '@/components/GlowButton'
 
 type StatusFilter = 'active' | 'mastered' | 'all'
 type NotebookId = 'past_exam' | 'mock' | 'flashcard'
@@ -314,11 +315,11 @@ function NotebookDetail({
         <span className="text-sm leading-none">{meta.icon}</span>
         <span className="text-sm font-semibold text-white flex-1 min-w-0 truncate">{meta.name}</span>
         {activeCount > 0 && !isFlashcard && (
-          <button onClick={onStartPractice}
+          <GlowButton onClick={onStartPractice}
             className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
             style={{ background: meta.color + '12', color: meta.color, border: `1px solid ${meta.color}32` }}>
             <Play size={11} /> 练习 ({activeCount})
-          </button>
+          </GlowButton>
         )}
       </div>
 

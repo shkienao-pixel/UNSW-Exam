@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { CheckCircle, CreditCard, Loader2, Sparkles, Star, XCircle } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useLang } from '@/lib/i18n'
+import { GlowButton } from '@/components/GlowButton'
 
 type Txn = { id: string; amount: number; type: string; note: string | null; created_at: string }
 type PackageId = '1000' | '3000' | '7000'
@@ -241,7 +242,7 @@ function CreditsPageInner() {
                 ))}
               </ul>
 
-              <button
+              <GlowButton
                 type="button"
                 onClick={() => handleCheckout(pkg.id)}
                 disabled={payingPkg !== null}
@@ -258,7 +259,7 @@ function CreditsPageInner() {
                     {t('credits_cta_buy')}
                   </>
                 )}
-              </button>
+              </GlowButton>
             </article>
           ))}
         </div>

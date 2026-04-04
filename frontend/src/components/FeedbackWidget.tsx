@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { api } from '@/lib/api'
 import { MessageSquarePlus, Send, Loader2, X } from 'lucide-react'
+import { GlowButton } from '@/components/GlowButton'
 
 export default function FeedbackWidget() {
   const pathname = usePathname()
@@ -107,14 +108,14 @@ export default function FeedbackWidget() {
                 )}
                 <div className="flex items-center justify-between">
                   <span className="text-xs" style={{ color: '#444' }}>{text.length}/2000</span>
-                  <button
+                  <GlowButton
                     onClick={submit}
                     disabled={sending || !text.trim()}
                     className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40 transition-all"
                     style={{ background: 'rgba(200,165,90,0.12)', color: '#e6cf98', border: '1px solid rgba(200,165,90,0.2)' }}>
                     {sending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
                     {sending ? '发送中…' : '提交'}
-                  </button>
+                  </GlowButton>
                 </div>
               </>
             )}

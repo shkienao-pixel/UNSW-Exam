@@ -20,6 +20,7 @@ import {
 import { api } from '@/lib/api'
 import type { ExamQuestion, GradeResult, MockSession, PastExamFile } from '@/lib/types'
 import { useLang } from '@/lib/i18n'
+import { GlowButton } from '@/components/GlowButton'
 
 type ExamMode = 'past_exam' | 'mock'
 type Phase = 'select' | 'doing' | 'result'
@@ -359,7 +360,7 @@ function PastExamList({
             </div>
 
             {file.is_unlocked ? (
-              <button
+              <GlowButton
                 onClick={() => handleStart(file.artifact_id)}
                 disabled={starting === file.artifact_id}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold transition-all disabled:opacity-60"
@@ -367,9 +368,9 @@ function PastExamList({
               >
                 {starting === file.artifact_id ? <Loader2 size={16} className="animate-spin" /> : <Target size={16} />}
                 {tt(lang, '进入考试页', 'Open Exam View')}
-              </button>
+              </GlowButton>
             ) : (
-              <button
+              <GlowButton
                 onClick={() => handleUnlock(file.artifact_id)}
                 disabled={unlocking === file.artifact_id}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold transition-all disabled:opacity-60"
@@ -377,7 +378,7 @@ function PastExamList({
               >
                 {unlocking === file.artifact_id ? <Loader2 size={16} className="animate-spin" /> : <Bookmark size={16} />}
                 {tt(lang, '解锁真题 150 积分', 'Unlock for 150 credits')}
-              </button>
+              </GlowButton>
             )}
           </div>
         </div>
@@ -490,7 +491,7 @@ function MockSessionList({
             </label>
           </div>
 
-          <button
+          <GlowButton
             onClick={handleGenerate}
             disabled={generating}
             className="inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold transition-all disabled:opacity-60"
@@ -500,7 +501,7 @@ function MockSessionList({
             {generating
               ? tt(lang, '正在生成试卷...', 'Generating paper...')
               : tt(lang, '生成模拟卷 · 100 积分', 'Generate Mock · 100 credits')}
-          </button>
+          </GlowButton>
         </div>
       </div>
 
@@ -535,7 +536,7 @@ function MockSessionList({
                   </p>
                 </div>
 
-                <button
+                <GlowButton
                   onClick={() => handleStart(session.session_id)}
                   disabled={starting === session.session_id}
                   className="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold transition-all disabled:opacity-60"
@@ -543,7 +544,7 @@ function MockSessionList({
                 >
                   {starting === session.session_id ? <Loader2 size={15} className="animate-spin" /> : <Target size={15} />}
                   {tt(lang, '继续做题', 'Open Paper')}
-                </button>
+                </GlowButton>
               </div>
             </div>
           ))}
@@ -658,7 +659,7 @@ function ExamDoingPage({
             {tt(lang, '重置本次作答', 'Reset attempt')}
           </button>
 
-          <button
+          <GlowButton
             onClick={handleSubmit}
             disabled={submitting}
             className="inline-flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-semibold transition-all disabled:opacity-60"
@@ -666,7 +667,7 @@ function ExamDoingPage({
           >
             {submitting ? <Loader2 size={16} className="animate-spin" /> : <Target size={16} />}
             {submitting ? tt(lang, '正在判分...', 'Submitting...') : tt(lang, '提交整份试卷', 'Submit Paper')}
-          </button>
+          </GlowButton>
         </div>
       </div>
 

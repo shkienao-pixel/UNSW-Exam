@@ -22,6 +22,7 @@ import {
   ExternalLink, Sparkles,
   Code, Lock, Target, Layers3,
 } from 'lucide-react'
+import { GlowButton } from '@/components/GlowButton'
 import MistakesView from '@/components/MistakesView'
 import ElectricBorder from '@/components/ElectricBorder'
 import InsufficientCreditsModal from '@/components/InsufficientCreditsModal'
@@ -184,7 +185,7 @@ function QuizTab({ courseId }: { courseId: string }) {
   const [refreshKey, setRefreshKey] = useState(0)
 
   const generateButton = (
-    <button
+    <GlowButton
       onClick={() => trackGeneration({
         label: t('gen_quiz'),
         viewLink: `/courses/${courseId}?view=quiz`,
@@ -195,7 +196,7 @@ function QuizTab({ courseId }: { courseId: string }) {
       style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}
     >
       <Sparkles size={12} /> {t('gen_quiz')} · 100 ✦
-    </button>
+    </GlowButton>
   )
 
   return (
@@ -405,7 +406,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
           <p className="text-sm mt-0.5" style={{ color: '#555' }}>{t('flashcards_sub')}</p>
         </div>
         <div className="flex items-center gap-2 mt-1 sm:mt-0 flex-wrap justify-end">
-          <button
+          <GlowButton
             onClick={() => trackGeneration({
               label: t('gen_flashcards'),
               viewLink: `/courses/${courseId}?view=flashcards`,
@@ -420,7 +421,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
             style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}
           >
             <Sparkles size={12} /> {t('gen_flashcards')} · 100 ✦
-          </button>
+          </GlowButton>
           {outputs.length > 0 && (
             <select
               className="input-glass text-xs py-1"
@@ -490,11 +491,11 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
               </div>
             </div>
           )}
-          <button onClick={restart}
+          <GlowButton onClick={restart}
             className="flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-medium mx-auto"
             style={{ background: 'rgba(255,255,255,0.07)', color: '#ddd', border: '1px solid rgba(255,255,255,0.1)' }}>
             <RotateCcw size={13} /> {lang === 'zh' ? '再做一次' : 'Redo'}
-          </button>
+          </GlowButton>
         </div>
       ) : (
         <>

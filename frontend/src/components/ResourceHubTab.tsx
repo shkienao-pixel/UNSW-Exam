@@ -22,6 +22,7 @@ import {
   Loader2, X, CheckCircle2, ChevronDown, FileText,
   Code, Globe, FileJson, FileCheck, Zap,
 } from 'lucide-react'
+import { GlowButton } from '@/components/GlowButton'
 
 // ── 上传队列类型 ─────────────────────────────────────────────────────────────
 type UploadStatus = 'pending' | 'uploading' | 'done' | 'error'
@@ -272,7 +273,7 @@ function ArtifactCard({
         {artifact.status !== 'approved' ? (
           <span className="text-xs" style={{ color: '#444' }}>文件审核中，通过后可访问</span>
         ) : isLocked ? (
-          <button
+          <GlowButton
             onClick={() => onUnlock(artifact)}
             className="w-full flex items-center gap-2 py-2 px-3 rounded-xl text-sm font-medium transition-all hover:opacity-85"
             style={{ background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.1)' }}
@@ -280,21 +281,21 @@ function ArtifactCard({
             <Zap size={12} style={{ color: '#FFD700', flexShrink: 0 }} />
             <span className="flex-1 text-left">解锁完整内容</span>
             <span style={{ fontSize: '11px', color: 'rgba(255,215,0,0.6)', fontVariantNumeric: 'tabular-nums' }}>50 ✦</span>
-          </button>
+          </GlowButton>
         ) : artifact.storage_url ? (
           <>
             {pdfOpen && (
               <PdfDrawer url={artifact.storage_url} title={artifact.file_name} onClose={() => setPdfOpen(false)} />
             )}
             {isPdf ? (
-              <button
+              <GlowButton
                 onClick={() => setPdfOpen(true)}
                 className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-semibold transition-all hover:opacity-85"
                 style={{ background: 'rgba(255,215,0,0.14)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.30)' }}
               >
                 <FileText size={13} />
                 <span>在线阅读</span>
-              </button>
+              </GlowButton>
             ) : (
               <a
                 href={artifact.storage_url}
@@ -402,12 +403,12 @@ function EditDocTypeModal({
             style={{ background: 'rgba(255,255,255,0.05)', color: '#666', border: '1px solid rgba(255,255,255,0.08)' }}>
             取消
           </button>
-          <button onClick={save} disabled={saving || selected === artifact.doc_type}
+          <GlowButton onClick={save} disabled={saving || selected === artifact.doc_type}
             className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-40"
             style={{ background: 'rgba(255,215,0,0.16)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.32)' }}>
             {saving ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
             {saving ? '保存中...' : '确认修改'}
-          </button>
+          </GlowButton>
         </div>
       </div>
     </div>
@@ -492,12 +493,12 @@ function UnlockModal({
             style={{ background: 'rgba(255,255,255,0.05)', color: '#666', border: '1px solid rgba(255,255,255,0.08)' }}>
             取消
           </button>
-          <button onClick={confirm} disabled={loading}
+          <GlowButton onClick={confirm} disabled={loading}
             className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
             style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.28)' }}>
             {loading ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
             {loading ? '解锁中…' : '确认解锁'}
-          </button>
+          </GlowButton>
         </div>
       </div>
     </div>
@@ -589,12 +590,12 @@ function UnlockAllModal({
             style={{ background: 'rgba(255,255,255,0.05)', color: '#666', border: '1px solid rgba(255,255,255,0.08)' }}>
             取消
           </button>
-          <button onClick={confirm} disabled={loading || !canAfford}
+          <GlowButton onClick={confirm} disabled={loading || !canAfford}
             className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-40"
             style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.28)' }}>
             {loading ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
             {loading ? '解锁中…' : '确认解锁全部'}
-          </button>
+          </GlowButton>
         </div>
       </div>
     </div>
@@ -774,7 +775,7 @@ export default function ResourceHubTab({
         )}
 
         {/* 上传按钮 */}
-        <button
+        <GlowButton
           onClick={() => setUploadOpen(o => !o)}
           className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all flex-shrink-0"
           style={{
@@ -786,7 +787,7 @@ export default function ResourceHubTab({
           <Upload size={14} />
           上传文件
           <ChevronDown size={13} style={{ transform: uploadOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-        </button>
+        </GlowButton>
       </div>
 
       {/* ── 上传面板（折叠式） ── */}

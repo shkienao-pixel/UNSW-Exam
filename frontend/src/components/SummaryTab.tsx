@@ -6,6 +6,7 @@ import { parseContentJson, extractToc, extractTocFromHtml } from '@/lib/utils'
 import type { ContentFormat } from '@/lib/utils'
 import type { SummarySchemaV1 } from '@/lib/types'
 import { FileText, Loader2, Zap } from 'lucide-react'
+import { GlowButton } from '@/components/GlowButton'
 import ReactMarkdown from 'react-markdown'
 import SummarySchemaRenderer from '@/components/SummarySchemaRenderer'
 import KnowledgeSummaryRenderer from '@/components/KnowledgeSummaryRenderer'
@@ -207,7 +208,7 @@ export default function SummaryTab({ courseId }: { courseId: string }) {
             </div>
           </div>
           <div className="flex-shrink-0 flex flex-col items-end gap-1">
-            <button
+            <GlowButton
               onClick={handleUnlock}
               disabled={unlocking}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all hover:opacity-85 disabled:opacity-60"
@@ -215,7 +216,7 @@ export default function SummaryTab({ courseId }: { courseId: string }) {
             >
               {unlocking ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
               {unlocking ? '解锁中…' : `解锁摘要  ·  ${creditsRequired} ✦`}
-            </button>
+            </GlowButton>
             <span className="text-[11px]" style={{ color: '#3a3a3a' }}>一次解锁，本课永久有效</span>
           </div>
         </div>
