@@ -49,6 +49,14 @@
 
 ## Changelog
 
+### v1.8.0 (2026-04-05)
+
+**UI 动画升级：**
+- **Cubes 加载动画** — 全站所有独立加载状态替换为 React Bits 原版 Cubes 组件（GSAP 驱动，8×8 网格，maxAngle=180°，radius=5，autoAnimate + rippleOnClick）
+- 涉及页面：全局 auth loading、landing、home、dashboard、credits、courses、admin、ClassroomTab、ExamPlannerTab、ExamTab、ReviewOutlineTab、SummaryTab、TypedOutputsView
+
+---
+
 ### v1.7.0 (2026-04-03)
 
 **产品简化 & 架构清理：**
