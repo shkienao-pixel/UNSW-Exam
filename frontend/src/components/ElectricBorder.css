@@ -44,19 +44,20 @@
 }
 
 .eb-glow-1 {
-  border: 2px solid oklch(from var(--electric-border-color) l c h / 0.6);
+  border: 2px solid oklch(from var(--electric-border-color) l c h / 0.85);
   filter: blur(1px);
+  box-shadow: 0 0 8px 2px oklch(from var(--electric-border-color) l c h / 0.3);
 }
 
 .eb-glow-2 {
-  border: 2px solid var(--electric-light-color);
-  filter: blur(4px);
+  border: 2.5px solid var(--electric-light-color);
+  filter: blur(6px);
 }
 
 .eb-background-glow {
   z-index: -1;
-  transform: scale(1.1);
-  filter: blur(32px);
-  opacity: 0.3;
+  transform: scale(1.18);
+  filter: blur(48px);
+  opacity: 0.55;
   background: linear-gradient(-30deg, var(--electric-light-color), transparent, var(--electric-border-color));
 }

@@ -5,8 +5,8 @@
 .glow-ring {
   --edge-proximity: 0;
   --cursor-angle: 45deg;
-  --edge-sensitivity: 12;
-  --glow-padding: 20px;
+  --edge-sensitivity: 8;
+  --glow-padding: 28px;
 
   position: relative;
   isolation: isolate;
@@ -21,17 +21,17 @@
 
   mask-image: conic-gradient(
     from var(--cursor-angle) at center,
-    black 2.5%, transparent 10%, transparent 90%, black 97.5%
+    black 2.5%, transparent 12%, transparent 88%, black 97.5%
   );
 
   opacity: max(0, calc((var(--edge-proximity) - var(--edge-sensitivity)) / (100 - var(--edge-sensitivity))));
   mix-blend-mode: plus-lighter;
-  transition: opacity 0.25s ease-out;
+  transition: opacity 0.2s ease-out;
 }
 
 .glow-ring:not(:hover) > .glow-ring-light {
   opacity: 0;
-  transition: opacity 0.75s ease-in-out;
+  transition: opacity 0.6s ease-in-out;
 }
 
 .glow-ring > .glow-ring-light::before {
@@ -40,15 +40,16 @@
   inset: var(--glow-padding);
   border-radius: inherit;
   box-shadow:
-    inset 0 0 0 1px    var(--glow-color,    hsl(38deg 70% 72% / 100%)),
-    inset 0 0 2px 0    var(--glow-color-60, hsl(38deg 70% 72% / 60%)),
-    inset 0 0 5px 0    var(--glow-color-50, hsl(38deg 70% 72% / 50%)),
-    inset 0 0 10px 0   var(--glow-color-40, hsl(38deg 70% 72% / 40%)),
-    inset 0 0 22px 0   var(--glow-color-30, hsl(38deg 70% 72% / 30%)),
-    inset 0 0 36px 2px var(--glow-color-20, hsl(38deg 70% 72% / 20%)),
-    0 0 2px 0    var(--glow-color-60, hsl(38deg 70% 72% / 60%)),
-    0 0 5px 0    var(--glow-color-50, hsl(38deg 70% 72% / 50%)),
-    0 0 10px 0   var(--glow-color-40, hsl(38deg 70% 72% / 40%)),
-    0 0 22px 0   var(--glow-color-30, hsl(38deg 70% 72% / 30%)),
-    0 0 36px 2px var(--glow-color-20, hsl(38deg 70% 72% / 20%));
+    inset 0 0 0 1.5px  var(--glow-color,    hsl(38deg 70% 72% / 100%)),
+    inset 0 0 4px 0    var(--glow-color-60, hsl(38deg 70% 72% / 60%)),
+    inset 0 0 10px 0   var(--glow-color-50, hsl(38deg 70% 72% / 50%)),
+    inset 0 0 22px 0   var(--glow-color-40, hsl(38deg 70% 72% / 40%)),
+    inset 0 0 42px 0   var(--glow-color-30, hsl(38deg 70% 72% / 30%)),
+    inset 0 0 64px 4px var(--glow-color-20, hsl(38deg 70% 72% / 20%)),
+    0 0 4px 0    var(--glow-color-60, hsl(38deg 70% 72% / 60%)),
+    0 0 10px 0   var(--glow-color-50, hsl(38deg 70% 72% / 50%)),
+    0 0 22px 0   var(--glow-color-40, hsl(38deg 70% 72% / 40%)),
+    0 0 42px 0   var(--glow-color-30, hsl(38deg 70% 72% / 30%)),
+    0 0 64px 4px var(--glow-color-20, hsl(38deg 70% 72% / 20%)),
+    0 0 90px 8px var(--glow-color-10, hsl(38deg 70% 72% / 10%));
 }

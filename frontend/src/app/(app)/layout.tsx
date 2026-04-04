@@ -99,7 +99,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
       className="flex h-screen overflow-hidden"
       style={{
         background:
-          'radial-gradient(circle at top, rgba(20,28,42,0.72), transparent 28%), radial-gradient(circle at 85% 10%, rgba(200,165,90,0.08), transparent 18%), linear-gradient(180deg, #050608 0%, #080b12 50%, #050608 100%)',
+          'radial-gradient(circle at top, rgba(20,28,42,0.72), transparent 28%), radial-gradient(ellipse 44% 36% at 85% 10%, rgba(200,165,90,0.18), transparent 70%), radial-gradient(ellipse 28% 22% at 15% 88%, rgba(185,150,60,0.12), transparent 65%), linear-gradient(180deg, #050608 0%, #080b12 50%, #050608 100%)',
       }}
     >
 
