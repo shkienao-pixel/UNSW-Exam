@@ -47,62 +47,53 @@ function loadSize(): { w: number; h: number } {
 
 // ── FAB ───────────────────────────────────────────────────────────────────────
 
-function NoteFab({ onClick, pos, onDragEnd }: {
-  onClick: () => void
-  pos: { x: number; y: number }
-  onDragEnd: (pos: { x: number; y: number }) => void
-}) {
-  const dragRef  = useRef<{ startX: number; startY: number; btnX: number; btnY: number } | null>(null)
-  const movedRef = useRef(false)
-  const [fabPos, setFabPos] = useState(pos)
-
-  function onMouseDown(e: React.MouseEvent) {
-    dragRef.current = { startX: e.clientX, startY: e.clientY, btnX: fabPos.x, btnY: fabPos.y }
-    movedRef.current = false
-    window.addEventListener('mousemove', onMouseMove)
-    window.addEventListener('mouseup', onMouseUp)
-  }
-
-  function onMouseMove(e: MouseEvent) {
-    if (!dragRef.current) return
-    const dx = e.clientX - dragRef.current.startX
-    const dy = e.clientY - dragRef.current.startY
-    if (Math.sqrt(dx * dx + dy * dy) > 4) movedRef.current = true
-    setFabPos({
-      x: Math.max(0, Math.min(window.innerWidth  - 44, dragRef.current.btnX + dx)),
-      y: Math.max(0, Math.min(window.innerHeight - 44, dragRef.current.btnY + dy)),
-    })
-  }
-
-  function onMouseUp() {
-    window.removeEventListener('mousemove', onMouseMove)
-    window.removeEventListener('mouseup',  onMouseUp)
-    if (!movedRef.current) onClick()
-    else onDragEnd(fabPos)
-    dragRef.current = null
-  }
+function NoteFab({ onClick }: { onClick: () => void; pos?: { x: number; y: number }; onDragEnd?: (pos: { x: number; y: number }) => void }) {
+  const [hovered, setHovered] = useState(false)
 
   return (
     <button
-      onMouseDown={onMouseDown}
+      onClick={onClick}
       title="笔记本"
-      className="fixed z-50 flex items-center justify-center select-none"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="fixed z-50 select-none overflow-hidden"
       style={{
-        left: fabPos.x,
-        top:  fabPos.y,
-        width:  48,
-        height: 48,
-        borderRadius: '50%',
-        background: 'rgba(14,16,26,0.92)',
-        border: '1px solid rgba(167,139,250,0.35)',
-        boxShadow: '0 6px 20px rgba(0,0,0,0.45)',
-        backdropFilter: 'blur(14px)',
-        WebkitBackdropFilter: 'blur(14px)',
-        cursor: 'grab',
-        color: '#A78BFA',
+        right: 24, bottom: 24,
+        width: 182, height: 58,
+        borderRadius: 24,
+        border: `1px solid ${hovered ? 'rgba(200,165,90,0.55)' : 'rgba(255,255,255,0.16)'}`,
+        background: 'rgba(255,255,255,0.08)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
+        cursor: 'pointer',
+        boxShadow: hovered
+          ? '0 0 0 1px rgba(200,165,90,0.3), 0 0 12px 3px rgba(200,165,90,0.2), 0 18px 40px rgba(0,0,0,0.18)'
+          : '0 10px 30px rgba(0,0,0,0.12)',
+        transition: 'box-shadow 0.25s ease, border-color 0.25s ease',
+        transform: hovered ? 'translateY(-2px) scale(1.013)' : 'none',
       }}
     >
-      <NotebookPen size={20} strokeWidth={1.7} />
+      {/* tint layer */}
+      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, rgba(221,214,254,0.16) 0%, rgba(221,214,254,0.06) 40%, transparent 100%)', opacity: 0.9 }} />
+      {/* orb */}
+      <div style={{ position: 'absolute', left: -24, top: '50%', transform: 'translateY(-50%)', width: 96, height: 96, borderRadius: '50%', background: 'radial-gradient(circle, rgba(167,139,250,0.25) 0%, transparent 70%)', filter: 'blur(8px)' }} />
+      {/* glass sheen */}
+      <div style={{ position: 'absolute', inset: 1, borderRadius: 23, background: 'linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.05) 34%, rgba(255,255,255,0.02))' }} />
+      <div style={{ position: 'absolute', left: 8, right: 8, top: 2, height: 24, borderRadius: 999, background: 'rgba(255,255,255,0.18)', filter: 'blur(10px)', opacity: 0.9 }} />
+      {/* content */}
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, height: '100%', padding: '0 14px' }}>
+        <div style={{ position: 'relative', width: 36, height: 36, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 14, border: '1px solid rgba(255,255,255,0.16)', background: 'rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.95)' }}>
+          <div style={{ position: 'absolute', left: 4, right: 4, top: 2, height: 12, borderRadius: 999, background: 'rgba(255,255,255,0.2)', filter: 'blur(4px)' }} />
+          <NotebookPen size={17} strokeWidth={1.7} style={{ position: 'relative' }} />
+        </div>
+        <div style={{ textAlign: 'left', minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 500, letterSpacing: '0.01em', color: 'rgba(255,255,255,0.94)' }}>Notebook</div>
+          <div style={{ marginTop: 2, fontSize: 10, lineHeight: 1, color: 'rgba(255,255,255,0.52)' }}>Notes · review</div>
+        </div>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(221,214,254,0.8)', boxShadow: '0 0 12px rgba(221,214,254,0.38)' }} />
+        </div>
+      </div>
     </button>
   )
 }

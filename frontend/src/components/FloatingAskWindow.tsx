@@ -68,6 +68,89 @@ function loadPos() {
   }
 }
 
+// ── AI Ask FAB (pill) ─────────────────────────────────────────────────────────
+
+function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
+  isLoading: boolean
+  unreadCount: number
+  showHint: boolean
+  onClick: () => void
+  onStop: (e: React.MouseEvent) => void
+}) {
+  const [hovered, setHovered] = useState(false)
+
+  return (
+    <button
+      onClick={onClick}
+      title="AI 问答"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="fixed z-50 select-none overflow-hidden"
+      style={{
+        right: 24, bottom: 94,
+        width: 182, height: 58,
+        borderRadius: 24,
+        border: `1px solid ${hovered ? 'rgba(200,165,90,0.55)' : isLoading ? 'rgba(255,215,0,0.45)' : 'rgba(255,255,255,0.16)'}`,
+        background: 'rgba(255,255,255,0.08)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
+        cursor: 'pointer',
+        boxShadow: hovered
+          ? '0 0 0 1px rgba(200,165,90,0.3), 0 0 12px 3px rgba(200,165,90,0.2), 0 18px 40px rgba(0,0,0,0.18)'
+          : isLoading
+          ? '0 0 18px rgba(255,215,0,0.15), 0 10px 30px rgba(0,0,0,0.14)'
+          : '0 10px 30px rgba(0,0,0,0.12)',
+        transition: 'box-shadow 0.25s ease, border-color 0.25s ease',
+        transform: hovered ? 'translateY(-2px) scale(1.013)' : 'none',
+      }}
+    >
+      {/* pulse hint */}
+      {showHint && !isLoading && (
+        <span className="absolute inset-0 animate-ping"
+          style={{ borderRadius: 24, background: 'rgba(255,215,0,0.15)', animationDuration: '1.4s', pointerEvents: 'none' }} />
+      )}
+      {/* tint layer */}
+      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, rgba(254,243,199,0.14) 0%, rgba(254,243,199,0.05) 40%, transparent 100%)', opacity: 0.9, pointerEvents: 'none' }} />
+      {/* orb */}
+      <div style={{ position: 'absolute', left: -24, top: '50%', transform: 'translateY(-50%)', width: 96, height: 96, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,215,0,0.2) 0%, transparent 70%)', filter: 'blur(8px)', pointerEvents: 'none' }} />
+      {/* glass sheen */}
+      <div style={{ position: 'absolute', inset: 1, borderRadius: 23, background: 'linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.05) 34%, rgba(255,255,255,0.02))', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', left: 8, right: 8, top: 2, height: 24, borderRadius: 999, background: 'rgba(255,255,255,0.18)', filter: 'blur(10px)', opacity: 0.9, pointerEvents: 'none' }} />
+      {/* content */}
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, height: '100%', padding: '0 14px' }}>
+        <div style={{ position: 'relative', width: 36, height: 36, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 14, border: '1px solid rgba(255,255,255,0.16)', background: 'rgba(255,255,255,0.10)', color: '#FFD700' }}>
+          <div style={{ position: 'absolute', left: 4, right: 4, top: 2, height: 12, borderRadius: 999, background: 'rgba(255,255,255,0.2)', filter: 'blur(4px)', pointerEvents: 'none' }} />
+          <div style={{ position: 'relative' }}>
+            {isLoading ? <Loader2 size={17} className="animate-spin" /> : <MessageCircleMore size={17} />}
+          </div>
+          {/* unread badge */}
+          {!isLoading && unreadCount > 0 && (
+            <span style={{ position: 'absolute', top: -6, right: -6, width: 16, height: 16, borderRadius: '50%', background: '#ef4444', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
+          {/* stop button when loading */}
+          {isLoading && (
+            <button
+              onClick={onStop}
+              style={{ position: 'absolute', bottom: -4, right: -4, width: 16, height: 16, borderRadius: '50%', background: '#ef4444', color: '#fff', border: '2px solid rgba(20,22,30,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Square size={7} />
+            </button>
+          )}
+        </div>
+        <div style={{ textAlign: 'left', minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 500, letterSpacing: '0.01em', color: 'rgba(255,255,255,0.94)' }}>AI Ask</div>
+          <div style={{ marginTop: 2, fontSize: 10, lineHeight: 1, color: 'rgba(255,255,255,0.52)' }}>Ask · explain</div>
+        </div>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(254,243,199,0.8)', boxShadow: '0 0 12px rgba(254,243,199,0.34)' }} />
+        </div>
+      </div>
+    </button>
+  )
+}
+
 // ── Lightbox ──────────────────────────────────────────────────────────────────
 
 function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
@@ -592,66 +675,17 @@ export default function FloatingAskWindow() {
 
   // ── FAB ───────────────────────────────────────────────────────────────────
   if (!isOpen || isMinimized) {
-    if (pos.x === -1) return null
     return (
-      <div
-        onMouseDown={handleFabMouseDown}
-        onMouseUp={e => {
+      <AiAskFab
+        isLoading={isLoading}
+        unreadCount={unreadCount}
+        showHint={showFabHint}
+        onClick={() => {
           if (showFabHint) { localStorage.setItem('fab_hint_seen', '1'); setShowFabHint(false) }
-          handleFabMouseUp(e)
+          openWindow()
         }}
-        title="AI 问答"
-        className="fixed z-50 select-none"
-        style={{ left: pos.x, top: pos.y, width: 58, height: 58, cursor: 'grab' }}
-      >
-        {/* pulse ring — only on first visit */}
-        {showFabHint && !isLoading && (
-          <span className="absolute inset-0 rounded-full animate-ping"
-            style={{ background: 'rgba(255,215,0,0.25)', animationDuration: '1.4s' }} />
-        )}
-        <div
-          className="absolute inset-0 flex items-center justify-center rounded-full"
-          style={{
-            background: isLoading
-              ? 'radial-gradient(circle at 30% 28%, rgba(255,215,0,0.28), rgba(25,23,18,0.94) 60%)'
-              : 'radial-gradient(circle at 32% 28%, rgba(255,215,0,0.18), rgba(17,19,30,0.96) 60%)',
-            border: `1px solid ${isLoading ? 'rgba(255,215,0,0.58)' : 'rgba(255,215,0,0.32)'}`,
-            color: '#FFD700',
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-            boxShadow: isLoading
-              ? '0 0 24px rgba(255,215,0,0.2), 0 20px 40px rgba(0,0,0,0.42)'
-              : '0 20px 44px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)',
-          }}
-        >
-          {isLoading ? <Loader2 size={22} className="animate-spin" /> : <MessageCircleMore size={22} />}
-          {isLoading && (
-            <button
-              onMouseDown={e => e.stopPropagation()} onMouseUp={e => e.stopPropagation()}
-              onClick={e => { e.stopPropagation(); stopGeneration() }}
-              className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full"
-              style={{ background: '#ef4444', color: '#fff', border: '2px solid rgba(20,22,30,0.9)' }}
-            >
-              <Square size={9} />
-            </button>
-          )}
-          {!isLoading && unreadCount > 0 && (
-            <span className="absolute -right-1 -top-1 flex h-[18px] w-[18px] items-center justify-center rounded-full font-bold"
-              style={{ background: '#ef4444', color: '#fff', fontSize: 10 }}>
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
-          )}
-          <span className="pointer-events-none absolute inset-1 rounded-full"
-            style={{ border: '1px solid rgba(255,255,255,0.05)' }} />
-        </div>
-        {/* AI 助教 label */}
-        {showFabHint && (
-          <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-center"
-            style={{ bottom: -22, fontSize: 11, color: '#FFD700', fontWeight: 600, letterSpacing: '0.02em', textShadow: '0 1px 4px rgba(0,0,0,0.7)' }}>
-            AI 助教
-          </div>
-        )}
-      </div>
+        onStop={e => { e.stopPropagation(); stopGeneration() }}
+      />
     )
   }
 
