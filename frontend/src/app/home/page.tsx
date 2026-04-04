@@ -43,16 +43,15 @@ export default function HomePage() {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#000', overflow: 'hidden', position: 'relative' }}>
       <LiquidEther
-        colors={['#5227FF', '#FF9FFC', '#c8a55a']}
-        mouseForce={50}
-        cursorSize={200}
+        colors={['#5227FF', '#FF9FFC', '#B19EEF']}
+        mouseForce={60}
+        cursorSize={250}
         resolution={0.5}
         autoDemo={false}
         style={{
           position: 'absolute',
           inset: 0,
-          zIndex: 5,
-          mixBlendMode: 'screen',
+          zIndex: 1,
         }}
       />
       <iframe
@@ -64,8 +63,9 @@ export default function HomePage() {
           height: '100%',
           border: 'none',
           display: 'block',
+          background: 'transparent',
           pointerEvents: 'none',
-          zIndex: 1,
+          zIndex: 2,
         }}
         title="UNSW Exam Master"
       />
