@@ -1,7 +1,6 @@
 ﻿'use client'
 
 import { FormEvent, ClipboardEvent, KeyboardEvent, useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
 import {
   AlertCircle,
   ArrowRight,
@@ -16,6 +15,7 @@ import {
 import ExamMasterLogo from '@/components/ExamMasterLogo'
 import Toast from '@/components/Toast'
 import { api } from '@/lib/api'
+import { GlowButton, GlowLink } from '@/components/GlowButton'
 
 const PERKS = [
   'New users get 5 welcome credits',
@@ -168,7 +168,7 @@ function OtpStep({
           </div>
         )}
 
-        <button
+        <GlowButton
           type="submit"
           disabled={loading}
           className="btn-gold flex w-full items-center justify-center gap-2 py-3.5 text-sm"
@@ -184,27 +184,27 @@ function OtpStep({
               Confirm code
             </>
           )}
-        </button>
+        </GlowButton>
       </form>
 
       <p className="text-center text-xs text-white/28">
         Did not receive the code?{' '}
-        <button
+        <GlowButton
           type="button"
           onClick={resendCode}
           disabled={resending || cooldown > 0}
           className="text-white/70 hover:text-white transition-colors underline underline-offset-2 disabled:opacity-50"
         >
           {resending ? 'Sending...' : cooldown > 0 ? `Resend (${cooldown}s)` : 'Resend'}
-        </button>
+        </GlowButton>
         {' '}·{' '}
-        <button
+        <GlowButton
           onClick={onBack}
           className="text-white/48 hover:text-white/70 transition-colors underline underline-offset-2"
           type="button"
         >
           Back to form
-        </button>
+        </GlowButton>
       </p>
     </div>
   )
@@ -464,7 +464,7 @@ export default function RegisterPage() {
                   </div>
                 )}
 
-                <button type="submit" className="btn-gold flex w-full items-center justify-center gap-2 py-3.5 text-sm" disabled={loading}>
+                <GlowButton type="submit" className="btn-gold flex w-full items-center justify-center gap-2 py-3.5 text-sm" disabled={loading}>
                   {loading ? (
                     <>
                       <Loader2 size={16} className="animate-spin" />
@@ -476,13 +476,13 @@ export default function RegisterPage() {
                       Register now
                     </>
                   )}
-                </button>
+                </GlowButton>
               </form>
 
               <div className="divider-text my-6">Already have an account?</div>
-              <Link href="/login" className="btn-outline-gold flex w-full items-center justify-center gap-2 py-3 text-sm" style={{ textDecoration: 'none' }}>
+              <GlowLink href="/login" className="btn-outline-gold flex w-full items-center justify-center gap-2 py-3 text-sm" style={{ textDecoration: 'none' }}>
                 Go to login
-              </Link>
+              </GlowLink>
             </>
           )}
         </section>

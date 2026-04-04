@@ -10,6 +10,7 @@ import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import type { Course, EnrollmentStatus } from '@/lib/types'
 import ExamCountdown from '@/components/ExamCountdown'
+import { GlowButton, GlowLink } from '@/components/GlowButton'
 
 const GOLD = '#c8a55a'
 const GOLD_LIGHT = '#e6cf98'
@@ -79,17 +80,17 @@ function EnrollModal({
         </p>
 
         <div className="flex gap-3">
-          <button onClick={onCancel} disabled={loading}
+          <GlowButton onClick={onCancel} disabled={loading}
             className="flex-1 py-2.5 rounded-xl text-sm transition-all"
             style={{ background: 'rgba(255,255,255,0.04)', color: '#666', border: '1px solid rgba(255,255,255,0.08)' }}>
             取消
-          </button>
-          <button onClick={onConfirm} disabled={loading}
+          </GlowButton>
+          <GlowButton onClick={onConfirm} disabled={loading}
             className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2"
             style={{ background: 'linear-gradient(135deg,rgba(200,165,90,0.25),rgba(200,165,90,0.14))', color: GOLD_LIGHT, border: '1px solid rgba(200,165,90,0.35)' }}>
             {loading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
             {loading ? '选课中…' : '确认选课'}
-          </button>
+          </GlowButton>
         </div>
       </div>
     </div>
@@ -174,7 +175,7 @@ function LockedCourseCard({ course, cost, slotsRemaining, onEnroll }: {
       )}
 
       <div className="mt-5 border-t border-white/6 pt-4">
-        <button
+        <GlowButton
           onClick={() => onEnroll(course)}
           disabled={slotsRemaining <= 0}
           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all"
@@ -186,7 +187,7 @@ function LockedCourseCard({ course, cost, slotsRemaining, onEnroll }: {
           }}>
           <Plus size={14} />
           选课 — {cost} ✦
-        </button>
+        </GlowButton>
       </div>
     </div>
   )
@@ -297,9 +298,9 @@ export default function DashboardPage() {
             <span className="rounded-full border border-[#c8a55a]/22 bg-[#c8a55a]/12 px-3 py-1 text-xs font-medium" style={{ color: GOLD_LIGHT }}>Guest</span>
             <p className="text-sm text-white/62">当前仅开放 COMP9517 演示课程。注册后可选课解锁完整备考工作流。</p>
           </div>
-          <Link href="/register" className="btn-gold inline-flex items-center gap-2 text-sm" style={{ textDecoration: 'none' }}>
+          <GlowLink href="/register" className="btn-gold inline-flex items-center gap-2 text-sm" style={{ textDecoration: 'none' }}>
             注册解锁全部 <ArrowRight size={15} />
-          </Link>
+          </GlowLink>
         </section>
       )}
 

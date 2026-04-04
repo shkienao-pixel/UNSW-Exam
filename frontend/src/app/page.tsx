@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   ArrowRight,
@@ -18,6 +17,7 @@ import {
 } from 'lucide-react'
 import ExamMasterLogo from '@/components/ExamMasterLogo'
 import { useAuth } from '@/lib/auth-context'
+import { GlowButton, GlowLink } from '@/components/GlowButton'
 
 const NAV_ITEMS = ['能力', '工作流', '安全']
 
@@ -214,7 +214,7 @@ function ProductPreviewCard({
                 <p className="text-sm leading-7 text-white/56">
                   直接问：Attention Mechanism 为什么是 COMP9517 历年高频点？系统会结合课件与真题上下文回答。
                 </p>
-                <button
+                <GlowButton
                   type="button"
                   onClick={onGuestLogin}
                   disabled={guestLoading}
@@ -231,7 +231,7 @@ function ProductPreviewCard({
                       <ArrowRight className="h-4 w-4" />
                     </>
                   )}
-                </button>
+                </GlowButton>
               </div>
             </div>
           </section>
@@ -368,25 +368,25 @@ export default function LandingPage() {
           </div>
 
           <div className="flex items-center gap-2.5">
-            <Link
+            <GlowLink
               href="/admin"
               className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-medium text-white/58 transition hover:border-white/14 hover:bg-white/[0.05] hover:text-white/82"
             >
               <Shield className="h-3.5 w-3.5" />
               管理后台
-            </Link>
-            <Link
+            </GlowLink>
+            <GlowLink
               href="/login"
               className="rounded-full border border-white/10 px-4 py-2 text-sm text-white/66 transition hover:border-white/14 hover:bg-white/[0.04] hover:text-white"
             >
               登录
-            </Link>
-            <Link
+            </GlowLink>
+            <GlowLink
               href="/register"
               className="rounded-full border border-[#c8a55a]/20 bg-[#c8a55a]/10 px-4 py-2 text-sm font-medium text-[#e6cf98] transition hover:border-[#c8a55a]/28 hover:bg-[#c8a55a]/14"
             >
               注册
-            </Link>
+            </GlowLink>
           </div>
         </div>
       </nav>
@@ -413,14 +413,14 @@ export default function LandingPage() {
             </div>
 
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <Link
+              <GlowLink
                 href="/register"
                 className="inline-flex items-center justify-center gap-2 rounded-full border border-[#c8a55a]/20 bg-[#c8a55a]/10 px-5 py-3 text-sm font-medium text-[#e6cf98] transition hover:border-[#c8a55a]/28 hover:bg-[#c8a55a]/14"
               >
                 创建账号
                 <ArrowRight className="h-4 w-4" />
-              </Link>
-              <button
+              </GlowLink>
+              <GlowButton
                 type="button"
                 onClick={handleGuestLogin}
                 disabled={guestLoading}
@@ -437,7 +437,7 @@ export default function LandingPage() {
                     <ArrowRight className="h-4 w-4" />
                   </>
                 )}
-              </button>
+              </GlowButton>
             </div>
 
             {guestError ? (

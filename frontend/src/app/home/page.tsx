@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowRight, Loader2 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import LiquidEther from '@/components/LiquidEther'
+import { GlowButton } from '@/components/GlowButton'
 
 const EXPLORE_BUTTON_DELAY = 1200
 
@@ -114,10 +115,10 @@ export default function HomePage() {
       `}</style>
 
       {btnReady ? (
-        <button className="explore-btn" onClick={handleExplore}>
+        <GlowButton className="explore-btn" onClick={handleExplore}>
           <ArrowRight size={18} className="explore-arrow" />
           <span>{'\u5f00\u59cb\u63a2\u7d22'}</span>
-        </button>
+        </GlowButton>
       ) : null}
     </div>
   )

@@ -1,0 +1,54 @@
+/* ── Additive glow ring ────────────────────────────────────────────────────
+   Never overrides bg, border, display, or layout. Purely additive.
+   Works on any rounded element.                                            */
+
+.glow-ring {
+  --edge-proximity: 0;
+  --cursor-angle: 45deg;
+  --edge-sensitivity: 12;
+  --glow-padding: 20px;
+
+  position: relative;
+  isolation: isolate;
+}
+
+.glow-ring > .glow-ring-light {
+  position: absolute;
+  inset: calc(var(--glow-padding) * -1);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 2;
+
+  mask-image: conic-gradient(
+    from var(--cursor-angle) at center,
+    black 2.5%, transparent 10%, transparent 90%, black 97.5%
+  );
+
+  opacity: max(0, calc((var(--edge-proximity) - var(--edge-sensitivity)) / (100 - var(--edge-sensitivity))));
+  mix-blend-mode: plus-lighter;
+  transition: opacity 0.25s ease-out;
+}
+
+.glow-ring:not(:hover) > .glow-ring-light {
+  opacity: 0;
+  transition: opacity 0.75s ease-in-out;
+}
+
+.glow-ring > .glow-ring-light::before {
+  content: "";
+  position: absolute;
+  inset: var(--glow-padding);
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px    var(--glow-color,    hsl(38deg 70% 72% / 100%)),
+    inset 0 0 2px 0    var(--glow-color-60, hsl(38deg 70% 72% / 60%)),
+    inset 0 0 5px 0    var(--glow-color-50, hsl(38deg 70% 72% / 50%)),
+    inset 0 0 10px 0   var(--glow-color-40, hsl(38deg 70% 72% / 40%)),
+    inset 0 0 22px 0   var(--glow-color-30, hsl(38deg 70% 72% / 30%)),
+    inset 0 0 36px 2px var(--glow-color-20, hsl(38deg 70% 72% / 20%)),
+    0 0 2px 0    var(--glow-color-60, hsl(38deg 70% 72% / 60%)),
+    0 0 5px 0    var(--glow-color-50, hsl(38deg 70% 72% / 50%)),
+    0 0 10px 0   var(--glow-color-40, hsl(38deg 70% 72% / 40%)),
+    0 0 22px 0   var(--glow-color-30, hsl(38deg 70% 72% / 30%)),
+    0 0 36px 2px var(--glow-color-20, hsl(38deg 70% 72% / 20%));
+}

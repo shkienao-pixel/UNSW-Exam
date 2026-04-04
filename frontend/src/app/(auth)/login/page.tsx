@@ -7,6 +7,7 @@ import { AlertCircle, ArrowRight, Loader2, Lock, Mail, Shield } from 'lucide-rea
 import ExamMasterLogo from '@/components/ExamMasterLogo'
 import Toast from '@/components/Toast'
 import { useAuth } from '@/lib/auth-context'
+import { GlowButton, GlowLink } from '@/components/GlowButton'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -152,7 +153,7 @@ export default function LoginPage() {
                 <p className="text-sm text-red-200/90">{error}</p>
               </div>
             )}
-            <button type="submit" className="btn-gold flex w-full items-center justify-center gap-2 py-3.5 text-sm" disabled={loading}>
+            <GlowButton type="submit" className="btn-gold flex w-full items-center justify-center gap-2 py-3.5 text-sm" disabled={loading}>
               {loading ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
@@ -164,7 +165,7 @@ export default function LoginPage() {
                   <ArrowRight size={16} />
                 </>
               )}
-            </button>
+            </GlowButton>
           </form>
 
           <div className="mt-3 text-right">
@@ -175,13 +176,13 @@ export default function LoginPage() {
 
           <div className="divider-text my-6">还没有账号？</div>
 
-          <Link
+          <GlowLink
             href="/register"
             className="btn-outline-gold flex w-full items-center justify-center gap-2 py-3 text-sm"
             style={{ textDecoration: 'none' }}
           >
             立即注册
-          </Link>
+          </GlowLink>
 
           <p className="mt-6 text-center text-xs text-white/30">需要邀请码，仅限 UNSW 学生。</p>
         </section>
