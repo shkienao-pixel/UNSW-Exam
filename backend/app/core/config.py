@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     # Optional second admin secret (comma-separated or a single extra value)
     admin_secret_extra: str = ""
 
+    # Fernet key for encrypting LLM API keys at rest (32 url-safe base64 bytes).
+    # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # Leave empty to disable encryption (plaintext fallback for backward compat).
+    api_key_encryption_key: str = ""
+
     @property
     def admin_secrets_set(self) -> set[str]:
         """Return all valid admin secrets as a set."""

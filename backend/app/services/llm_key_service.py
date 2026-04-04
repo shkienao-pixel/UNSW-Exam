@@ -76,7 +76,9 @@ def _fetch_from_db(provider: str, supabase) -> Optional[str]:
             .execute()
         )
         if result.data:
-            return result.data[0]["api_key"]
+            raw = result.data[0]["api_key"]
+            from app.services.key_encryption import decrypt
+            return decrypt(raw)
     except Exception as exc:
         # Table may not exist yet (before migration) — log and fall through
         logger.debug("api_keys DB lookup failed for %s: %s", provider, exc)

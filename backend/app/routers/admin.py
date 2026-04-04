@@ -511,28 +511,39 @@ def admin_list_users(
     include_unverified: bool = True,
     _: None = Depends(_require_admin),
 ) -> list[dict[str, Any]]:
-    """List all registered users via Supabase REST admin API."""
+    """List all registered users via Supabase REST admin API (paginates automatically)."""
     import httpx
     cfg = get_settings()
+    headers = {
+        "apikey": cfg.supabase_service_role_key,
+        "Authorization": f"Bearer {cfg.supabase_service_role_key}",
+    }
+    raw_users: list[dict] = []
+    page = 1
+    per_page = 1000
     try:
-        r = httpx.get(
-            f"{cfg.supabase_url}/auth/v1/admin/users",
-            headers={
-                "apikey": cfg.supabase_service_role_key,
-                "Authorization": f"Bearer {cfg.supabase_service_role_key}",
-            },
-            timeout=10,
-        )
-        r.raise_for_status()
-        data = r.json()
+        while True:
+            r = httpx.get(
+                f"{cfg.supabase_url}/auth/v1/admin/users",
+                headers=headers,
+                params={"page": page, "per_page": per_page},
+                timeout=10,
+            )
+            r.raise_for_status()
+            data = r.json()
+            batch = data.get("users", data) if isinstance(data, dict) else data
+            if not batch:
+                break
+            raw_users.extend(batch)
+            if len(batch) < per_page:
+                break
+            page += 1
     except httpx.HTTPStatusError as exc:
         logger.error("admin_list_users Supabase HTTP %s: %s", exc.response.status_code, exc.response.text[:500])
         raise HTTPException(status_code=500, detail="获取用户列表失败，请稍后重试") from exc
     except Exception as exc:
         logger.error("admin_list_users error: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail="获取用户列表失败，请稍后重试") from exc
-
-    raw_users = data.get("users", data) if isinstance(data, dict) else data
     # Hide soft-deleted accounts
     raw_users = [u for u in raw_users if not u.get("deleted_at")]
     if not include_unverified:
@@ -636,28 +647,39 @@ def admin_delete_user(
     # Best-effort: remove duplicate accounts with the same email.
     if target_email:
         try:
-            r_list = httpx.get(
-                f"{cfg.supabase_url}/auth/v1/admin/users",
-                headers=headers,
-                timeout=10,
-            )
-            if r_list.status_code < 400:
+            all_dup_users: list[dict] = []
+            dup_page = 1
+            while True:
+                r_list = httpx.get(
+                    f"{cfg.supabase_url}/auth/v1/admin/users",
+                    headers=headers,
+                    params={"page": dup_page, "per_page": 1000},
+                    timeout=10,
+                )
+                if r_list.status_code >= 400:
+                    break
                 data = r_list.json()
-                users = data.get("users", data) if isinstance(data, dict) else data
-                for u in users or []:
-                    uid = u.get("id")
-                    uemail = (u.get("email") or "").lower()
-                    if uid and uid != user_id and uemail and uemail == target_email:
-                        try:
-                            dr = httpx.delete(
-                                f"{cfg.supabase_url}/auth/v1/admin/users/{uid}?should_soft_delete=false",
-                                headers=headers,
-                                timeout=10,
-                            )
-                            if dr.status_code < 400 or dr.status_code == 404:
-                                deleted_duplicates += 1
-                        except Exception:
-                            pass
+                batch = data.get("users", data) if isinstance(data, dict) else data
+                if not batch:
+                    break
+                all_dup_users.extend(batch)
+                if len(batch) < 1000:
+                    break
+                dup_page += 1
+            for u in all_dup_users:
+                uid = u.get("id")
+                uemail = (u.get("email") or "").lower()
+                if uid and uid != user_id and uemail and uemail == target_email:
+                    try:
+                        dr = httpx.delete(
+                            f"{cfg.supabase_url}/auth/v1/admin/users/{uid}?should_soft_delete=false",
+                            headers=headers,
+                            timeout=10,
+                        )
+                        if dr.status_code < 400 or dr.status_code == 404:
+                            deleted_duplicates += 1
+                    except Exception:
+                        pass
         except Exception:
             pass
 
@@ -893,16 +915,19 @@ def create_api_key(
     if not body.api_key.strip():
         raise HTTPException(status_code=400, detail="api_key must not be empty")
 
+    from app.services.key_encryption import encrypt as _encrypt_key
     try:
-        # Deactivate any existing keys for this provider first
-        supabase.table("api_keys").update({"is_active": False}).eq("provider", body.provider).execute()
-
+        # Insert new active key FIRST — ensures there's always at least one active key
+        # even if the subsequent deactivation step fails.
         row = supabase.table("api_keys").insert({
             "provider": body.provider,
-            "api_key":  body.api_key.strip(),
+            "api_key":  _encrypt_key(body.api_key.strip()),
             "label":    body.label or body.provider,
             "is_active": True,
         }).execute()
+        new_id = row.data[0]["id"]
+        # Deactivate all OTHER keys for this provider (exclude the one we just inserted)
+        supabase.table("api_keys").update({"is_active": False}).eq("provider", body.provider).neq("id", new_id).execute()
     except Exception as exc:
         raise HTTPException(
             status_code=503,
@@ -943,12 +968,14 @@ def activate_api_key(
         raise HTTPException(status_code=404, detail="API key not found")
     provider = existing.data[0]["provider"]
 
-    # Deactivate all, then activate the target
-    supabase.table("api_keys").update({"is_active": False}).eq("provider", provider).execute()
+    # Activate the target FIRST — ensures there's always at least one active key
+    # even if the subsequent deactivation of others fails.
     supabase.table("api_keys").update({
         "is_active":  True,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }).eq("id", key_id).execute()
+    # Then deactivate all OTHER keys for the same provider
+    supabase.table("api_keys").update({"is_active": False}).eq("provider", provider).neq("id", key_id).execute()
 
     from app.services.llm_key_service import invalidate_cache
     invalidate_cache(provider)
@@ -1024,6 +1051,7 @@ def admin_mark_order_paid(
     supabase: Client = Depends(get_db),
 ) -> dict[str, Any]:
     """手动将订单标记为已付款并补发积分（webhook 漏发时使用）。"""
+    # 先确认订单存在
     row = supabase.table("credit_orders").select("*").eq("id", order_id).limit(1).execute()
     if not row.data:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -1032,15 +1060,24 @@ def admin_mark_order_paid(
     if order["status"] == "paid":
         raise HTTPException(status_code=409, detail="Order already paid")
 
-    supabase.table("credit_orders").update({
-        "status": "paid",
-        "paid_at": datetime.now(timezone.utc).isoformat(),
-    }).eq("id", order_id).execute()
+    # 原子更新：WHERE id=? AND status='pending'，避免并发双发
+    updated = (
+        supabase.table("credit_orders")
+        .update({"status": "paid", "paid_at": datetime.now(timezone.utc).isoformat()})
+        .eq("id", order_id)
+        .eq("status", "pending")
+        .select("id")
+        .execute()
+    )
+    if not updated.data:
+        # 另一个并发请求已经先完成了
+        raise HTTPException(status_code=409, detail="Order already paid (concurrent request)")
 
     from app.services import credit_service
+    ref_id = str(order["stripe_session_id"] or order_id)
     credit_service.earn(
         supabase, order["user_id"], order["credits_amount"],
-        "purchase", ref_id=str(order["stripe_session_id"] or order_id),
+        "purchase", ref_id=ref_id,
         note=f"管理员手动补发 {order['credits_amount']} 积分"
     )
 
