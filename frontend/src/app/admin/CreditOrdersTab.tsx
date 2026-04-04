@@ -58,7 +58,7 @@ export function CreditOrdersTab({ secret }: { secret: string }) {
       setToast(`已补发 ${order.credits_amount} 积分`)
       void load()
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : '操作失败')
+      setError(e instanceof Error ? e.message : '操作失败')
     } finally {
       setMarkingId(null)
     }
@@ -116,7 +116,15 @@ export function CreditOrdersTab({ secret }: { secret: string }) {
         ))}
       </div>
 
-      {error && <ErrorBox msg={error} />}
+      {error && (
+        <div className="relative">
+          <ErrorBox msg={error} />
+          <button
+            onClick={() => setError('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-red-400/60 hover:text-red-400 text-lg leading-none"
+          >×</button>
+        </div>
+      )}
       {loading ? <Spinner /> : displayed.length === 0 ? <Empty text="暂无订单" /> : (
         <div className="space-y-2">
           {displayed.map(order => {
