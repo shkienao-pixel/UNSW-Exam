@@ -18,6 +18,7 @@ import {
 import ExamMasterLogo from '@/components/ExamMasterLogo'
 import { useAuth } from '@/lib/auth-context'
 import { GlowButton, GlowLink } from '@/components/GlowButton'
+import Lanyard from '@/components/Lanyard'
 
 const NAV_ITEMS = ['能力', '工作流', '安全']
 
@@ -393,7 +394,8 @@ export default function LandingPage() {
 
       <main>
         <section className="mx-auto flex min-h-[calc(100vh-81px)] max-w-[1280px] flex-col justify-center gap-12 px-5 py-16 sm:px-6 xl:py-20">
-          <div className="max-w-[560px]">
+          <div className="flex flex-col items-center gap-8 lg:flex-row lg:items-start lg:gap-0">
+          <div className="w-full max-w-[560px] lg:flex-1">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-white/58">
               <Sparkles className="h-3.5 w-3.5 text-[#c8a55a]" />
               数据驱动 · AI 助教 · 专为留学生打造
@@ -458,6 +460,12 @@ export default function LandingPage() {
             <p className="mt-4 text-sm text-white/34">
               访客模式仅限 COMP9517 课程体验；注册后可上传完整资料并解锁全部功能。
             </p>
+          </div>
+
+          {/* Lanyard badge — desktop right side */}
+          <div className="hidden w-[260px] shrink-0 lg:block">
+            <Lanyard />
+          </div>
           </div>
 
           <ProductPreviewCard onGuestLogin={handleGuestLogin} guestLoading={guestLoading} />
