@@ -18,6 +18,7 @@ import {
 import ExamMasterLogo from '@/components/ExamMasterLogo'
 import { useAuth } from '@/lib/auth-context'
 import { GlowButton, GlowLink } from '@/components/GlowButton'
+import { CubesLoader } from '@/components/Cubes'
 
 const NAV_ITEMS = ['能力', '工作流', '安全']
 
@@ -321,7 +322,7 @@ export default function LandingPage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#050608]">
-        <Loader2 className="h-8 w-8 animate-spin text-[#c8a55a]" />
+        <CubesLoader />
       </div>
     )
   }

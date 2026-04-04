@@ -20,6 +20,7 @@ import type {
   ReviewSettings, ReviewNodeProgress, ReviewNodeUpdate,
   ReviewPriority, ReviewStatus, OutlineNodeData, TodayPlanResult,
 } from '@/lib/types'
+import { CubesLoader } from '@/components/Cubes'
 import {
   Loader2, ChevronDown, ChevronRight, CheckSquare, Square,
   Clock, Target, BarChart2, RefreshCw, AlertCircle, BookOpen,
@@ -975,11 +976,7 @@ export default function ReviewOutlineTab({ courseId }: Props) {
 
   // ── Loading state ──────────────────────────────────────────────────────────
   if (outlineLoading || reviewLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="animate-spin" style={{ color: '#FFD700' }} size={28} />
-      </div>
-    )
+    return <CubesLoader className="py-20" />
   }
 
   if (roots.length === 0) {

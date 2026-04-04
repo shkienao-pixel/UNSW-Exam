@@ -20,7 +20,8 @@ import SidebarFooter from '@/components/SidebarFooter'
 import FeedbackWidget from '@/components/FeedbackWidget'
 import { SIDEBAR_SHELL_BG } from '@/lib/navigation'
 import type { Course } from '@/lib/types'
-import { Loader2, ChevronLeft, Menu, X } from 'lucide-react'
+import { ChevronLeft, Menu, X } from 'lucide-react'
+import { CubesLoader } from '@/components/Cubes'
 
 // Sidebar shell (shared by mobile drawer and desktop)
 
@@ -79,7 +80,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: '#08080f' }}>
-      <Loader2 className="animate-spin" style={{ color: '#FFD700' }} size={32} />
+      <CubesLoader />
     </div>
   )
   if (!user) return null

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Loader2, XCircle, Trash2, Plus, CheckCircle } from 'lucide-react'
+import { CubesLoader } from '@/components/Cubes'
 
 export const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8005'
 
@@ -114,11 +115,7 @@ export const cardStyle: React.CSSProperties = {
 // ── Shared UI primitives ───────────────────────────────────────────────────────
 
 export function Spinner() {
-  return (
-    <div className="flex justify-center py-10">
-      <Loader2 className="animate-spin" style={{ color: '#FFD700' }} size={24} />
-    </div>
-  )
+  return <CubesLoader className="py-10" />
 }
 
 export function Empty({ text }: { text: string }) {

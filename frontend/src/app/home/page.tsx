@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, Loader2 } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import LiquidEther from '@/components/LiquidEther'
 import { GlowButton } from '@/components/GlowButton'
+import { CubesLoader } from '@/components/Cubes'
 
 const EXPLORE_BUTTON_DELAY = 1200
 
@@ -36,7 +37,7 @@ export default function HomePage() {
           justifyContent: 'center',
         }}
       >
-        <Loader2 className="animate-spin" style={{ color: '#fff' }} size={28} />
+        <CubesLoader />
       </div>
     )
   }

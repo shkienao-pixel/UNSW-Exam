@@ -23,6 +23,7 @@ import {
   Code, Lock, Target, Layers3,
 } from 'lucide-react'
 import { GlowButton } from '@/components/GlowButton'
+import { CubesLoader } from '@/components/Cubes'
 import MistakesView from '@/components/MistakesView'
 import ElectricBorder from '@/components/ElectricBorder'
 import InsufficientCreditsModal from '@/components/InsufficientCreditsModal'
@@ -60,7 +61,7 @@ function CoursePageInner() {
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-screen">
-      <Loader2 className="animate-spin" style={{ color: '#FFD700' }} size={32} />
+      <CubesLoader />
     </div>
   )
   if (!course) return <div className="p-8 text-red-400">{t('course_404')}</div>
@@ -152,7 +153,7 @@ export default function CoursePage() {
   return (
     <Suspense fallback={
       <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="animate-spin" style={{ color: '#FFD700' }} size={32} />
+        <CubesLoader />
       </div>
     }>
       <CoursePageInner />
@@ -386,9 +387,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
   }, [courseId])
 
   if (loading) return (
-    <div className="flex justify-center py-16">
-      <Loader2 className="animate-spin" style={{ color: '#FFD700' }} size={28} />
-    </div>
+    <CubesLoader className="py-16" />
   )
 
   const card = cards[cardIndex]

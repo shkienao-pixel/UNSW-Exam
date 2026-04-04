@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { CheckCircle, CreditCard, Loader2, Sparkles, Star, XCircle } from 'lucide-react'
+import { CubesLoader } from '@/components/Cubes'
 import { api } from '@/lib/api'
 import { useLang } from '@/lib/i18n'
 import { GlowButton } from '@/components/GlowButton'
@@ -121,7 +122,7 @@ function CreditsPageInner() {
           <div className="min-w-[250px] rounded-[26px] border border-[#c8a55a]/20 bg-[#c8a55a]/8 px-6 py-5">
             <p className="text-xs uppercase tracking-[0.18em] text-white/32">{t('credits_balance_label')}</p>
             {loading ? (
-              <Loader2 className="mt-4 h-7 w-7 animate-spin text-[#c8a55a]" />
+              <CubesLoader className="mt-2" />
             ) : (
               <div className="mt-4 flex items-end gap-3">
                 <span className="text-5xl font-semibold tracking-[-0.06em] text-white">{balance ?? 0}</span>
@@ -337,9 +338,7 @@ function CreditsPageInner() {
         <p className="mt-1 text-sm text-white/42">{t('credits_txn_sub')}</p>
 
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-6 w-6 animate-spin text-[#c8a55a]" />
-          </div>
+          <CubesLoader className="py-16" />
         ) : txns.length === 0 ? (
           <div className="mt-5 rounded-[28px] border border-white/8 bg-white/[0.03] px-6 py-16 text-center text-sm text-white/42">
             {t('credits_txn_empty')}
@@ -378,7 +377,7 @@ export default function CreditsPage() {
     <Suspense
       fallback={
         <div className="flex min-h-screen items-center justify-center">
-          <Loader2 className="h-7 w-7 animate-spin text-[#c8a55a]" />
+          <CubesLoader />
         </div>
       }
     >

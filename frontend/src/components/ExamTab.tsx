@@ -18,6 +18,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { api } from '@/lib/api'
+import { CubesLoader } from '@/components/Cubes'
 import type { ExamQuestion, GradeResult, MockSession, PastExamFile } from '@/lib/types'
 import { useLang } from '@/lib/i18n'
 import { GlowButton } from '@/components/GlowButton'
@@ -1453,9 +1454,5 @@ function EmptyState({
 }
 
 function LoadingSpinner() {
-  return (
-    <div className="flex justify-center py-16">
-      <Loader2 className="animate-spin" style={{ color: '#d4a843' }} size={24} />
-    </div>
-  )
+  return <CubesLoader className="py-16" />
 }

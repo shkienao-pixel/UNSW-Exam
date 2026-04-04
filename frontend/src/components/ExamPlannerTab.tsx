@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { api } from '@/lib/api'
 import type { PlannerPlan, PlannerDay, PlannerKP, PlannerPaper } from '@/lib/types'
 import { CalendarDays, CheckCircle2, Circle, BookOpen, FileText, ChevronDown, ChevronRight, Loader2, AlertCircle, Trophy } from 'lucide-react'
+import { CubesLoader } from '@/components/Cubes'
 
 const GOLD = '#c8a55a'
 const GOLD_LIGHT = '#e6cf98'
@@ -340,11 +341,7 @@ export default function ExamPlannerTab({ courseId }: { courseId: string }) {
   }, [courseId])
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="animate-spin" style={{ color: GOLD }} size={28} />
-      </div>
-    )
+    return <CubesLoader className="py-20" />
   }
 
   if (error) {

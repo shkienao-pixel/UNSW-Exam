@@ -4,6 +4,9 @@ import { useState, useEffect, useRef } from 'react'
 import type { Artifact } from '@/lib/types'
 import {
   Sparkles, Loader2, Play, CheckSquare, Square,
+} from 'lucide-react'
+import { CubesLoader } from '@/components/Cubes'
+import {
   ChevronLeft, ChevronRight, HelpCircle, FileText,
   AlertCircle, RefreshCw, History, PencilLine, Globe,
 } from 'lucide-react'
@@ -350,7 +353,7 @@ export default function ClassroomTab({ courseId, artifacts, creditBalance, onCre
     const pct = jobStatus?.progress ?? 0
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-6 max-w-sm mx-auto">
-        <Loader2 size={36} className="animate-spin" style={{ color: '#A78BFA' }} />
+        <CubesLoader />
         <div className="w-full space-y-2">
           <div className="flex justify-between text-xs" style={{ color: '#555' }}>
             <span>{jobStatus?.message ?? '等待中…'}</span>

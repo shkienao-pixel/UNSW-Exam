@@ -6,6 +6,7 @@ import {
   ArrowRight, BookOpen, CheckCircle2, Layers3, Loader2,
   Shield, Sparkles, Search, Lock, Plus, Star,
 } from 'lucide-react'
+import { CubesLoader } from '@/components/Cubes'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import type { Course, EnrollmentStatus } from '@/lib/types'
@@ -324,9 +325,7 @@ export default function DashboardPage() {
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center py-24">
-          <Loader2 className="h-7 w-7 animate-spin" style={{ color: GOLD }} />
-        </div>
+        <CubesLoader className="py-24" />
       ) : (
         <>
           {/* My Courses */}

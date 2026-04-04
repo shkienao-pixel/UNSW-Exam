@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { api } from '@/lib/api'
 import type { Output } from '@/lib/types'
 import { BookOpen, Loader2 } from 'lucide-react'
+import { CubesLoader } from '@/components/Cubes'
 
 export interface TypedOutputsViewProps {
   courseId: string
@@ -31,11 +32,7 @@ export default function TypedOutputsView({
       .finally(() => setLoading(false))
   }, [courseId, outputType])
 
-  if (loading) return (
-    <div className="flex justify-center py-16">
-      <Loader2 className="animate-spin" style={{ color: '#FFD700' }} size={24} />
-    </div>
-  )
+  if (loading) return <CubesLoader className="py-16" />
 
   return (
     <div className="space-y-5">

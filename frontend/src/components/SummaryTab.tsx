@@ -6,6 +6,7 @@ import { parseContentJson, extractToc, extractTocFromHtml } from '@/lib/utils'
 import type { ContentFormat } from '@/lib/utils'
 import type { SummarySchemaV1 } from '@/lib/types'
 import { FileText, Loader2, Zap } from 'lucide-react'
+import { CubesLoader } from '@/components/Cubes'
 import { GlowButton } from '@/components/GlowButton'
 import ReactMarkdown from 'react-markdown'
 import SummarySchemaRenderer from '@/components/SummarySchemaRenderer'
@@ -158,11 +159,7 @@ export default function SummaryTab({ courseId }: { courseId: string }) {
     el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  if (status === 'loading') return (
-    <div className="flex justify-center py-20">
-      <Loader2 className="animate-spin" size={24} style={{ color: '#FFD700' }} />
-    </div>
-  )
+  if (status === 'loading') return <CubesLoader className="py-20" />
 
   if (status === 'not_published') return (
     <div className="text-center py-20 glass rounded-2xl" style={{ color: '#444' }}>
