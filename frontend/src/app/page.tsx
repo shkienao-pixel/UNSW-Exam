@@ -17,6 +17,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import ExamMasterLogo from '@/components/ExamMasterLogo'
+import LiquidEther from '@/components/LiquidEther'
 import { useAuth } from '@/lib/auth-context'
 
 const NAV_ITEMS = ['能力', '工作流', '安全']
@@ -341,6 +342,7 @@ export default function LandingPage() {
           filter: 'saturate(1.0) contrast(1.07) brightness(1.03)',
         }}
       />
+      <LiquidEther className="pointer-events-none absolute inset-0 z-[2]" />
       <div
         className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-[46vh] md:hidden"
         style={{
