@@ -1,365 +1,336 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useSpring, animated } from '@react-spring/web'
+import { useDrag } from '@use-gesture/react'
 
-interface Vec2 {
-  x: number
-  y: number
-}
+// ── rope physics ──────────────────────────────────────────────────────────────
 
-interface Segment {
-  pos: Vec2
-  prev: Vec2
-}
-
-const SEGMENT_COUNT = 18
-const GRAVITY = 0.45
+const SEG = 24          // number of rope segments
+const SEG_LEN = 14      // px per segment
+const GRAVITY = 0.6
 const FRICTION = 0.98
-const STIFFNESS = 0.82
-const SEGMENT_LENGTH = 22
+const ITERATIONS = 12
 
-function lerp(a: number, b: number, t: number) {
-  return a + (b - a) * t
+type V2 = { x: number; y: number }
+type Seg = { pos: V2; prev: V2 }
+
+function makeRope(anchorX: number, anchorY: number): Seg[] {
+  return Array.from({ length: SEG }, (_, i) => {
+    const p = { x: anchorX, y: anchorY + i * SEG_LEN }
+    return { pos: { ...p }, prev: { ...p } }
+  })
 }
 
-function distance(a: Vec2, b: Vec2) {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  return Math.sqrt(dx * dx + dy * dy)
-}
+function stepRope(segs: Seg[], anchor: V2, tip: V2) {
+  // verlet
+  for (const s of segs) {
+    const vx = (s.pos.x - s.prev.x) * FRICTION
+    const vy = (s.pos.y - s.prev.y) * FRICTION
+    s.prev = { ...s.pos }
+    s.pos.x += vx
+    s.pos.y += vy + GRAVITY
+  }
+  segs[0].pos = { ...anchor }
+  segs[segs.length - 1].pos = { ...tip }
 
-export default function Lanyard() {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const badgeRef = useRef<HTMLDivElement>(null)
-  const segmentsRef = useRef<Segment[]>([])
-  const anchorRef = useRef<Vec2>({ x: 0, y: 0 })
-  const rafRef = useRef<number>(0)
-  const isDraggingRef = useRef(false)
-  const dragOffsetRef = useRef<Vec2>({ x: 0, y: 0 })
-  const [badgePos, setBadgePos] = useState<Vec2>({ x: 0, y: 0 })
-  const badgePosRef = useRef<Vec2>({ x: 0, y: 0 })
-  const [initialized, setInitialized] = useState(false)
-
-  const initRope = useCallback(() => {
-    const container = containerRef.current
-    if (!container) return
-    const rect = container.getBoundingClientRect()
-    const cx = rect.width / 2
-    anchorRef.current = { x: cx, y: 0 }
-
-    const startX = cx
-    const startY = 60
-    segmentsRef.current = Array.from({ length: SEGMENT_COUNT }, (_, i) => {
-      const y = startY + i * SEGMENT_LENGTH
-      return {
-        pos: { x: startX, y },
-        prev: { x: startX, y },
-      }
-    })
-    const endY = startY + SEGMENT_COUNT * SEGMENT_LENGTH
-    badgePosRef.current = { x: startX - 60, y: endY }
-    setBadgePos({ x: startX - 60, y: endY })
-    setInitialized(true)
-  }, [])
-
-  const simulate = useCallback(() => {
-    const segs = segmentsRef.current
-    if (segs.length === 0) return
-
-    // Verlet integration
-    for (const seg of segs) {
-      const vx = (seg.pos.x - seg.prev.x) * FRICTION
-      const vy = (seg.pos.y - seg.prev.y) * FRICTION
-      seg.prev = { ...seg.pos }
-      seg.pos.x += vx
-      seg.pos.y += vy + GRAVITY
-    }
-
-    // Pin first segment to anchor
-    segs[0].pos = { ...anchorRef.current }
-
-    // Constrain last segment toward badge center
-    const badgeCenter = {
-      x: badgePosRef.current.x + 60,
-      y: badgePosRef.current.y + 14,
-    }
-    segs[segs.length - 1].pos = { ...badgeCenter }
-
-    // Solve distance constraints
-    for (let iter = 0; iter < 8; iter++) {
-      segs[0].pos = { ...anchorRef.current }
-      segs[segs.length - 1].pos = { ...badgeCenter }
-
-      for (let i = 0; i < segs.length - 1; i++) {
-        const a = segs[i]
-        const b = segs[i + 1]
-        const dist = distance(a.pos, b.pos)
-        const diff = (dist - SEGMENT_LENGTH) / dist
-        const ox = (b.pos.x - a.pos.x) * diff * 0.5 * STIFFNESS
-        const oy = (b.pos.y - a.pos.y) * diff * 0.5 * STIFFNESS
-        if (i !== 0) {
-          a.pos.x += ox
-          a.pos.y += oy
-        }
-        if (i !== segs.length - 2) {
-          b.pos.x -= ox
-          b.pos.y -= oy
-        }
-      }
-    }
-  }, [])
-
-  const draw = useCallback(() => {
-    const canvas = canvasRef.current
-    const container = containerRef.current
-    if (!canvas || !container) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    const dpr = window.devicePixelRatio || 1
-    const w = container.offsetWidth
-    const h = container.offsetHeight
-
-    if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
-      canvas.width = w * dpr
-      canvas.height = h * dpr
-      canvas.style.width = `${w}px`
-      canvas.style.height = `${h}px`
-      ctx.scale(dpr, dpr)
-    }
-
-    ctx.clearRect(0, 0, w, h)
-
-    const segs = segmentsRef.current
-    if (segs.length < 2) return
-
-    // Draw rope shadow
-    ctx.beginPath()
-    ctx.moveTo(segs[0].pos.x, segs[0].pos.y)
-    for (let i = 1; i < segs.length; i++) {
-      const xc = (segs[i].pos.x + segs[i - 1].pos.x) / 2
-      const yc = (segs[i].pos.y + segs[i - 1].pos.y) / 2
-      ctx.quadraticCurveTo(segs[i - 1].pos.x, segs[i - 1].pos.y, xc, yc)
-    }
-    ctx.strokeStyle = 'rgba(0,0,0,0.22)'
-    ctx.lineWidth = 5
-    ctx.lineCap = 'round'
-    ctx.lineJoin = 'round'
-    ctx.stroke()
-
-    // Draw rope
-    ctx.beginPath()
-    ctx.moveTo(segs[0].pos.x, segs[0].pos.y)
-    for (let i = 1; i < segs.length; i++) {
-      const xc = (segs[i].pos.x + segs[i - 1].pos.x) / 2
-      const yc = (segs[i].pos.y + segs[i - 1].pos.y) / 2
-      ctx.quadraticCurveTo(segs[i - 1].pos.x, segs[i - 1].pos.y, xc, yc)
-    }
-
-    // Gradient rope color
-    const grad = ctx.createLinearGradient(
-      segs[0].pos.x,
-      segs[0].pos.y,
-      segs[segs.length - 1].pos.x,
-      segs[segs.length - 1].pos.y,
-    )
-    grad.addColorStop(0, 'rgba(200,165,90,0.92)')
-    grad.addColorStop(0.5, 'rgba(230,207,152,0.88)')
-    grad.addColorStop(1, 'rgba(200,165,90,0.72)')
-    ctx.strokeStyle = grad
-    ctx.lineWidth = 3
-    ctx.stroke()
-
-    // Anchor pin dot
-    ctx.beginPath()
-    ctx.arc(anchorRef.current.x, anchorRef.current.y, 5, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(200,165,90,0.7)'
-    ctx.fill()
-  }, [])
-
-  const loop = useCallback(() => {
-    simulate()
-    draw()
-    rafRef.current = requestAnimationFrame(loop)
-  }, [simulate, draw])
-
-  useEffect(() => {
-    initRope()
-    const observer = new ResizeObserver(() => initRope())
-    if (containerRef.current) observer.observe(containerRef.current)
-    return () => observer.disconnect()
-  }, [initRope])
-
-  useEffect(() => {
-    if (!initialized) return
-    rafRef.current = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(rafRef.current)
-  }, [initialized, loop])
-
-  // Drag handlers
-  const getEventPos = (e: MouseEvent | TouchEvent): Vec2 => {
-    const container = containerRef.current
-    if (!container) return { x: 0, y: 0 }
-    const rect = container.getBoundingClientRect()
-    const raw = 'touches' in e ? e.touches[0] : e
-    return {
-      x: raw.clientX - rect.left,
-      y: raw.clientY - rect.top,
+  // constraints
+  for (let it = 0; it < ITERATIONS; it++) {
+    segs[0].pos = { ...anchor }
+    segs[segs.length - 1].pos = { ...tip }
+    for (let i = 0; i < segs.length - 1; i++) {
+      const a = segs[i]
+      const b = segs[i + 1]
+      const dx = b.pos.x - a.pos.x
+      const dy = b.pos.y - a.pos.y
+      const dist = Math.hypot(dx, dy) || 0.001
+      const diff = (dist - SEG_LEN) / dist
+      const ox = dx * diff * 0.5
+      const oy = dy * diff * 0.5
+      if (i !== 0) { a.pos.x += ox; a.pos.y += oy }
+      if (i !== segs.length - 2) { b.pos.x -= ox; b.pos.y -= oy }
     }
   }
+}
 
-  const onPointerDown = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    isDraggingRef.current = true
-    const container = containerRef.current
-    if (!container) return
-    const rect = container.getBoundingClientRect()
-    const raw = 'touches' in e ? e.touches[0] : e
-    dragOffsetRef.current = {
-      x: raw.clientX - rect.left - badgePosRef.current.x,
-      y: raw.clientY - rect.top - badgePosRef.current.y,
-    }
-    e.preventDefault()
-  }, [])
+function drawRope(ctx: CanvasRenderingContext2D, segs: Seg[], dpr: number) {
+  if (segs.length < 2) return
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
 
+  ctx.save()
+  ctx.scale(dpr, dpr)
+
+  // shadow
+  ctx.beginPath()
+  ctx.moveTo(segs[0].pos.x, segs[0].pos.y)
+  for (let i = 1; i < segs.length; i++) {
+    const mx = (segs[i].pos.x + segs[i - 1].pos.x) / 2
+    const my = (segs[i].pos.y + segs[i - 1].pos.y) / 2
+    ctx.quadraticCurveTo(segs[i - 1].pos.x, segs[i - 1].pos.y, mx, my)
+  }
+  ctx.strokeStyle = 'rgba(0,0,0,0.28)'
+  ctx.lineWidth = 5
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.stroke()
+
+  // rope
+  const grad = ctx.createLinearGradient(
+    segs[0].pos.x, segs[0].pos.y,
+    segs[segs.length - 1].pos.x, segs[segs.length - 1].pos.y,
+  )
+  grad.addColorStop(0, '#c8a55a')
+  grad.addColorStop(0.5, '#e6cf98')
+  grad.addColorStop(1, '#c8a55a')
+
+  ctx.beginPath()
+  ctx.moveTo(segs[0].pos.x, segs[0].pos.y)
+  for (let i = 1; i < segs.length; i++) {
+    const mx = (segs[i].pos.x + segs[i - 1].pos.x) / 2
+    const my = (segs[i].pos.y + segs[i - 1].pos.y) / 2
+    ctx.quadraticCurveTo(segs[i - 1].pos.x, segs[i - 1].pos.y, mx, my)
+  }
+  ctx.strokeStyle = grad
+  ctx.lineWidth = 3
+  ctx.stroke()
+
+  ctx.restore()
+}
+
+// ── component ─────────────────────────────────────────────────────────────────
+
+const CARD_W = 200
+const CARD_H = 280
+
+export default function Lanyard({ maxAngle = 20 }: { maxAngle?: number }) {
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const segsRef = useRef<Seg[]>([])
+  const anchorRef = useRef<V2>({ x: 0, y: 0 })
+  const rafRef = useRef<number>(0)
+
+  // card position (spring)
+  const [spring, api] = useSpring(() => ({
+    x: 0,
+    y: 0,
+    rotateX: 0,
+    rotateZ: 0,
+    config: { mass: 1.2, tension: 200, friction: 26 },
+  }))
+
+  const [ready, setReady] = useState(false)
+
+  // init
   useEffect(() => {
-    const onMove = (e: MouseEvent | TouchEvent) => {
-      if (!isDraggingRef.current) return
-      const pos = getEventPos(e)
-      const newPos = {
-        x: pos.x - dragOffsetRef.current.x,
-        y: pos.y - dragOffsetRef.current.y,
-      }
-      badgePosRef.current = newPos
-      setBadgePos({ ...newPos })
-    }
+    const wrap = wrapRef.current
+    if (!wrap) return
+    const { width } = wrap.getBoundingClientRect()
+    const ax = width / 2
+    const ay = 0
+    anchorRef.current = { x: ax, y: ay }
+    const startX = ax - CARD_W / 2
+    const startY = SEG * SEG_LEN + 10
+    segsRef.current = makeRope(ax, ay)
+    api.set({ x: startX, y: startY })
+    setReady(true)
+  }, [api])
 
-    const onUp = () => {
-      isDraggingRef.current = false
-    }
+  // animation loop
+  useEffect(() => {
+    if (!ready) return
+    const canvas = canvasRef.current!
+    const dpr = window.devicePixelRatio || 1
 
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    window.addEventListener('touchmove', onMove, { passive: false })
-    window.addEventListener('touchend', onUp)
+    function resize() {
+      const wrap = wrapRef.current
+      if (!wrap || !canvas) return
+      const { width, height } = wrap.getBoundingClientRect()
+      canvas.width = width * dpr
+      canvas.height = height * dpr
+      canvas.style.width = `${width}px`
+      canvas.style.height = `${height}px`
+    }
+    resize()
+    const ro = new ResizeObserver(resize)
+    if (wrapRef.current) ro.observe(wrapRef.current)
+
+    function tick() {
+      const ctx = canvas.getContext('2d')!
+      const { x, y } = spring
+      const cx = (x.get() as number) + CARD_W / 2
+      const cy = (y.get() as number)
+      stepRope(segsRef.current, anchorRef.current, { x: cx, y: cy })
+      drawRope(ctx, segsRef.current, dpr)
+      rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
     return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-      window.removeEventListener('touchmove', onMove)
-      window.removeEventListener('touchend', onUp)
+      cancelAnimationFrame(rafRef.current)
+      ro.disconnect()
     }
-  }, [])
+  }, [ready, spring])
+
+  // drag
+  const bind = useDrag(
+    ({ offset: [ox, oy], velocity: [vx, vy], last }) => {
+      const clampedRot = Math.max(-maxAngle, Math.min(maxAngle, ox * 0.08))
+      api.start({
+        x: ox,
+        y: oy,
+        rotateZ: last ? 0 : clampedRot,
+        rotateX: last ? 0 : -vy * 4,
+        config: last
+          ? { tension: 200, friction: 26 }
+          : { tension: 800, friction: 40 },
+      })
+    },
+    {
+      from: () => [spring.x.get() as number, spring.y.get() as number],
+      filterTaps: true,
+      bounds: wrapRef,
+    },
+  )
 
   return (
-    <div
-      ref={containerRef}
-      className="relative h-[420px] w-full select-none overflow-hidden"
-      style={{ touchAction: 'none' }}
-    >
-      <canvas ref={canvasRef} className="pointer-events-none absolute inset-0" />
-
-      {/* Anchor bracket */}
-      <div
-        className="absolute left-1/2 top-0 -translate-x-1/2"
-        style={{ zIndex: 2 }}
-      >
-        <div className="h-3 w-8 rounded-b-md border-x border-b border-[#c8a55a]/50 bg-[rgba(200,165,90,0.12)]" />
+    <div ref={wrapRef} className="relative h-[480px] w-full select-none" style={{ touchAction: 'none' }}>
+      {/* anchor pin */}
+      <div className="absolute left-1/2 top-0 z-10 -translate-x-1/2">
+        <div className="h-3.5 w-10 rounded-b-lg border-x border-b border-[#c8a55a]/60 bg-[rgba(200,165,90,0.15)]" />
       </div>
 
-      {/* Badge */}
-      {initialized && (
-        <div
-          ref={badgeRef}
-          onMouseDown={onPointerDown}
-          onTouchStart={onPointerDown}
-          className="absolute cursor-grab active:cursor-grabbing"
+      {/* rope canvas */}
+      <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 z-0" />
+
+      {/* card */}
+      {ready && (
+        <animated.div
+          {...bind()}
           style={{
-            left: badgePos.x,
-            top: badgePos.y,
-            zIndex: 10,
-            userSelect: 'none',
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            x: spring.x,
+            y: spring.y,
+            rotateX: spring.rotateX,
+            rotateZ: spring.rotateZ,
+            width: CARD_W,
+            cursor: 'grab',
+            zIndex: 20,
+            transformStyle: 'preserve-3d',
+            perspective: 800,
           }}
+          className="active:cursor-grabbing"
         >
-          <div
-            className="relative w-[120px] overflow-hidden rounded-2xl border border-[#c8a55a]/22 shadow-[0_8px_40px_rgba(0,0,0,0.52),0_0_0_1px_rgba(200,165,90,0.08)]"
-            style={{
-              background: 'linear-gradient(160deg, rgba(18,21,30,0.97) 0%, rgba(12,14,20,0.99) 100%)',
-            }}
-          >
-            {/* Top stripe */}
+          {/* lanyard strap (short bit above card) */}
+          <div className="mx-auto mb-0 w-10 overflow-hidden">
             <div
-              className="h-2 w-full"
+              className="h-8 w-full"
               style={{
-                background: 'linear-gradient(90deg, #c8a55a 0%, #e6cf98 50%, #c8a55a 100%)',
+                background: 'linear-gradient(180deg, rgba(200,165,90,0.0) 0%, rgba(200,165,90,0.18) 100%)',
+                borderLeft: '1px solid rgba(200,165,90,0.25)',
+                borderRight: '1px solid rgba(200,165,90,0.25)',
               }}
             />
+          </div>
 
-            <div className="px-3 pb-3 pt-2.5">
-              {/* Logo area */}
-              <div className="mb-2 flex items-center gap-1.5">
+          {/* badge card */}
+          <div
+            className="overflow-hidden rounded-2xl border border-[#c8a55a]/20"
+            style={{
+              background: 'linear-gradient(165deg, #12151e 0%, #0b0d14 100%)',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(200,165,90,0.06)',
+            }}
+          >
+            {/* top gold bar */}
+            <div
+              className="h-2.5 w-full"
+              style={{ background: 'linear-gradient(90deg, #b8903e 0%, #e6cf98 50%, #b8903e 100%)' }}
+            />
+
+            <div className="px-4 pb-5 pt-4">
+              {/* university logo row */}
+              <div className="flex items-center gap-2">
                 <div
-                  className="flex h-6 w-6 items-center justify-center rounded-lg text-[9px] font-bold"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl text-[10px] font-black tracking-tight text-[#e6cf98]"
                   style={{
-                    background: 'linear-gradient(135deg, rgba(200,165,90,0.2) 0%, rgba(200,165,90,0.08) 100%)',
-                    border: '1px solid rgba(200,165,90,0.3)',
-                    color: '#e6cf98',
+                    background: 'linear-gradient(135deg, rgba(200,165,90,0.22) 0%, rgba(200,165,90,0.06) 100%)',
+                    border: '1px solid rgba(200,165,90,0.35)',
                   }}
                 >
-                  EM
+                  UNSW
                 </div>
                 <div>
-                  <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-[#c8a55a]">Exam</p>
-                  <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-[#c8a55a]">Master</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#c8a55a]">University of</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#c8a55a]">New South Wales</p>
                 </div>
               </div>
 
-              {/* Divider */}
-              <div className="mb-2 h-px bg-gradient-to-r from-transparent via-[#c8a55a]/20 to-transparent" />
+              {/* divider */}
+              <div className="my-3 h-px bg-gradient-to-r from-transparent via-[#c8a55a]/25 to-transparent" />
 
-              {/* Name */}
-              <p className="text-[11px] font-semibold leading-tight tracking-tight text-white/90">UNSW</p>
-              <p className="text-[10px] font-medium text-[#c8a55a]">留学生备考助手</p>
-
-              {/* Info rows */}
-              <div className="mt-2 space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[8px] uppercase tracking-[0.1em] text-white/30">课程</span>
-                  <span className="text-[8px] font-medium text-white/60">COMP9517</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[8px] uppercase tracking-[0.1em] text-white/30">引擎</span>
-                  <span className="text-[8px] font-medium text-white/60">GPT+Gemini</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[8px] uppercase tracking-[0.1em] text-white/30">状态</span>
-                  <span className="inline-flex items-center gap-1 text-[8px] font-medium text-emerald-400">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                    在线
-                  </span>
-                </div>
+              {/* avatar placeholder */}
+              <div
+                className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(200,165,90,0.14) 0%, rgba(200,165,90,0.04) 100%)',
+                  border: '1px solid rgba(200,165,90,0.2)',
+                }}
+              >
+                <span className="text-2xl font-bold text-[#c8a55a]/60">EM</span>
               </div>
 
-              {/* Bottom barcode-style strip */}
-              <div className="mt-2.5 flex gap-px overflow-hidden rounded-sm">
-                {Array.from({ length: 28 }, (_, i) => (
+              {/* name */}
+              <p className="text-center text-[15px] font-semibold tracking-tight text-white/92">Exam Master</p>
+              <p className="mt-0.5 text-center text-[11px] font-medium text-[#c8a55a]">AI 备考助手</p>
+
+              {/* divider */}
+              <div className="my-3 h-px bg-gradient-to-r from-transparent via-white/8 to-transparent" />
+
+              {/* info rows */}
+              <div className="space-y-1.5">
+                {[
+                  { label: 'SCHOOL', value: 'CSE / EE / Commerce' },
+                  { label: 'ENGINE', value: 'GPT-4o + Gemini' },
+                  { label: 'STATUS', value: '● Online', green: true },
+                ].map(({ label, value, green }) => (
+                  <div key={label} className="flex items-center justify-between">
+                    <span className="text-[9px] uppercase tracking-[0.14em] text-white/28">{label}</span>
+                    <span className={`text-[10px] font-medium ${green ? 'text-emerald-400' : 'text-white/55'}`}>
+                      {value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* barcode */}
+              <div className="mt-3.5 flex h-6 gap-px overflow-hidden rounded-sm">
+                {Array.from({ length: 34 }, (_, i) => (
                   <div
                     key={i}
                     className="flex-1"
                     style={{
-                      height: i % 3 === 0 ? '10px' : i % 5 === 0 ? '6px' : '8px',
                       background:
-                        i % 7 === 0
-                          ? 'rgba(200,165,90,0.5)'
-                          : i % 4 === 0
-                            ? 'rgba(200,165,90,0.2)'
-                            : 'rgba(255,255,255,0.08)',
+                        i % 7 === 0 ? 'rgba(200,165,90,0.55)' :
+                        i % 4 === 0 ? 'rgba(200,165,90,0.22)' :
+                        'rgba(255,255,255,0.07)',
+                      height: i % 3 === 0 ? '100%' : i % 5 === 0 ? '70%' : '85%',
+                      alignSelf: 'flex-end',
                     }}
                   />
                 ))}
               </div>
+              <p className="mt-1 text-center text-[8px] tracking-[0.22em] text-white/20">
+                EXAMMASTER · UNSW · 2025
+              </p>
             </div>
+
+            {/* bottom gold bar */}
+            <div
+              className="h-1.5 w-full"
+              style={{ background: 'linear-gradient(90deg, #b8903e 0%, #e6cf98 50%, #b8903e 100%)' }}
+            />
           </div>
-        </div>
+        </animated.div>
       )}
     </div>
   )
