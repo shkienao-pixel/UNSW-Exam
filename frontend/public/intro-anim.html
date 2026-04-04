@@ -56,6 +56,7 @@
 </head>
 <body>
 <div id="stage">
+  <canvas id="liquidEther" style="position:absolute;inset:0;width:100%;height:100%;z-index:2;mix-blend-mode:screen;pointer-events:none"></canvas>
   <div class="heroPhotoWrap" id="heroPhotoWrap">
     <img class="heroPhoto" id="heroPhoto" src="./b7830f310f59c9f898266efbffdde304.jpg" alt="hero"/>
     <div class="heroPhotoShade"></div>
@@ -435,6 +436,96 @@ function frameLoop(ts){
 }
 requestAnimationFrame(frameLoop);
 window.addEventListener('resize', ()=>location.reload());
+
+// ── Liquid Ether WebGL overlay ────────────────────────────────────────────
+(function(){
+  const cv = document.getElementById('liquidEther');
+  const gl = cv.getContext('webgl', {alpha:false});
+  if(!gl) return;
+
+  const vert = `
+    attribute vec2 p;
+    void main(){gl_Position=vec4(p,0.,1.);}
+  `;
+  const frag = `
+    precision highp float;
+    uniform float t;
+    uniform vec2  r;
+
+    vec2 h(vec2 p){
+      p=vec2(dot(p,vec2(127.1,311.7)),dot(p,vec2(269.5,183.3)));
+      return fract(sin(p)*43758.5453)*2.-1.;
+    }
+    float n(vec2 p){
+      vec2 i=floor(p),f=fract(p),u=f*f*(3.-2.*f);
+      return mix(mix(dot(h(i),f),dot(h(i+vec2(1,0)),f-vec2(1,0)),u.x),
+                 mix(dot(h(i+vec2(0,1)),f-vec2(0,1)),dot(h(i+vec2(1,1)),f-vec2(1,1)),u.x),u.y);
+    }
+    float fbm(vec2 p){
+      float v=0.,a=.5;
+      for(int i=0;i<5;i++){v+=a*n(p);p=p*2.1+vec2(3.1,1.7);a*=.5;}
+      return v;
+    }
+    void main(){
+      vec2 uv=gl_FragCoord.xy/r;
+      float ar=r.x/r.y;
+      uv.x*=ar;
+      float s=t*.065;
+      vec2 q=vec2(fbm(uv+s*.5),fbm(uv+vec2(5.2,1.3)));
+      vec2 rr=vec2(fbm(uv+4.*q+vec2(1.7,9.2)+s*.15),fbm(uv+4.*q+vec2(8.3,2.8)+s*.13));
+      float f=clamp(fbm(uv+4.*rr+s*.05)*.5+.5,0.,1.);
+
+      /* screen 模式: 黑=透明，颜色叠亮背景，不遮挡原有画面 */
+      vec3 blue  =vec3(.03,.08,.52);
+      vec3 purple=vec3(.14,.03,.38);
+      vec3 amber =vec3(.42,.26,.04);  /* #c8a55a 系 */
+
+      vec3 col=mix(purple,blue,clamp(f*1.7,0.,1.));
+      col=mix(col,amber,clamp(length(rr)*.48-.06,0.,1.));
+
+      /* 边缘 vignette，让特效集中在中心 */
+      vec2 cv2=uv-vec2(ar*.5,.5);
+      col*=1.-smoothstep(.28,1.05,dot(cv2,cv2)*1.4);
+
+      gl_FragColor=vec4(col*.68,1.);
+    }
+  `;
+
+  function sh(type,src){
+    const s=gl.createShader(type);
+    gl.shaderSource(s,src);gl.compileShader(s);return s;
+  }
+  const prog=gl.createProgram();
+  gl.attachShader(prog,sh(gl.VERTEX_SHADER,vert));
+  gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,frag));
+  gl.linkProgram(prog);gl.useProgram(prog);
+
+  const buf=gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+  const loc=gl.getAttribLocation(prog,'p');
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
+
+  const uT=gl.getUniformLocation(prog,'t');
+  const uR=gl.getUniformLocation(prog,'r');
+  const t0=performance.now();
+
+  function resize(){
+    const w=Math.round(cv.clientWidth*devicePixelRatio);
+    const h=Math.round(cv.clientHeight*devicePixelRatio);
+    if(w>0&&h>0&&(cv.width!==w||cv.height!==h)){cv.width=w;cv.height=h;gl.viewport(0,0,w,h);}
+  }
+
+  function draw(){
+    resize();
+    gl.uniform1f(uT,(performance.now()-t0)*.001);
+    gl.uniform2f(uR,cv.width,cv.height);
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+})();
 </script>
 </body>
 </html>
