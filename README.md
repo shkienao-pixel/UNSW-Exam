@@ -49,6 +49,20 @@
 
 ## Changelog
 
+### v2.0.0 (2026-04-05)
+
+**安全加固 & Bug Fix：**
+
+- **LLM API Key 加密存储** — 新增 `key_encryption.py`（Fernet 对称加密），API key 落库时自动加密（`enc:` 前缀），读取时解密；旧明文行向后兼容；需在 VPS `.env` 配置 `API_KEY_ENCRYPTION_KEY`
+- **API Key 切换原子性** — `create_api_key` 改为先 INSERT 新 key 再停用旧 key（排除新 id）；`activate_api_key` 改为先激活目标再停用其他；任意步骤失败时线上始终存在至少一条 active key
+- **手动补发幂等性** — `mark-paid` 改用 `UPDATE WHERE status='pending'` 原子操作，检查受影响行数，消除并发 TOCTOU 竞态双发积分问题
+- **用户列表分页** — `admin_list_users` 和删除时重复账号清理均改为 while 循环翻页（`per_page=1000`），用户量大时不再漏看/漏删
+- **新增 Migration 036** — `credit_transactions(user_id, type, ref_id)` 部分唯一约束（`WHERE type='purchase'`），数据库层防止同一订单二次入账
+- **访客模式修复** — VPS `.env` 补充 `GUEST_EMAIL` / `GUEST_PASSWORD`，Supabase 访客账号密码同步重置，访客登录恢复正常
+- **手动补发错误提示** — 将 `alert()` 替换为页面内 `ErrorBox` 组件展示，错误信息可关闭，与整体 UI 风格一致
+
+---
+
 ### v1.9.0 (2026-04-05)
 
 **管理端 UI 全面升级：**
