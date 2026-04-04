@@ -49,6 +49,17 @@
 
 ## Changelog
 
+### v1.9.0 (2026-04-05)
+
+**管理端 UI 全面升级：**
+- **视觉对齐用户端** — 背景统一 `#050608` + radial-gradient 光晕，所有 inline style 替换为 Tailwind 类
+- **金色主题统一** — 从 `#FFD700` 改为与用户端一致的 `#c8a55a` / `#e6cf98`
+- **登录页重构** — `backdrop-blur-2xl` 毛玻璃卡片，与用户端 auth 页风格一致
+- **Tab 导航** — pill 样式激活态，去掉底部指示线，hover 用 Tailwind 类替代 JS handler
+- **共享组件** — `ActionBtn`、`DeleteBtn`、`ErrorBox`、`Toast`、`Empty` 全部重写，保持 API 兼容
+
+---
+
 ### v1.8.0 (2026-04-05)
 
 **UI 动画升级：**
