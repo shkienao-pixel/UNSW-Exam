@@ -47,14 +47,14 @@
   }
   .finalTagline::after{content:none}
   .decrypt-char{display:inline;transition:color .08s}
-  .circular-wrap{display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;flex:0 0 52px;animation:circSpin 10s linear infinite}
-  .circular-wrap svg{width:100%;height:100%;overflow:visible}
-  .circular-wrap text{font-size:14.5px;fill:rgba(255,255,255,.72);font-family:"Futura PT","Avenir Next","Helvetica Neue",Arial,sans-serif;letter-spacing:2px}
+  .circular-badge{position:absolute;left:0;top:0;width:90px;height:90px;opacity:0;pointer-events:none;z-index:7;transform-origin:center center}
+  .circular-badge svg{width:100%;height:100%;overflow:visible;animation:circSpin 10s linear infinite;transform-origin:50% 50%}
+  .circular-badge text{font-size:13px;fill:rgba(255,255,255,.80);font-family:"Futura PT","Avenir Next","Helvetica Neue",Arial,sans-serif;letter-spacing:1.8px}
   @keyframes circSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
   @media (max-width: 900px){
     .finalTagline{font-size:clamp(16px,4.2vw,23px);letter-spacing:.09em;padding:7px 12px 8px 10px;gap:8px}
-    .circular-wrap{width:42px;height:42px;flex:0 0 42px}
-    .circular-wrap text{font-size:13px}
+    .circular-badge{width:70px;height:70px}
+    .circular-badge text{font-size:11px}
   }
 </style>
 </head>
@@ -66,14 +66,14 @@
   </div>
   <div class="finalTagline" id="finalTagline">
     <span id="decryptText"></span>
-    <div class="circular-wrap">
-      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <path id="cp" d="M 50,50 m-38,0 a 38,38 0 1,1 76,0 a 38,38 0 1,1 -76,0"/>
-        </defs>
-        <text><textPath href="#cp">EXAM • MASTER • EXAM • MASTER •</textPath></text>
-      </svg>
-    </div>
+  </div>
+  <div class="circular-badge" id="circularBadge">
+    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <path id="cp" d="M 50,50 m-38,0 a 38,38 0 1,1 76,0 a 38,38 0 1,1 -76,0"/>
+      </defs>
+      <text><textPath href="#cp">EXAM • MASTER • EXAM • MASTER •</textPath></text>
+    </svg>
   </div>
   <div class="vignette"></div>
   <div class="frame" id="frame">
@@ -89,6 +89,7 @@ const heroPhotoWrap = document.getElementById('heroPhotoWrap');
 const heroPhoto = document.getElementById('heroPhoto');
 const finalTagline = document.getElementById('finalTagline');
 const decryptText = document.getElementById('decryptText');
+const circularBadge = document.getElementById('circularBadge');
 const frame = document.getElementById('frame');
 
 const DECRYPT_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*<>?/\\|[]{}';
@@ -365,6 +366,19 @@ function renderBall(t){
   return {energy: 1, red, x, y, targetX:tx, targetY:ty, vx, vy, s};
 }
 
+function renderCircularBadge(t){
+  const start = SPARKLE_START;
+  const target = starTarget();
+  const size = 90;
+  circularBadge.style.left = `${target.x - size/2}px`;
+  circularBadge.style.top = `${target.y - size/2}px`;
+  const p = clamp((t - start) / 1000, 0, 1);
+  if(p <= 0){ circularBadge.style.opacity = '0'; circularBadge.style.transform = 'scale(0.18)'; return; }
+  const e = easeOutBack(p);
+  circularBadge.style.opacity = String(Math.min(1, p * 1.5));
+  circularBadge.style.transform = `scale(${lerp(0.18, 1, e)})`;
+}
+
 function renderSparkle(t, ballState){
   const start = SPARKLE_START;
   const spinStart = start - 760;
@@ -443,6 +457,7 @@ function frameLoop(ts){
   const ballState = renderBall(t);
   renderHeroPhoto(t);
   renderFinalTagline(t);
+  renderCircularBadge(t);
   energy = Math.max(energy, .85);
   redEnergy = Math.max(redEnergy, ballState.red||0);
 
