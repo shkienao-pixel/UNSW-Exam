@@ -23,6 +23,7 @@ uniform float u_roundness;
 uniform float u_borderSize;
 uniform float u_circleSize;
 uniform float u_circleEdge;
+uniform vec3 u_color;
 
 #ifndef PI
 #define PI 3.1415926535897932384626433832795
@@ -90,10 +91,15 @@ void main() {
     float sdf = sdRoundRect(st, shapeRect, u_roundness);
     float alpha = strokeAA(sdf, 0.0, u_borderSize, sdfCircle) * 4.0;
 
-    vec3 color = vec3(1.0);
-    gl_FragColor = vec4(color.rgb, alpha);
+    gl_FragColor = vec4(u_color, alpha);
 }
 `
+
+function parseCssColor(css: string): [number, number, number] {
+  const m = css.match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/)
+  if (m) return [+m[1] / 255, +m[2] / 255, +m[3] / 255]
+  return [1, 1, 1]
+}
 
 export interface ShapeBlurProps {
   className?: string
@@ -142,6 +148,7 @@ export default function ShapeBlur({
     renderer.setClearColor(0x000000, 0)
     mount.appendChild(renderer.domElement)
 
+    const [cr, cg, cb] = parseCssColor(color)
     const material = new THREE.ShaderMaterial({
       vertexShader,
       fragmentShader,
@@ -154,6 +161,7 @@ export default function ShapeBlur({
         u_borderSize: { value: borderSize },
         u_circleSize: { value: circleSize },
         u_circleEdge: { value: circleEdge },
+        u_color:      { value: new THREE.Vector3(cr, cg, cb) },
       },
       transparent: true,
     })
@@ -210,13 +218,13 @@ export default function ShapeBlur({
       renderer.dispose()
       renderer.forceContextLoss()
     }
-  }, [shapeSize, roundness, borderSize, circleSize, circleEdge])
+  }, [shapeSize, roundness, borderSize, circleSize, circleEdge, color])
 
   return (
     <div
       ref={mountRef}
       className={className}
-      style={{ width: '100%', height: '100%', color }}
+      style={{ width: '100%', height: '100%' }}
     />
   )
 }

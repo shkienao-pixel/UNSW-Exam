@@ -3,7 +3,7 @@ import type {
   GenerateBody, AskResponse, ExplainImageResponse,
   ReviewSettings, ReviewNodeProgress, ReviewNodeUpdate, TodayPlanResult,
   DocType, Feedback, FeedbackStatus, CourseContentStatus,
-  ExamQuestion, PastExamFile, MockSession, GradeResult, ExamQuestionsResponse, StoredMistake, UserNote, FlashcardMistake,
+  ExamQuestion, PastExamFile, MockSession, GradeResult, ExamQuestionsResponse, StoredMistake, FlashcardMistake,
 } from './types'
 
 export type StreamEvent =
@@ -518,28 +518,6 @@ export const api = {
         body: JSON.stringify({ content, course_id: courseId ?? null }),
       }),
 
-    // Legacy screenshot notes (kept for backwards compat)
-    upload: (imageFile: File, caption: string, courseId?: string): Promise<UserNote> => {
-      const form = new FormData()
-      form.append('image', imageFile)
-      form.append('caption', caption)
-      if (courseId) form.append('course_id', courseId)
-      return req<UserNote>('/notes', { method: 'POST', body: form })
-    },
-
-    list: (courseId?: string) => {
-      const qs = courseId ? `?course_id=${courseId}` : ''
-      return req<UserNote[]>(`/notes${qs}`)
-    },
-
-    updateCaption: (noteId: number, caption: string) =>
-      req<{ ok: boolean }>(`/notes/${noteId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ caption }),
-      }),
-
-    delete: (noteId: number) =>
-      req<{ ok: boolean }>(`/notes/${noteId}`, { method: 'DELETE' }),
   },
 
   flashcardMistakes: {
@@ -554,6 +532,11 @@ export const api = {
     list: (courseId: string, status?: string) => {
       const qs = status && status !== 'all' ? `?status=${status}` : ''
       return req<FlashcardMistake[]>(`/courses/${courseId}/flashcard-mistakes${qs}`)
+    },
+
+    listAll: (status?: string) => {
+      const qs = status && status !== 'all' ? `?status=${status}` : ''
+      return req<FlashcardMistake[]>(`/flashcard-mistakes${qs}`)
     },
 
     update: (courseId: string, id: number, mistakeStatus: 'active' | 'mastered') =>

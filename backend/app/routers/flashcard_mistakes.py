@@ -56,6 +56,23 @@ def add_mistake(
     return result[0] if result else row
 
 
+@router.get("/flashcard-mistakes")
+def list_all_mistakes(
+    status: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """List all flashcard mistakes for the current user across all courses."""
+    q = (
+        supabase.table("flashcard_mistakes")
+        .select("*")
+        .eq("user_id", current_user["id"])
+    )
+    if status and status != "all":
+        q = q.eq("mistake_status", status)
+    return q.order("created_at", desc=True).execute().data or []
+
+
 @router.get("/courses/{course_id}/flashcard-mistakes")
 def list_mistakes(
     course_id: str,

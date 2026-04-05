@@ -28,7 +28,7 @@ export function useMistakesStore(courseId?: string): MistakesStore {
     try {
       const [exam, fc] = await Promise.allSettled([
         courseId ? api.exam.listMistakes(courseId) : api.exam.listAllMistakes(),
-        courseId ? api.flashcardMistakes.list(courseId) : Promise.resolve([]),
+        courseId ? api.flashcardMistakes.list(courseId) : api.flashcardMistakes.listAll(),
       ])
       if (exam.status === 'fulfilled') setExamMistakes(exam.value)
       if (fc.status === 'fulfilled') setFcMistakes(fc.value)
