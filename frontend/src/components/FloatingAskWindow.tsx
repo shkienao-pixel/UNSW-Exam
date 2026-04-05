@@ -286,7 +286,7 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
           loop
           autoplay={false}
           // brightness(0) 先变纯黑，invert(1) 再变纯白，色调干净不偏色
-          style={{ width: '100%', height: '100%', filter: 'brightness(0) invert(1)' }}
+          style={{ width: '100%', height: '100%', filter: 'grayscale(1) invert(1)' }}
         />
         {!isLoading && unreadCount > 0 && (
           <span style={{
