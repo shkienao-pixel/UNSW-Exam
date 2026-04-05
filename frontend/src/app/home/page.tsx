@@ -20,6 +20,15 @@ export default function HomePage() {
     return () => window.clearTimeout(timer)
   }, [])
 
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      const iframe = document.getElementById('intro-iframe') as HTMLIFrameElement | null
+      iframe?.contentWindow?.postMessage({ type: 'mousemove', x: e.clientX, y: e.clientY }, '*')
+    }
+    window.addEventListener('mousemove', onMove)
+    return () => window.removeEventListener('mousemove', onMove)
+  }, [])
+
   function handleExplore() {
     sessionStorage.setItem('intro_visited', '1')
     router.push('/')
@@ -57,6 +66,7 @@ export default function HomePage() {
         }}
       />
       <iframe
+        id="intro-iframe"
         src="/intro-anim.html"
         style={{
           position: 'absolute',

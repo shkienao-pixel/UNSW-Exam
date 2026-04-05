@@ -96,6 +96,9 @@ const frame = document.getElementById('frame');
 
 let mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
 window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+window.addEventListener('message', e => {
+  if(e.data && e.data.type === 'mousemove'){ mouse.x = e.data.x; mouse.y = e.data.y; }
+});
 
 function getAttrP(d, maxD, minV, maxV){
   const val = maxV - Math.abs((maxV * d) / maxD);
