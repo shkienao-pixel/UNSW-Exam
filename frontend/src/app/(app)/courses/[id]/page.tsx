@@ -407,7 +407,12 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
   // Show generating state if AI is running and there are no flashcards yet
   if (activeJob && outputs.length === 0) {
     return (
-      <CubesLoader className="py-16 pb-32" />
+      <GeneratingState
+        label={t('gen_flashcards')}
+        timeHint={activeJob.timeHint}
+        progress={activeJob.progress}
+        message={activeJob.message}
+      />
     )
   }
 
