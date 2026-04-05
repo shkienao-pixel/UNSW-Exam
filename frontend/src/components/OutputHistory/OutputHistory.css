@@ -21,7 +21,7 @@
 }
 
 .oh-item {
-  opacity: 0; /* initial; GSAP will animate to 1 */
+  opacity: 1;
 }
 
 .oh-btn {

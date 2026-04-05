@@ -33,7 +33,7 @@ export default function OutputHistory({ outputs, selectedId, onSelect }: Props) 
         duration: 0.45,
         ease: 'power3.out',
         stagger: { each: 0.07, from: 'start' },
-        clearProps: 'transform,opacity',
+        clearProps: 'transform',
       }
     )
 
