@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>UNSW EXAM MASTER Preview v6</title>
 <style>
+  @font-face{font-family:'Compressa VF';src:url('https://res.cloudinary.com/dr6lvwubh/raw/upload/v1529908256/CompressaPRO-GX.woff2');font-style:normal}
   html,body{margin:0;height:100%;background:transparent;overflow:hidden;font-family:Inter,Arial,"Microsoft YaHei",sans-serif}
   #stage{position:fixed;inset:0;background:transparent;overflow:hidden}
   .vignette{position:absolute;inset:0;background:radial-gradient(circle at center, rgba(255,255,255,.008), rgba(0,0,0,.55) 64%)}
@@ -92,6 +93,14 @@ const finalTagline = document.getElementById('finalTagline');
 const decryptText = document.getElementById('decryptText');
 const circularBadge = document.getElementById('circularBadge');
 const frame = document.getElementById('frame');
+
+let mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+
+function getAttrP(d, maxD, minV, maxV){
+  const val = maxV - Math.abs((maxV * d) / maxD);
+  return Math.max(minV, val + minV);
+}
 
 const DECRYPT_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*<>?/\\|[]{}';
 const DECRYPT_TARGET = '备考，从未如此清晰';
@@ -240,8 +249,12 @@ function spawnGuidedWord({word, start, build=1600, hold=900, fade=420, size, xRa
     el.style.fontSize = size + 'px';
     el.style.color = color;
     el.style.opacity = '0';
+    if(finalHold){
+      el.style.fontFamily = "'Compressa VF', Arial, sans-serif";
+      el.style.fontVariationSettings = "'wght' 800, 'wdth' 100, 'ital' 0";
+    }
     stage.appendChild(el);
-    entities.push({type:'letter', el, start:arrival, build:duration, hold, fade, finalHold, startX, startY, c1:controls.c1, c2:controls.c2, endX:cxEnd, endY:cyEnd, dir, pulse, red, scale0: ch===' ' ? 1 : rand(.72,.88), rot0: rand(-8,8), side});
+    entities.push({type:'letter', el, start:arrival, build:duration, hold, fade, finalHold, startX, startY, c1:controls.c1, c2:controls.c2, endX:cxEnd, endY:cyEnd, dir, pulse, red, scale0: ch===' ' ? 1 : rand(.72,.88), rot0: rand(-8,8), side, pressureScale:1});
   });
 
   const ballControls = createArcControls({x:anchor.x + soft.x*1.95, y:anchor.y + soft.y*1.95}, {x:endAnchor.x, y:endAnchor.y}, dir);
@@ -295,7 +308,8 @@ function renderLetter(o,t){
     glow = pulse ? .95*(.5+.5*Math.sin(t/92)**2) : .16;
   }
   el.style.opacity = op;
-  el.style.transform = `translate(${x}px,${y}px) translate(-50%,-50%) rotate(${rot}deg) scale(${scale})`;
+  const ps = (finalHold && o.pressureScale) ? o.pressureScale : 1;
+  el.style.transform = `translate(${x}px,${y}px) translate(-50%,-50%) rotate(${rot}deg) scale(${scale}, ${scale * ps})`;
   el.style.filter = pulse || red
     ? `drop-shadow(0 0 ${8+glow*8}px rgba(255,80,80,.95)) drop-shadow(0 0 ${18+glow*12}px rgba(255,40,40,.35))`
     : `drop-shadow(0 0 ${3+glow*3}px rgba(255,255,255,.26))`;
@@ -369,6 +383,26 @@ function renderBall(t){
   ball.style.filter = 'none';
   ball.style.transform = `translate(${x}px,${y}px) translate(-50%,-50%) scale(${s*sx},${s*sy})`;
   return {energy: 1, red, x, y, targetX:tx, targetY:ty, vx, vy, s};
+}
+
+const PRESSURE_SETTLE = 7800; // ms — after all EXAM MASTER letters fully settled
+function renderTextPressure(t){
+  if(t < PRESSURE_SETTLE) return;
+  const MAX_D = 320;
+  entities.forEach(o => {
+    if(!o.finalHold || !o.el) return;
+    const rect = o.el.getBoundingClientRect();
+    const cx = rect.x + rect.width / 2;
+    const cy = rect.y + rect.height / 2;
+    const dx = mouse.x - cx;
+    const dy = mouse.y - cy;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    const wght = Math.floor(getAttrP(d, MAX_D, 100, 900));
+    const wdth = Math.floor(getAttrP(d, MAX_D, 5, 200));
+    const ital = getAttrP(d, MAX_D, 0, 1).toFixed(2);
+    o.pressureScale = 1 + getAttrP(d, MAX_D, 0, 0.48);
+    o.el.style.fontVariationSettings = `'wght' ${wght}, 'wdth' ${wdth}, 'ital' ${ital}`;
+  });
 }
 
 function renderCircularBadge(t){
@@ -462,6 +496,7 @@ function frameLoop(ts){
   const ballState = renderBall(t);
   renderHeroPhoto(t);
   renderFinalTagline(t);
+  renderTextPressure(t);
   renderCircularBadge(t);
   energy = Math.max(energy, .85);
   redEnergy = Math.max(redEnergy, ballState.red||0);
