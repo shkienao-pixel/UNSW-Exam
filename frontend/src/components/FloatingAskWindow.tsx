@@ -1,13 +1,14 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import Lottie from 'lottie-react'
+import loaderCatData from '../../public/loader-cat.json'
 import {
   Check,
   Copy,
   ImagePlus,
   Layers3,
   Loader2,
-  MessageCircleMore,
   Minus,
   RefreshCw,
   Send,
@@ -68,7 +69,7 @@ function loadPos() {
   }
 }
 
-// ── AI Ask FAB (pill) ─────────────────────────────────────────────────────────
+// ── AI Ask FAB (cat Lottie) ───────────────────────────────────────────────────
 
 function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
   isLoading: boolean
@@ -78,76 +79,136 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
   onStop: (e: React.MouseEvent) => void
 }) {
   const [hovered, setHovered] = useState(false)
+  const lottieRef = useRef<any>(null)
+
+  useEffect(() => {
+    if (!lottieRef.current) return
+    if (hovered || isLoading) {
+      lottieRef.current.play()
+    } else {
+      lottieRef.current.stop()
+    }
+  }, [hovered, isLoading])
 
   return (
-    <button
-      onClick={onClick}
-      title="AI 问答"
+    <div
+      className="fixed z-50 select-none"
+      style={{ right: 24, bottom: 80 }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className="fixed z-50 select-none overflow-hidden"
-      style={{
-        right: 24, bottom: 94,
-        width: 182, height: 58,
-        borderRadius: 24,
-        border: `1px solid ${hovered ? 'rgba(200,165,90,0.55)' : isLoading ? 'rgba(255,215,0,0.45)' : 'rgba(255,255,255,0.16)'}`,
-        background: 'rgba(255,255,255,0.08)',
-        backdropFilter: 'blur(24px)',
-        WebkitBackdropFilter: 'blur(24px)',
-        cursor: 'pointer',
-        boxShadow: hovered
-          ? '0 0 0 1px rgba(200,165,90,0.3), 0 0 12px 3px rgba(200,165,90,0.2), 0 18px 40px rgba(0,0,0,0.18)'
-          : isLoading
-          ? '0 0 18px rgba(255,215,0,0.15), 0 10px 30px rgba(0,0,0,0.14)'
-          : '0 10px 30px rgba(0,0,0,0.12)',
-        transition: 'box-shadow 0.25s ease, border-color 0.25s ease',
-        transform: hovered ? 'translateY(-2px) scale(1.013)' : 'none',
-      }}
     >
+      {/* 游戏对话框气泡 */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: '100%',
+          left: '50%',
+          transform: `translateX(-50%) translateY(${hovered ? '-8px' : '4px'})`,
+          marginBottom: 6,
+          opacity: hovered ? 1 : 0,
+          pointerEvents: 'none',
+          transition: 'opacity 0.22s ease, transform 0.22s ease',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {/* 气泡主体 */}
+        <div style={{
+          background: 'rgba(255,255,255,0.97)',
+          border: '2px solid #1a1a2e',
+          borderRadius: 8,
+          padding: '6px 12px',
+          fontSize: 13,
+          fontWeight: 600,
+          color: '#1a1a2e',
+          boxShadow: '3px 3px 0px #1a1a2e',
+          letterSpacing: '0.02em',
+          fontFamily: 'monospace',
+        }}>
+          有什么问题要问我吗？
+        </div>
+        {/* 气泡三角 */}
+        <div style={{
+          position: 'absolute',
+          bottom: -9,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 0,
+          height: 0,
+          borderLeft: '7px solid transparent',
+          borderRight: '7px solid transparent',
+          borderTop: '9px solid #1a1a2e',
+        }} />
+        <div style={{
+          position: 'absolute',
+          bottom: -6,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 0,
+          height: 0,
+          borderLeft: '5px solid transparent',
+          borderRight: '5px solid transparent',
+          borderTop: '7px solid rgba(255,255,255,0.97)',
+        }} />
+      </div>
+
+      {/* 猫咪 Lottie 按钮 */}
+      <button
+        onClick={onClick}
+        title="AI 问答"
+        style={{
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          cursor: 'pointer',
+          display: 'block',
+          transform: hovered ? 'scale(1.08)' : 'scale(1)',
+          transition: 'transform 0.2s ease',
+          filter: hovered ? 'drop-shadow(0 0 10px rgba(255,200,80,0.5))' : 'none',
+        }}
+      >
+        <Lottie
+          lottieRef={lottieRef}
+          animationData={loaderCatData}
+          loop
+          autoplay={false}
+          style={{ width: 90, height: 90 }}
+        />
+        {/* unread badge */}
+        {!isLoading && unreadCount > 0 && (
+          <span style={{
+            position: 'absolute', top: 4, right: 4,
+            width: 18, height: 18, borderRadius: '50%',
+            background: '#ef4444', color: '#fff',
+            fontSize: 10, fontWeight: 700,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            border: '2px solid rgba(20,22,30,0.85)',
+          }}>
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </span>
+        )}
+        {/* stop button when loading */}
+        {isLoading && (
+          <button
+            onClick={onStop}
+            style={{
+              position: 'absolute', bottom: 4, right: 4,
+              width: 18, height: 18, borderRadius: '50%',
+              background: '#ef4444', color: '#fff',
+              border: '2px solid rgba(20,22,30,0.9)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Square size={8} />
+          </button>
+        )}
+      </button>
+
       {/* pulse hint */}
       {showHint && !isLoading && (
-        <span className="absolute inset-0 animate-ping"
-          style={{ borderRadius: 24, background: 'rgba(255,215,0,0.15)', animationDuration: '1.4s', pointerEvents: 'none' }} />
+        <span className="absolute inset-0 animate-ping rounded-full pointer-events-none"
+          style={{ background: 'rgba(255,215,0,0.2)', animationDuration: '1.6s' }} />
       )}
-      {/* tint layer */}
-      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, rgba(254,243,199,0.14) 0%, rgba(254,243,199,0.05) 40%, transparent 100%)', opacity: 0.9, pointerEvents: 'none' }} />
-      {/* orb */}
-      <div style={{ position: 'absolute', left: -24, top: '50%', transform: 'translateY(-50%)', width: 96, height: 96, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,215,0,0.2) 0%, transparent 70%)', filter: 'blur(8px)', pointerEvents: 'none' }} />
-      {/* glass sheen */}
-      <div style={{ position: 'absolute', inset: 1, borderRadius: 23, background: 'linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.05) 34%, rgba(255,255,255,0.02))', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', left: 8, right: 8, top: 2, height: 24, borderRadius: 999, background: 'rgba(255,255,255,0.18)', filter: 'blur(10px)', opacity: 0.9, pointerEvents: 'none' }} />
-      {/* content */}
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, height: '100%', padding: '0 14px' }}>
-        <div style={{ position: 'relative', width: 36, height: 36, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 14, border: '1px solid rgba(255,255,255,0.16)', background: 'rgba(255,255,255,0.10)', color: '#FFD700' }}>
-          <div style={{ position: 'absolute', left: 4, right: 4, top: 2, height: 12, borderRadius: 999, background: 'rgba(255,255,255,0.2)', filter: 'blur(4px)', pointerEvents: 'none' }} />
-          <div style={{ position: 'relative' }}>
-            {isLoading ? <Loader2 size={17} className="animate-spin" /> : <MessageCircleMore size={17} />}
-          </div>
-          {/* unread badge */}
-          {!isLoading && unreadCount > 0 && (
-            <span style={{ position: 'absolute', top: -6, right: -6, width: 16, height: 16, borderRadius: '50%', background: '#ef4444', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
-          )}
-          {/* stop button when loading */}
-          {isLoading && (
-            <button
-              onClick={onStop}
-              style={{ position: 'absolute', bottom: -4, right: -4, width: 16, height: 16, borderRadius: '50%', background: '#ef4444', color: '#fff', border: '2px solid rgba(20,22,30,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Square size={7} />
-            </button>
-          )}
-        </div>
-        <div style={{ textAlign: 'left', minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 500, letterSpacing: '0.01em', color: 'rgba(255,255,255,0.94)' }}>AI Ask</div>
-          <div style={{ marginTop: 2, fontSize: 10, lineHeight: 1, color: 'rgba(255,255,255,0.52)' }}>Ask · explain</div>
-        </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(254,243,199,0.8)', boxShadow: '0 0 12px rgba(254,243,199,0.34)' }} />
-        </div>
-      </div>
-    </button>
+    </div>
   )
 }
 
