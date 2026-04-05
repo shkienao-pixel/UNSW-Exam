@@ -256,7 +256,7 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
           animationData={loaderCatData}
           loop
           autoplay={false}
-          style={{ width: '100%', height: '100%' }}
+          style={{ width: '100%', height: '100%', filter: 'invert(1)' }}
         />
         {!isLoading && unreadCount > 0 && (
           <span style={{
