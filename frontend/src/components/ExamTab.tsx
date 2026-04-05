@@ -850,6 +850,8 @@ function ExamDoingPage({
   )
 }
 
+type ResultViewMode = 'per-question' | 'full-paper'
+
 function ExamResultPage({
   questions,
   results,
@@ -866,6 +868,7 @@ function ExamResultPage({
   onRedo: () => void
 }) {
   const [currentIndex, setCurrentIndex] = useState(0)
+  const [viewMode, setViewMode] = useState<ResultViewMode>('full-paper')
   const { lang } = useLang()
 
   const resultMap = useMemo(
@@ -884,154 +887,284 @@ function ExamResultPage({
 
   const tone = getResultTone(currentResult)
 
+  const scorePanel = (
+    <div className="rounded-2xl p-4" style={{ background: '#ffffff', border: '1px solid rgba(148,163,184,0.22)' }}>
+      <div className="space-y-3">
+        <div>
+          <p className="text-3xl font-bold" style={{ color: '#0f172a' }}>
+            {correctCount} / {answeredCount}
+          </p>
+          <p className="text-xs" style={{ color: '#64748b' }}>
+            {tt(lang, '本次已判分题目', 'Graded answers this attempt')}
+          </p>
+        </div>
+        <div className="space-y-2 text-sm">
+          <div className="flex items-center justify-between">
+            <span style={{ color: '#64748b' }}>{tt(lang, '正确', 'Correct')}</span>
+            <span className="font-semibold" style={{ color: '#15803d' }}>{correctCount}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span style={{ color: '#64748b' }}>{tt(lang, '错误', 'Incorrect')}</span>
+            <span className="font-semibold" style={{ color: '#b91c1c' }}>{wrongCount}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span style={{ color: '#64748b' }}>{tt(lang, '待复核', 'Needs review')}</span>
+            <span className="font-semibold" style={{ color: '#b45309' }}>{reviewCount}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
   return (
     <div className="space-y-5">
+      {/* top bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm" style={{ color: '#94a3b8' }}>
           <ChevronLeft size={16} />
           {tt(lang, '返回试卷列表', 'Back to papers')}
         </button>
 
-        <button
-          onClick={onRedo}
-          className="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm transition-all"
-          style={{ background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', border: '1px solid rgba(255,255,255,0.08)' }}
-        >
-          <RotateCcw size={15} />
-          {tt(lang, '重新进入作答页', 'Return to attempt view')}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* view-mode toggle */}
+          <div className="flex items-center rounded-2xl p-1" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
+            {(['full-paper', 'per-question'] as ResultViewMode[]).map(m => {
+              const active = m === viewMode
+              return (
+                <button
+                  key={m}
+                  onClick={() => setViewMode(m)}
+                  className="rounded-xl px-3 py-1.5 text-xs font-semibold transition-all"
+                  style={{
+                    background: active ? 'rgba(212,168,67,0.18)' : 'transparent',
+                    color: active ? '#f4d37a' : '#94a3b8',
+                  }}
+                >
+                  {m === 'full-paper'
+                    ? tt(lang, '整卷展示', 'Full Paper')
+                    : tt(lang, '逐题回顾', 'Per Question')}
+                </button>
+              )
+            })}
+          </div>
+
+          <button
+            onClick={onRedo}
+            className="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm transition-all"
+            style={{ background: 'rgba(255,255,255,0.04)', color: '#e2e8f0', border: '1px solid rgba(255,255,255,0.08)' }}
+          >
+            <RotateCcw size={15} />
+            {tt(lang, '重新作答', 'Return to attempt')}
+          </button>
+        </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
-        <aside
-          className="rounded-[28px] p-5 xl:sticky xl:top-5 xl:h-fit"
-          style={{ background: '#f8fafc', border: '1px solid rgba(148,163,184,0.24)', color: '#0f172a' }}
+      {/* mistakes notice */}
+      {wrongCount > 0 && (
+        <div
+          className="flex items-center gap-3 rounded-[22px] px-5 py-3"
+          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.22)', color: '#b91c1c' }}
         >
-          <div className="space-y-4">
-            <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.26em]" style={{ color: '#64748b' }}>
-                {tt(lang, '试卷回顾', 'Paper Review')}
-              </p>
-              <p className="text-lg font-semibold">{getAttemptTitle(lang, currentQuestion.source_type)}</p>
-            </div>
+          <XCircle size={16} className="flex-shrink-0" />
+          <p className="text-sm">
+            {tt(
+              lang,
+              `${wrongCount} 道错题已自动加入错题集，可在「错题集」页面复习。`,
+              `${wrongCount} incorrect answer${wrongCount > 1 ? 's' : ''} have been added to your mistake bank automatically.`
+            )}
+          </p>
+        </div>
+      )}
 
-            <div className="rounded-2xl p-4" style={{ background: '#ffffff', border: '1px solid rgba(148,163,184,0.22)' }}>
-              <div className="space-y-3">
-                <div>
-                  <p className="text-3xl font-bold" style={{ color: '#0f172a' }}>
-                    {correctCount} / {answeredCount}
-                  </p>
-                  <p className="text-xs" style={{ color: '#64748b' }}>
-                    {tt(lang, '本次已判分题目', 'Graded answers this attempt')}
-                  </p>
-                </div>
-
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span style={{ color: '#64748b' }}>{tt(lang, '正确', 'Correct')}</span>
-                    <span className="font-semibold" style={{ color: '#15803d' }}>{correctCount}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span style={{ color: '#64748b' }}>{tt(lang, '错误', 'Incorrect')}</span>
-                    <span className="font-semibold" style={{ color: '#b91c1c' }}>{wrongCount}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span style={{ color: '#64748b' }}>{tt(lang, '待复核', 'Needs review')}</span>
-                    <span className="font-semibold" style={{ color: '#b45309' }}>{reviewCount}</span>
-                  </div>
-                </div>
+      {/* ── full-paper mode ── */}
+      {viewMode === 'full-paper' && (
+        <div className="space-y-4">
+          {/* score summary bar */}
+          <div className="rounded-[28px] p-5" style={{ background: '#f8fafc', border: '1px solid rgba(148,163,184,0.24)', color: '#0f172a' }}>
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.26em]" style={{ color: '#64748b' }}>
+                  {tt(lang, '试卷回顾', 'Paper Review')}
+                </p>
+                <p className="text-lg font-semibold">{getAttemptTitle(lang, currentQuestion.source_type)}</p>
+              </div>
+              <div className="flex flex-wrap gap-4 text-sm">
+                <span><span style={{ color: '#15803d', fontWeight: 700 }}>{correctCount}</span> <span style={{ color: '#64748b' }}>{tt(lang, '正确', 'correct')}</span></span>
+                <span><span style={{ color: '#b91c1c', fontWeight: 700 }}>{wrongCount}</span> <span style={{ color: '#64748b' }}>{tt(lang, '错误', 'incorrect')}</span></span>
+                {reviewCount > 0 && <span><span style={{ color: '#b45309', fontWeight: 700 }}>{reviewCount}</span> <span style={{ color: '#64748b' }}>{tt(lang, '待复核', 'pending')}</span></span>}
+                <span><span style={{ color: '#0f172a', fontWeight: 700 }}>{correctCount}/{answeredCount}</span> <span style={{ color: '#64748b' }}>{tt(lang, '总得分', 'total')}</span></span>
               </div>
             </div>
-
-            <QuestionNavigator
-              lang={lang}
-              questions={questions}
-              currentIndex={currentIndex}
-              answers={answers}
-              flags={flags}
-              results={resultMap}
-              onSelect={setCurrentIndex}
-            />
           </div>
-        </aside>
 
-        <section
-          className="rounded-[30px] p-4 sm:p-6"
-          style={{ background: '#e9eef6', border: '1px solid rgba(148,163,184,0.22)' }}
-        >
-          <div className="space-y-5">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className="rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]"
-                    style={{ background: '#ffffff', color: '#475569', border: '1px solid rgba(148,163,184,0.24)' }}
-                  >
-                    {tt(lang, '第', 'Question ')}{currentIndex + 1}{tt(lang, '题', '')}
-                  </span>
-                  <span
-                    className="rounded-full px-3 py-1 text-xs font-semibold"
-                    style={{ background: tone.background, color: tone.text, border: `1px solid ${tone.border}` }}
-                  >
-                    {getQuestionStatusLabel(lang, answers[currentQuestion.id], currentResult)}
-                  </span>
-                  {flags[currentQuestion.id] && (
+          {/* all questions */}
+          {questions.map((q, index) => {
+            const r = resultMap[q.id]
+            const qTone = getResultTone(r)
+            const statusLabel = getQuestionStatusLabel(lang, answers[q.id], r)
+            return (
+              <div
+                key={q.id}
+                className="rounded-[30px] p-4 sm:p-6"
+                style={{ background: '#e9eef6', border: `1px solid ${qTone.border}` }}
+              >
+                <div className="space-y-4">
+                  {/* question header */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className="rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]"
+                      style={{ background: '#ffffff', color: '#475569', border: '1px solid rgba(148,163,184,0.24)' }}
+                    >
+                      {tt(lang, '第', 'Q')}{index + 1}{tt(lang, '题', '')}
+                    </span>
                     <span
                       className="rounded-full px-3 py-1 text-xs font-semibold"
-                      style={{ background: 'rgba(251,191,36,0.18)', color: '#92400e', border: '1px solid rgba(251,191,36,0.32)' }}
+                      style={{ background: qTone.background, color: qTone.text, border: `1px solid ${qTone.border}` }}
                     >
-                      {tt(lang, '已标记', 'Flagged')}
+                      {statusLabel}
                     </span>
-                  )}
+                    <span
+                      className="rounded-full px-3 py-1 text-xs font-semibold"
+                      style={{ background: 'rgba(59,130,246,0.1)', color: '#1d4ed8', border: '1px solid rgba(59,130,246,0.18)' }}
+                    >
+                      {getQuestionTypeLabel(lang, q.question_type)}
+                    </span>
+                    {flags[q.id] && (
+                      <span
+                        className="rounded-full px-3 py-1 text-xs font-semibold"
+                        style={{ background: 'rgba(251,191,36,0.18)', color: '#92400e', border: '1px solid rgba(251,191,36,0.32)' }}
+                      >
+                        {tt(lang, '已标记', 'Flagged')}
+                      </span>
+                    )}
+                    <span
+                      className="ml-auto rounded-2xl px-4 py-1.5 text-xs font-semibold"
+                      style={{ background: '#ffffff', color: qTone.text, border: `1px solid ${qTone.border}` }}
+                    >
+                      {getMarkLabel(lang, r, answers[q.id])}
+                    </span>
+                  </div>
+
+                  <QuestionReviewPanel
+                    lang={lang}
+                    question={q}
+                    answer={answers[q.id]}
+                    result={r}
+                  />
                 </div>
-                <p className="text-sm leading-6" style={{ color: '#64748b' }}>
-                  {tt(
-                    lang,
-                    '这里按学校 quiz review 的逻辑显示当前题、你的作答、判分结果和参考答案。',
-                    'This review mirrors a school quiz-review flow: current question, your answer, grading result, and the reference answer.'
-                  )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── per-question mode ── */}
+      {viewMode === 'per-question' && (
+        <div className="grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
+          <aside
+            className="rounded-[28px] p-5 xl:sticky xl:top-5 xl:h-fit"
+            style={{ background: '#f8fafc', border: '1px solid rgba(148,163,184,0.24)', color: '#0f172a' }}
+          >
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.26em]" style={{ color: '#64748b' }}>
+                  {tt(lang, '试卷回顾', 'Paper Review')}
                 </p>
+                <p className="text-lg font-semibold">{getAttemptTitle(lang, currentQuestion.source_type)}</p>
               </div>
 
-              <div
-                className="rounded-2xl px-4 py-3 text-sm font-semibold"
-                style={{ background: '#ffffff', color: tone.text, border: `1px solid ${tone.border}` }}
-              >
-                {tt(lang, '得分', 'Mark')}: {getMarkLabel(lang, currentResult, answers[currentQuestion.id])}
+              {scorePanel}
+
+              <QuestionNavigator
+                lang={lang}
+                questions={questions}
+                currentIndex={currentIndex}
+                answers={answers}
+                flags={flags}
+                results={resultMap}
+                onSelect={setCurrentIndex}
+              />
+            </div>
+          </aside>
+
+          <section
+            className="rounded-[30px] p-4 sm:p-6"
+            style={{ background: '#e9eef6', border: '1px solid rgba(148,163,184,0.22)' }}
+          >
+            <div className="space-y-5">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className="rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]"
+                      style={{ background: '#ffffff', color: '#475569', border: '1px solid rgba(148,163,184,0.24)' }}
+                    >
+                      {tt(lang, '第', 'Question ')}{currentIndex + 1}{tt(lang, '题', '')}
+                    </span>
+                    <span
+                      className="rounded-full px-3 py-1 text-xs font-semibold"
+                      style={{ background: tone.background, color: tone.text, border: `1px solid ${tone.border}` }}
+                    >
+                      {getQuestionStatusLabel(lang, answers[currentQuestion.id], currentResult)}
+                    </span>
+                    {flags[currentQuestion.id] && (
+                      <span
+                        className="rounded-full px-3 py-1 text-xs font-semibold"
+                        style={{ background: 'rgba(251,191,36,0.18)', color: '#92400e', border: '1px solid rgba(251,191,36,0.32)' }}
+                      >
+                        {tt(lang, '已标记', 'Flagged')}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm leading-6" style={{ color: '#64748b' }}>
+                    {tt(
+                      lang,
+                      '这里按学校 quiz review 的逻辑显示当前题、你的作答、判分结果和参考答案。',
+                      'This review mirrors a school quiz-review flow: current question, your answer, grading result, and the reference answer.'
+                    )}
+                  </p>
+                </div>
+
+                <div
+                  className="rounded-2xl px-4 py-3 text-sm font-semibold"
+                  style={{ background: '#ffffff', color: tone.text, border: `1px solid ${tone.border}` }}
+                >
+                  {tt(lang, '得分', 'Mark')}: {getMarkLabel(lang, currentResult, answers[currentQuestion.id])}
+                </div>
+              </div>
+
+              <QuestionReviewPanel
+                lang={lang}
+                question={currentQuestion}
+                answer={answers[currentQuestion.id]}
+                result={currentResult}
+              />
+
+              <div className="flex flex-wrap gap-2 border-t pt-4" style={{ borderColor: 'rgba(148,163,184,0.22)' }}>
+                <button
+                  onClick={() => setCurrentIndex(index => Math.max(index - 1, 0))}
+                  disabled={currentIndex === 0}
+                  className="inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-medium transition-all disabled:opacity-40"
+                  style={{ background: '#ffffff', color: '#334155', border: '1px solid rgba(148,163,184,0.24)' }}
+                >
+                  <ChevronLeft size={15} />
+                  {tt(lang, '上一题', 'Previous')}
+                </button>
+
+                <button
+                  onClick={() => setCurrentIndex(index => Math.min(index + 1, questions.length - 1))}
+                  disabled={currentIndex === questions.length - 1}
+                  className="inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-medium transition-all disabled:opacity-40"
+                  style={{ background: '#ffffff', color: '#334155', border: '1px solid rgba(148,163,184,0.24)' }}
+                >
+                  {tt(lang, '下一题', 'Next')}
+                  <ChevronRight size={15} />
+                </button>
               </div>
             </div>
-
-            <QuestionReviewPanel
-              lang={lang}
-              question={currentQuestion}
-              answer={answers[currentQuestion.id]}
-              result={currentResult}
-            />
-
-            <div className="flex flex-wrap gap-2 border-t pt-4" style={{ borderColor: 'rgba(148,163,184,0.22)' }}>
-              <button
-                onClick={() => setCurrentIndex(index => Math.max(index - 1, 0))}
-                disabled={currentIndex === 0}
-                className="inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-medium transition-all disabled:opacity-40"
-                style={{ background: '#ffffff', color: '#334155', border: '1px solid rgba(148,163,184,0.24)' }}
-              >
-                <ChevronLeft size={15} />
-                {tt(lang, '上一题', 'Previous')}
-              </button>
-
-              <button
-                onClick={() => setCurrentIndex(index => Math.min(index + 1, questions.length - 1))}
-                disabled={currentIndex === questions.length - 1}
-                className="inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-medium transition-all disabled:opacity-40"
-                style={{ background: '#ffffff', color: '#334155', border: '1px solid rgba(148,163,184,0.24)' }}
-              >
-                {tt(lang, '下一题', 'Next')}
-                <ChevronRight size={15} />
-              </button>
-            </div>
-          </div>
-        </section>
-      </div>
+          </section>
+        </div>
+      )}
     </div>
   )
 }
