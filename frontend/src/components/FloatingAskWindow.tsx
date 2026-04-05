@@ -176,6 +176,9 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
 
   if (!pos) return null
 
+  // 气泡方向：猫在屏幕上半时向下，否则向上
+  const bubbleUp = pos.y > window.innerHeight / 2
+
   return (
     <div
       className="fixed z-50 select-none"
@@ -187,7 +190,6 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
         cursor: dragging ? 'grabbing' : 'grab',
       }}
       onMouseEnter={() => {
-        // 每次 hover 换一条不重复的消息
         let idx
         do { idx = Math.floor(Math.random() * CAT_MESSAGES.length) }
         while (idx === lastMsgIdx.current && CAT_MESSAGES.length > 1)
@@ -202,10 +204,16 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
       <div
         style={{
           position: 'absolute',
-          bottom: '100%',
+          // 上半屏：气泡显示在猫下方；下半屏：显示在猫上方
+          ...(bubbleUp
+            ? { bottom: '100%', marginBottom: 6 }
+            : { top: '100%', marginTop: 6 }
+          ),
           left: '50%',
-          transform: `translateX(-50%) translateY(${hovered ? '-8px' : '4px'})`,
-          marginBottom: 6,
+          transform: `translateX(-50%) translateY(${hovered
+            ? (bubbleUp ? '-8px' : '8px')
+            : (bubbleUp ? '4px' : '-4px')
+          })`,
           opacity: hovered && !dragging ? 1 : 0,
           pointerEvents: 'none',
           transition: 'opacity 0.22s ease, transform 0.22s ease',
@@ -226,16 +234,34 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
         }}>
           {message}
         </div>
-        <div style={{
-          position: 'absolute', bottom: -9, left: '50%', transform: 'translateX(-50%)',
-          width: 0, height: 0,
-          borderLeft: '7px solid transparent', borderRight: '7px solid transparent', borderTop: '9px solid #1a1a2e',
-        }} />
-        <div style={{
-          position: 'absolute', bottom: -6, left: '50%', transform: 'translateX(-50%)',
-          width: 0, height: 0,
-          borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: '7px solid rgba(255,255,255,0.97)',
-        }} />
+        {/* 三角：跟随气泡方向 */}
+        {bubbleUp ? (
+          <>
+            <div style={{
+              position: 'absolute', bottom: -9, left: '50%', transform: 'translateX(-50%)',
+              width: 0, height: 0,
+              borderLeft: '7px solid transparent', borderRight: '7px solid transparent', borderTop: '9px solid #1a1a2e',
+            }} />
+            <div style={{
+              position: 'absolute', bottom: -6, left: '50%', transform: 'translateX(-50%)',
+              width: 0, height: 0,
+              borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: '7px solid rgba(255,255,255,0.97)',
+            }} />
+          </>
+        ) : (
+          <>
+            <div style={{
+              position: 'absolute', top: -9, left: '50%', transform: 'translateX(-50%)',
+              width: 0, height: 0,
+              borderLeft: '7px solid transparent', borderRight: '7px solid transparent', borderBottom: '9px solid #1a1a2e',
+            }} />
+            <div style={{
+              position: 'absolute', top: -6, left: '50%', transform: 'translateX(-50%)',
+              width: 0, height: 0,
+              borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderBottom: '7px solid rgba(255,255,255,0.97)',
+            }} />
+          </>
+        )}
       </div>
 
       {/* 猫咪 Lottie 按钮 */}
@@ -248,7 +274,10 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
           display: 'block', width: '100%', height: '100%',
           transform: hovered && !dragging ? 'scale(1.08)' : 'scale(1)',
           transition: 'transform 0.2s ease',
-          filter: hovered && !dragging ? 'drop-shadow(0 0 12px rgba(255,200,80,0.55))' : 'none',
+          // hover 时白色光晕，与猫的颜色匹配
+          filter: hovered && !dragging
+            ? 'drop-shadow(0 0 8px rgba(255,255,255,0.7)) drop-shadow(0 0 20px rgba(255,255,255,0.3))'
+            : 'none',
         }}
       >
         <Lottie
@@ -256,7 +285,8 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
           animationData={loaderCatData}
           loop
           autoplay={false}
-          style={{ width: '100%', height: '100%', filter: 'invert(1)' }}
+          // brightness(0) 先变纯黑，invert(1) 再变纯白，色调干净不偏色
+          style={{ width: '100%', height: '100%', filter: 'brightness(0) invert(1)' }}
         />
         {!isLoading && unreadCount > 0 && (
           <span style={{
