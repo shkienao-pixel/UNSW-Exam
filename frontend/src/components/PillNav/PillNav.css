@@ -1,0 +1,101 @@
+.pill-tabs {
+  --pill-pad-x: 16px;
+  --pill-gap: 3px;
+  --nav-h: 38px;
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: var(--nav-h);
+  border-radius: 9999px;
+  background: var(--base);
+}
+
+.pill-tabs-list {
+  list-style: none;
+  display: flex;
+  align-items: stretch;
+  gap: var(--pill-gap);
+  margin: 0;
+  padding: 3px;
+  height: 100%;
+}
+
+.pill-tabs-list > li {
+  display: flex;
+  height: 100%;
+}
+
+.pill-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 100%;
+  padding: 0 var(--pill-pad-x);
+  background: var(--pill-bg);
+  color: var(--pill-text);
+  border: none;
+  border-radius: 9999px;
+  box-sizing: border-box;
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  font-family: inherit;
+}
+
+.pill-tab .hover-circle {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  border-radius: 50%;
+  background: var(--base);
+  z-index: 1;
+  display: block;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.pill-tab .label-stack {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1;
+  z-index: 2;
+}
+
+.pill-tab .pill-label {
+  position: relative;
+  z-index: 2;
+  display: inline-block;
+  line-height: 1;
+  will-change: transform;
+}
+
+.pill-tab .pill-label-hover {
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--hover-text);
+  z-index: 3;
+  display: inline-block;
+  will-change: transform, opacity;
+  white-space: nowrap;
+}
+
+/* Badge stays on top, outside of the animated stack */
+.pill-tab .pill-badge {
+  position: relative;
+  z-index: 4;
+  will-change: transform;
+}
+
+.pill-tab.is-active {
+  color: var(--hover-text);
+  background: var(--active-bg, var(--pill-bg));
+}

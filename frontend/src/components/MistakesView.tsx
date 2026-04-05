@@ -5,6 +5,7 @@ import { useMistakesStore } from '@/lib/mistakes-store'
 import type { StoredMistake, FlashcardMistake } from '@/lib/mistakes-store'
 import { BookMarked, BookOpen, ChevronDown, ChevronUp, Loader2, Play, RotateCcw, ArrowLeft } from 'lucide-react'
 import { GlowButton } from '@/components/GlowButton'
+import PillNav from '@/components/PillNav/PillNav'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -43,6 +44,14 @@ export default function MistakesView({ courseId }: { courseId?: string }) {
     store.examMistakes.filter(m => m.mistake_status === 'active').length +
     store.fcMistakes.filter(m => m.mistake_status === 'active').length
 
+  const pillNavItems = TABS.map(t => ({
+    id: t.id,
+    label: `${t.icon} ${t.name}`,
+    badge: t.id === 'flashcard'
+      ? store.fcMistakes.filter(m => m.mistake_status === 'active').length
+      : examByType(t.id).filter(m => m.mistake_status === 'active').length,
+  }))
+
   return (
     <div className="space-y-4">
 
@@ -58,35 +67,17 @@ export default function MistakesView({ courseId }: { courseId?: string }) {
         )}
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 p-0.5 rounded-xl w-full"
-        style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-        {TABS.map(t => {
-          const count = t.id === 'flashcard'
-            ? store.fcMistakes.filter(m => m.mistake_status === 'active').length
-            : examByType(t.id).filter(m => m.mistake_status === 'active').length
-          const isActive = tab === t.id
-          return (
-            <button key={t.id} onClick={() => { setTab(t.id); setPracticing(false) }}
-              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-[10px] text-xs transition-all"
-              style={{
-                background: isActive ? t.color + '16' : 'transparent',
-                color: isActive ? t.color : '#444',
-                border: isActive ? `1px solid ${t.color}30` : '1px solid transparent',
-                fontWeight: isActive ? 600 : 400,
-              }}>
-              <span>{t.icon}</span>
-              <span className="hidden sm:inline">{t.name}</span>
-              {count > 0 && (
-                <span className="text-[9px] font-bold px-1.5 py-px rounded-full"
-                  style={{ background: 'rgba(255,68,68,0.8)', color: '#fff' }}>
-                  {count}
-                </span>
-              )}
-            </button>
-          )
-        })}
-      </div>
+      {/* Tabs — PillNav */}
+      <PillNav
+        items={pillNavItems}
+        activeId={tab}
+        onSelect={id => { setTab(id as TabId); setPracticing(false) }}
+        baseColor="rgba(255,255,255,0.04)"
+        pillColor="rgba(255,255,255,0.07)"
+        pillTextColor="#666"
+        hoveredPillTextColor={currentTab.color}
+        activePillColor={currentTab.color + '1a'}
+      />
 
       {/* Content */}
       {store.loading ? (
