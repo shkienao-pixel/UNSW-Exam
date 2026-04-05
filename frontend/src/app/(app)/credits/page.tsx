@@ -39,6 +39,7 @@ function CreditsPageInner() {
       gen_ask: t('credits_type_gen_ask'),
       unlock_upload: t('credits_type_unlock_upload'),
       unlock_all: t('credits_type_unlock_all'),
+      exam_submit: t('credits_type_exam_submit'),
     }),
     [t]
   )
@@ -316,6 +317,7 @@ function CreditsPageInner() {
             [t('credits_estimator_item_8'), t('credits_estimator_cost_8'), t('credits_estimator_value_8')],
             [t('credits_estimator_item_9'), t('credits_estimator_cost_9'), t('credits_estimator_value_9')],
             [t('credits_estimator_item_10'), t('credits_estimator_cost_10'), t('credits_estimator_value_10')],
+            [t('credits_estimator_item_11'), t('credits_estimator_cost_11'), t('credits_estimator_value_11')],
           ].map(([name, cost, value]) => (
             <div key={name} className="grid grid-cols-[1.1fr_0.65fr_1.8fr] gap-3 px-4 py-3 text-sm"
               style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>

@@ -1010,17 +1010,32 @@ def _grade_short_answers_batch(
     if not batch:
         return
 
+    import re as _re
+    _mcq_opt_re = _re.compile(
+        r'(?:^|\n)\s*\(?([A-D])\)?[.)]\s*([\s\S]+?)(?=(?:\n\s*\(?[A-D]\)?[.)]\s*)|\Z)',
+        _re.MULTILINE,
+    )
     letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     lines: list[str] = []
     for idx, (_, q, user_ans) in enumerate(batch, 1):
         ref = q.get("correct_answer") or ""
-        options = q.get("options") or []
+        options = [str(o).strip() for o in (q.get("options") or []) if str(o).strip()]
+
+        # Fallback: parse options from question_text when options array is empty
+        if not options and q.get("question_type") == "mcq":
+            text = q.get("question_text") or ""
+            matches = _mcq_opt_re.findall(text)
+            ordered = sorted(matches, key=lambda m: m[0])
+            if len(ordered) >= 4:
+                options = [m[1].replace('\n', ' ').strip() for m in ordered[:4]]
+
         opts_text = ""
         if options:
             opts_text = "\nOptions:\n" + "\n".join(
                 f"  {letters[i]}. {opt}" for i, opt in enumerate(options[:len(letters)])
             )
-        ref_line = f"Reference answer: {ref}" if ref else "Reference answer: (use your knowledge to determine the correct answer)"
+
+        ref_line = f"Reference answer: {ref}" if ref else "Reference answer: use your knowledge"
         lines.append(
             f"[{idx}] Question: {q['question_text']}{opts_text}\n"
             f"{ref_line}\n"
@@ -1029,12 +1044,16 @@ def _grade_short_answers_batch(
 
     system = (
         "You are a strict but fair exam marker. Grade each numbered student answer.\n"
-        "For MCQ questions (with A/B/C/D options): if no reference answer is provided, "
-        "use your own knowledge to determine the correct option, then judge accordingly.\n"
-        "For short-answer questions: accept alternative phrasing if the core concept is correct.\n"
-        "Provide brief feedback (1-2 sentences) explaining the result. "
-        "If you determined the correct answer yourself, state it in the feedback.\n"
-        "Use the same language as the question (Chinese or English).\n"
+        "Rules:\n"
+        "1. For MCQ (A/B/C/D options shown): use your knowledge to determine the correct option "
+        "even if no reference is given. Never say options are missing — they are embedded above.\n"
+        "2. For short-answer: accept correct core concept even if phrasing differs.\n"
+        "3. Feedback requirements:\n"
+        "   - If CORRECT: one sentence confirming why.\n"
+        "   - If INCORRECT: explicitly state (a) which option/answer is correct, "
+        "(b) why the student's choice is wrong, (c) a concise explanation of the concept. "
+        "Minimum 2 sentences for incorrect answers.\n"
+        "4. Use the same language as the question (Chinese or English).\n"
         "Return ONLY a raw JSON array in the same order as the input.\n"
         'Format: [{"is_correct": true/false, "feedback": "..."}]'
     )

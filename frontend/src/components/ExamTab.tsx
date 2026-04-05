@@ -677,7 +677,7 @@ function ExamDoingPage({
             style={{ background: 'rgba(212,168,67,0.16)', color: '#f4d37a', border: '1px solid rgba(212,168,67,0.32)' }}
           >
             {submitting ? <Loader2 size={16} className="animate-spin" /> : <Target size={16} />}
-            {submitting ? tt(lang, '正在判分...', 'Submitting...') : tt(lang, '提交整份试卷', 'Submit Paper')}
+            {submitting ? tt(lang, '正在判分...', 'Submitting...') : tt(lang, '提交整份试卷 · 50 积分', 'Submit Paper · 50 credits')}
           </GlowButton>
         </div>
       </div>

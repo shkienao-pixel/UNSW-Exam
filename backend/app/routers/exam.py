@@ -201,16 +201,21 @@ def submit_answers(
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_db),
 ) -> dict[str, Any]:
-    """Submit answers for AI grading. MCQ graded locally; short answers via GPT."""
+    """Submit answers for AI grading. MCQ graded locally; short answers via GPT. Costs 50 credits."""
     if current_user.get("is_guest"):
         raise HTTPException(status_code=403, detail="演示账号不支持该功能，请注册正式账号")
 
-    openai_key = _get_openai_key(supabase)
-    answers = [{"question_id": a.question_id, "user_answer": a.user_answer} for a in body.answers]
-    results = exam_service.grade_answers(
-        supabase, current_user["id"], course_id, answers, openai_key
-    )
-    return {"results": results}
+    from app.services.credit_service import credit_guard, InsufficientCreditsError
+    try:
+        with credit_guard(supabase, current_user["id"], "exam_submit"):
+            openai_key = _get_openai_key(supabase)
+            answers = [{"question_id": a.question_id, "user_answer": a.user_answer} for a in body.answers]
+            results = exam_service.grade_answers(
+                supabase, current_user["id"], course_id, answers, openai_key
+            )
+            return {"results": results}
+    except InsufficientCreditsError:
+        raise HTTPException(status_code=402, detail="积分不足，请前往充值页购买积分")
 
 
 # ── Favorites (per course) ─────────────────────────────────────────────────────

@@ -33,6 +33,8 @@ COSTS: dict[str, int] = {
     "gen_exam_mock":    100,
     # 互动课堂生成
     "gen_classroom":    300,
+    # AI 改卷（提交整份试卷）
+    "exam_submit":      50,
 }
 
 
