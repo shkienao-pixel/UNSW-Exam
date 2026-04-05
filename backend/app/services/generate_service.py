@@ -51,20 +51,17 @@ def _resolve_artifact_ids(
     if scope_set_id:
         scope = get_scope_set(supabase, user_id, scope_set_id)
         ids = scope.get("artifact_ids") or []
-        if ids:
-            accessible = filter_accessible_artifact_ids(supabase, user_id, ids)
-            return accessible if accessible else None
-        return None
+        return ids if ids else None
     if priority_doc_types:
+        # doc_type routing 用于 AI 生成上下文（非直接下载），admin 共享管理的文件
+        # 无需走付费解锁过滤，直接按 doc_type 过滤即可
         ids = get_artifact_ids_by_doc_type(supabase, course_id, priority_doc_types)
         if ids:
-            accessible = filter_accessible_artifact_ids(supabase, user_id, ids)
-            return accessible if accessible else None
+            return ids
         if fallback_doc_types:
             ids = get_artifact_ids_by_doc_type(supabase, course_id, fallback_doc_types)
             if ids:
-                accessible = filter_accessible_artifact_ids(supabase, user_id, ids)
-                return accessible if accessible else None
+                return ids
     return None
 
 
