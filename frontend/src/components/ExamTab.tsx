@@ -22,6 +22,7 @@ import { CubesLoader } from '@/components/Cubes'
 import type { ExamQuestion, GradeResult, MockSession, PastExamFile } from '@/lib/types'
 import { useLang } from '@/lib/i18n'
 import { GlowButton } from '@/components/GlowButton'
+import GeneratingState from '@/components/GeneratingState'
 
 type ExamMode = 'past_exam' | 'mock'
 type Phase = 'select' | 'doing' | 'result'
@@ -432,6 +433,15 @@ function MockSessionList({
     } finally {
       setGenerating(false)
     }
+  }
+
+  if (generating) {
+    return (
+      <GeneratingState
+        label={tt(lang, '模拟试卷', 'mock paper')}
+        timeHint={tt(lang, '通常需要 60-120 秒', 'Usually takes 60-120 seconds')}
+      />
+    )
   }
 
   async function handleStart(sessionId: string) {

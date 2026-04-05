@@ -7,7 +7,7 @@ import { api } from '@/lib/api'
 import { useFloatingAsk } from '@/lib/floating-ask-context'
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/i18n'
-import { useGeneration } from '@/lib/generation-context'
+import { useGeneration, useTabGeneration } from '@/lib/generation-context'
 import type { Course, Artifact, ScopeSet, Output, DocType, FlashcardMistake } from '@/lib/types'
 import { DOC_TYPE_LABELS, DOC_TYPE_COLORS } from '@/lib/types'
 import { biText } from '@/lib/utils'
@@ -29,6 +29,7 @@ import ElectricBorder from '@/components/ElectricBorder'
 import InsufficientCreditsModal from '@/components/InsufficientCreditsModal'
 import ReactMarkdown from 'react-markdown'
 
+import GeneratingState from '@/components/GeneratingState'
 import ResourceHubTab from '@/components/ResourceHubTab'
 import ExamPlannerTab from '@/components/ExamPlannerTab'
 import CourseLockedScreen from '@/components/CourseLockedScreen'
@@ -183,6 +184,7 @@ interface QuizSource {
 function QuizTab({ courseId }: { courseId: string }) {
   const { t } = useLang()
   const { trackGeneration } = useGeneration()
+  const activeJob = useTabGeneration(`/courses/${courseId}?view=quiz`)
   const [refreshKey, setRefreshKey] = useState(0)
 
   const generateButton = (
@@ -191,6 +193,7 @@ function QuizTab({ courseId }: { courseId: string }) {
         label: t('gen_quiz'),
         viewLink: `/courses/${courseId}?view=quiz`,
         promise: api.generate.quiz(courseId, {}),
+        timeHint: '通常需要 30-60 秒',
         onSuccess: () => setRefreshKey(k => k + 1),
       })}
       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all hover:opacity-85"
@@ -206,7 +209,15 @@ function QuizTab({ courseId }: { courseId: string }) {
       courseId={courseId} outputType="quiz"
       icon={<Target size={20} style={{ color: '#FFD700' }} />} title={t('quiz_title')} subtitle={t('quiz_sub')}
       emptyTitle={t('empty_quiz')} emptyLinkLabel={t('empty_quiz_btn')}
-      headerExtra={generateButton}
+      headerExtra={activeJob ? null : generateButton}
+      generatingSlot={activeJob ? (
+        <GeneratingState
+          label={t('gen_quiz')}
+          timeHint={activeJob.timeHint}
+          progress={activeJob.progress}
+          message={activeJob.message}
+        />
+      ) : null}
       renderContent={output => {
         let questions: QuizQuestion[] = []
         let sources: QuizSource[] = []
@@ -244,6 +255,7 @@ function flashcardMistakeKey(outputId: number, cardIndex: number) {
 function FlashcardsTab({ courseId }: { courseId: string }) {
   const { t, lang } = useLang()
   const { trackGeneration } = useGeneration()
+  const activeJob = useTabGeneration(`/courses/${courseId}?view=flashcards`)
   const [outputs, setOutputs] = useState<Output[]>([])
   const [selectedOutputId, setSelectedOutputId] = useState<number | null>(null)
   const [cards, setCards] = useState<Flashcard[]>([])
@@ -390,6 +402,24 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
     <CubesLoader className="py-16" />
   )
 
+  // Show generating state if AI is running and there are no flashcards yet
+  if (activeJob && outputs.length === 0) {
+    return (
+      <div className="space-y-5">
+        <div className="flex items-center gap-2">
+          <Layers3 size={22} style={{ color: '#FFD700' }} />
+          <h2 className="text-2xl font-bold text-white">{t('flashcards_title')}</h2>
+        </div>
+        <GeneratingState
+          label={t('gen_flashcards')}
+          timeHint={activeJob.timeHint ?? '通常需要 30-60 秒'}
+          progress={activeJob.progress}
+          message={activeJob.message}
+        />
+      </div>
+    )
+  }
+
   const card = cards[cardIndex]
   const progress = cards.length > 0 ? ((cardIndex + 1) / cards.length) * 100 : 0
   const accuracy = (remembered + forgotten) > 0 ? Math.round((remembered / (remembered + forgotten)) * 100) : null
@@ -410,6 +440,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
               label: t('gen_flashcards'),
               viewLink: `/courses/${courseId}?view=flashcards`,
               promise: api.generate.flashcards(courseId, {}),
+              timeHint: '通常需要 30-60 秒',
               onSuccess: (output) => {
                 setOutputs(prev => [output, ...prev])
                 setShowingMistakes(false)

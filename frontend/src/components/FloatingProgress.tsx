@@ -7,7 +7,7 @@ import Link from 'next/link'
 
 /**
  * Floating generation status panel — fixed bottom-right.
- * Shows active generation jobs with animated spinner,
+ * Shows active generation jobs with animated progress bar,
  * and a toast when each job completes or fails.
  */
 export default function FloatingProgress() {
@@ -17,13 +17,10 @@ export default function FloatingProgress() {
   if (jobs.length === 0) return null
 
   return (
-    <div
-      className="fixed bottom-6 right-6 z-50 flex flex-col gap-2"
-      style={{ maxWidth: 320, pointerEvents: 'none' }}
-    >
+    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2"
+      style={{ maxWidth: 320, pointerEvents: 'none' }}>
       {jobs.map(job => (
-        <div
-          key={job.id}
+        <div key={job.id}
           className="flex items-start gap-3 px-4 py-3 rounded-2xl shadow-2xl transition-all"
           style={{
             background: 'rgba(18,18,18,0.97)',
@@ -31,17 +28,17 @@ export default function FloatingProgress() {
               ? '1px solid rgba(34,197,94,0.4)'
               : job.status === 'error'
               ? '1px solid rgba(255,68,68,0.4)'
-              : '1px solid rgba(255,215,0,0.25)',
+              : '1px solid rgba(167,139,250,0.3)',
             backdropFilter: 'blur(16px)',
             pointerEvents: 'auto',
             minWidth: 260,
             boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-          }}
-        >
+          }}>
+
           {/* Status icon */}
           <div className="mt-0.5 flex-shrink-0">
             {job.status === 'generating' && (
-              <Loader2 size={16} className="animate-spin" style={{ color: '#FFD700' }} />
+              <Loader2 size={16} className="animate-spin" style={{ color: '#A78BFA' }} />
             )}
             {job.status === 'done' && (
               <CheckCircle size={16} style={{ color: '#22C55E' }} />
@@ -55,21 +52,37 @@ export default function FloatingProgress() {
           <div className="flex-1 min-w-0">
             {job.status === 'generating' && (
               <>
-                <p className="text-xs font-medium text-white leading-tight">
-                  {lang === 'zh' ? `正在生成 ${job.label}...` : `Generating ${job.label}...`}
-                </p>
-                {/* Animated progress bar (indeterminate) */}
-                <div className="mt-2 h-0.5 rounded-full overflow-hidden"
-                  style={{ background: 'rgba(255,215,0,0.1)' }}>
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      background: '#FFD700',
-                      animation: 'progressPulse 1.5s ease-in-out infinite',
-                      width: '60%',
-                    }}
-                  />
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-medium text-white leading-tight truncate">
+                    {lang === 'zh' ? `AI 正在生成${job.label}` : `Generating ${job.label}...`}
+                  </p>
+                  {job.progress !== undefined && (
+                    <span className="text-[10px] font-mono flex-shrink-0"
+                      style={{ color: '#A78BFA' }}>
+                      {job.progress}%
+                    </span>
+                  )}
                 </div>
+                {job.message && (
+                  <p className="text-[11px] mt-0.5 truncate" style={{ color: '#555' }}>{job.message}</p>
+                )}
+                {/* Progress bar */}
+                <div className="mt-2 h-0.5 rounded-full overflow-hidden"
+                  style={{ background: 'rgba(167,139,250,0.1)' }}>
+                  {job.progress !== undefined ? (
+                    <div className="h-full rounded-full transition-all duration-500"
+                      style={{ width: `${job.progress}%`, background: 'linear-gradient(90deg, #A78BFA, #F9A8D4)' }} />
+                  ) : (
+                    <div className="h-full rounded-full w-[45%]"
+                      style={{
+                        background: 'linear-gradient(90deg, #A78BFA, #F9A8D4)',
+                        animation: 'fpSweep 1.8s ease-in-out infinite',
+                      }} />
+                  )}
+                </div>
+                {job.timeHint && (
+                  <p className="text-[10px] mt-1.5" style={{ color: '#333' }}>{job.timeHint}</p>
+                )}
               </>
             )}
             {job.status === 'done' && (
@@ -96,8 +109,7 @@ export default function FloatingProgress() {
 
           {/* Dismiss button */}
           {(job.status === 'done' || job.status === 'error') && (
-            <button
-              onClick={() => dismissJob(job.id)}
+            <button onClick={() => dismissJob(job.id)}
               className="flex-shrink-0 transition-opacity hover:opacity-100"
               style={{ color: '#555', opacity: 0.7 }}>
               <X size={14} />
@@ -106,12 +118,10 @@ export default function FloatingProgress() {
         </div>
       ))}
 
-      {/* Inline keyframe style */}
       <style>{`
-        @keyframes progressPulse {
-          0%   { transform: translateX(-100%); }
-          50%  { transform: translateX(100%); }
-          100% { transform: translateX(300%); }
+        @keyframes fpSweep {
+          0%   { transform: translateX(-120%); }
+          100% { transform: translateX(340%); }
         }
       `}</style>
     </div>

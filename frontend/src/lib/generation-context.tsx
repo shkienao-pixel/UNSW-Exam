@@ -14,18 +14,22 @@ export interface GenJob {
   viewLink: string     // e.g. "/courses/xxx?view=summary"
   status: GenJobStatus
   error?: string
+  progress?: number    // 0-100 (undefined = indeterminate)
+  message?: string     // current step description
+  timeHint?: string    // e.g. "通常需要 30-60 秒"
 }
 
 interface GenCtxValue {
   jobs: GenJob[]
-  /** Start tracking a generation promise. Returns the job id. */
   trackGeneration: (params: {
     label: string
     viewLink: string
     promise: Promise<Output>
+    timeHint?: string
     onSuccess?: (result: Output) => void
     onError?: (err: Error) => void
   }) => string
+  updateProgress: (id: string, progress: number, message?: string) => void
   dismissJob: (id: string) => void
 }
 
@@ -34,6 +38,7 @@ interface GenCtxValue {
 const GenCtx = createContext<GenCtxValue>({
   jobs: [],
   trackGeneration: () => '',
+  updateProgress: () => {},
   dismissJob: () => {},
 })
 
@@ -50,32 +55,40 @@ export function GenerationProvider({ children }: { children: ReactNode }) {
     setJobs(prev => prev.filter(j => j.id !== id))
   }, [])
 
+  const updateProgress = useCallback((id: string, progress: number, message?: string) => {
+    setJobs(prev => prev.map(j => j.id === id ? { ...j, progress, ...(message ? { message } : {}) } : j))
+  }, [])
+
   const trackGeneration = useCallback((params: {
     label: string
     viewLink: string
     promise: Promise<Output>
+    timeHint?: string
     onSuccess?: (result: Output) => void
     onError?: (err: Error) => void
   }) => {
     const id = nextId()
-    const job: GenJob = { id, label: params.label, viewLink: params.viewLink, status: 'generating' }
+    const job: GenJob = {
+      id,
+      label: params.label,
+      viewLink: params.viewLink,
+      status: 'generating',
+      timeHint: params.timeHint,
+    }
     setJobs(prev => [...prev, job])
 
     params.promise
       .then(result => {
-        setJobs(prev => prev.map(j => j.id === id ? { ...j, status: 'done' } : j))
+        setJobs(prev => prev.map(j => j.id === id ? { ...j, status: 'done', progress: 100 } : j))
         params.onSuccess?.(result)
-        // Auto-dismiss after 8 seconds
         const t = setTimeout(() => dismissJob(id), 8000)
         timers.current.set(id, t)
       })
       .catch((err: Error) => {
-        setJobs(prev => prev.map(j => j.id === id
-          ? { ...j, status: 'error', error: err?.message || '生成失败' }
-          : j,
+        setJobs(prev => prev.map(j =>
+          j.id === id ? { ...j, status: 'error', error: err?.message || '生成失败' } : j,
         ))
         params.onError?.(err)
-        // Auto-dismiss errors after 12 seconds
         const t = setTimeout(() => dismissJob(id), 12000)
         timers.current.set(id, t)
       })
@@ -84,7 +97,7 @@ export function GenerationProvider({ children }: { children: ReactNode }) {
   }, [dismissJob])
 
   return (
-    <GenCtx.Provider value={{ jobs, trackGeneration, dismissJob }}>
+    <GenCtx.Provider value={{ jobs, trackGeneration, updateProgress, dismissJob }}>
       {children}
     </GenCtx.Provider>
   )
@@ -92,4 +105,10 @@ export function GenerationProvider({ children }: { children: ReactNode }) {
 
 export function useGeneration() {
   return useContext(GenCtx)
+}
+
+/** Returns the active generating job for the given tab viewLink, or null. */
+export function useTabGeneration(viewLink: string) {
+  const { jobs } = useGeneration()
+  return jobs.find(j => j.viewLink === viewLink && j.status === 'generating') ?? null
 }

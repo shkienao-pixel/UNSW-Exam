@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import type { Artifact } from '@/lib/types'
 import {
   Sparkles, Loader2, Play, CheckSquare, Square,
@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import SimpleWhiteboard from '@/components/classroom/SimpleWhiteboard'
 import { GlowButton } from '@/components/GlowButton'
+import GeneratingState from '@/components/GeneratingState'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -237,6 +238,8 @@ interface Props {
   onCreditSpent: (amount: number) => void
 }
 
+const SESSION_KEY = (courseId: string) => `classroom_job_${courseId}`
+
 export default function ClassroomTab({ courseId, artifacts, creditBalance, onCreditSpent }: Props) {
   const [phase, setPhase] = useState<'idle' | 'generating' | 'viewing'>('idle')
   const [selected, setSelected] = useState<Set<number>>(new Set())
@@ -258,6 +261,19 @@ export default function ClassroomTab({ courseId, artifacts, creditBalance, onCre
     fetch(`${API}/classroom/list/${courseId}`, {
       headers: { Authorization: `Bearer ${token()}` },
     }).then(r => r.ok ? r.json() : []).then(setHistory).catch(() => {})
+  }, [courseId])
+
+  // 恢复上次未完成的生成任务（用户导航离开后再回来）
+  useEffect(() => {
+    const saved = sessionStorage.getItem(SESSION_KEY(courseId))
+    if (saved) {
+      setJobId(saved)
+      setPhase('generating')
+    }
+  }, [courseId])
+
+  const clearSavedJob = useCallback(() => {
+    sessionStorage.removeItem(SESSION_KEY(courseId))
   }, [courseId])
 
   const toggleSelect = (id: number) =>
@@ -284,8 +300,9 @@ export default function ClassroomTab({ courseId, artifacts, creditBalance, onCre
         throw new Error(err.detail || '启动失败')
       }
       const data = await res.json()
-      // 积分已在后端扣除
       onCreditSpent(COST)
+      // 持久化 jobId，导航离开再回来可继续轮询
+      sessionStorage.setItem(SESSION_KEY(courseId), data.job_id)
       setJobId(data.job_id)
     } catch (e) {
       setError(e instanceof Error ? e.message : '启动失败')
@@ -303,6 +320,7 @@ export default function ClassroomTab({ courseId, artifacts, creditBalance, onCre
         })
         if (res.status === 401) {
           setError('登录已过期，请刷新页面重新登录后再试')
+          clearSavedJob()
           setPhase('idle')
           return
         }
@@ -310,6 +328,7 @@ export default function ClassroomTab({ courseId, artifacts, creditBalance, onCre
         const data: JobStatus = await res.json()
         setJobStatus(data)
         if (data.status === 'succeeded' && data.classroom_id) {
+          clearSavedJob()
           const cr = await fetch(`${API}/classroom/${data.classroom_id}`, {
             headers: { Authorization: `Bearer ${token()}` },
           })
@@ -318,12 +337,12 @@ export default function ClassroomTab({ courseId, artifacts, creditBalance, onCre
             setClassroom(c)
             setSceneIdx(0)
             setPhase('viewing')
-            // 刷新历史列表
             fetch(`${API}/classroom/list/${courseId}`, {
               headers: { Authorization: `Bearer ${token()}` },
             }).then(r => r.ok ? r.json() : []).then(setHistory).catch(() => {})
           } else { setError('加载课堂数据失败'); setPhase('idle') }
         } else if (data.status === 'failed') {
+          clearSavedJob()
           setError(data.error || '生成失败（积分已自动退款）')
           setPhase('idle')
         } else {
@@ -333,7 +352,7 @@ export default function ClassroomTab({ courseId, artifacts, creditBalance, onCre
     }
     pollRef.current = setTimeout(poll, 2000)
     return () => { if (pollRef.current) clearTimeout(pollRef.current) }
-  }, [jobId, phase, courseId])
+  }, [jobId, phase, courseId, clearSavedJob])
 
   async function loadHistoryItem(id: string) {
     const res = await fetch(`${API}/classroom/${id}`, {
@@ -350,22 +369,15 @@ export default function ClassroomTab({ courseId, artifacts, creditBalance, onCre
 
   // ── Generating ───────────────────────────────────────────────────────────────
   if (phase === 'generating') {
-    const pct = jobStatus?.progress ?? 0
+    const pct = jobStatus?.progress
+    const msg = jobStatus?.message ?? undefined
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-6 max-w-sm mx-auto">
-        <CubesLoader />
-        <div className="w-full space-y-2">
-          <div className="flex justify-between text-xs" style={{ color: '#555' }}>
-            <span>{jobStatus?.message ?? '等待中…'}</span>
-            <span>{pct}%</span>
-          </div>
-          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
-            <div className="h-full rounded-full transition-all duration-700"
-              style={{ width: `${pct}%`, background: 'linear-gradient(90deg, #A78BFA, #F9A8D4)' }} />
-          </div>
-        </div>
-        <p className="text-xs text-center" style={{ color: '#444' }}>AI 正在生成互动课堂，通常需要 30-60 秒</p>
-      </div>
+      <GeneratingState
+        label="互动课堂"
+        timeHint="通常需要 30-60 秒"
+        progress={pct}
+        message={msg}
+      />
     )
   }
 

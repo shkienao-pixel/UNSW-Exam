@@ -15,12 +15,14 @@ export interface TypedOutputsViewProps {
   emptyTitle: string
   emptyLinkLabel: string
   headerExtra?: React.ReactNode
+  /** Shown instead of empty state when generation is in progress */
+  generatingSlot?: React.ReactNode
   renderContent: (output: Output) => React.ReactNode
 }
 
 export default function TypedOutputsView({
   courseId, outputType, icon, title, subtitle,
-  emptyTitle, emptyLinkLabel, headerExtra, renderContent,
+  emptyTitle, emptyLinkLabel, headerExtra, generatingSlot, renderContent,
 }: TypedOutputsViewProps) {
   const [outputs, setOutputs] = useState<Output[]>([])
   const [selected, setSelected] = useState<Output | null>(null)
@@ -58,10 +60,12 @@ export default function TypedOutputsView({
       </div>
 
       {outputs.length === 0 ? (
-        <div className="text-center py-20 glass rounded-2xl" style={{ color: '#444' }}>
-          <BookOpen size={52} className="mx-auto mb-4 opacity-20" />
-          <p className="text-base font-medium text-white mb-4">{emptyTitle}</p>
-        </div>
+        generatingSlot ?? (
+          <div className="text-center py-20 glass rounded-2xl" style={{ color: '#444' }}>
+            <BookOpen size={52} className="mx-auto mb-4 opacity-20" />
+            <p className="text-base font-medium text-white mb-4">{emptyTitle}</p>
+          </div>
+        )
       ) : selected ? renderContent(selected) : null}
     </div>
   )
