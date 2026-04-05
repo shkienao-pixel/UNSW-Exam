@@ -652,6 +652,16 @@ function ExamDoingPage({
 
   if (!currentQuestion) return null
 
+  if (submitting) {
+    return (
+      <GeneratingState
+        label={tt(lang, '试卷', 'your paper')}
+        timeHint={tt(lang, 'AI 正在逐题判分，通常需要 15-40 秒', 'AI is grading each question, usually 15-40 seconds')}
+        message={tt(lang, '正在批改并生成双语解析...', 'Grading and generating bilingual explanations...')}
+      />
+    )
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
