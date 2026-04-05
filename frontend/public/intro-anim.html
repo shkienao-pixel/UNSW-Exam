@@ -45,12 +45,16 @@
     box-shadow:0 10px 24px rgba(0,0,0,.3), inset 0 0 0 1px rgba(255,255,255,.1);
     opacity:0;pointer-events:none;z-index:5;white-space:nowrap
   }
-  .finalTagline::after{
-    content:'';display:block;width:26px;height:1px;flex:0 0 auto;background:rgba(255,255,255,.68)
-  }
+  .finalTagline::after{content:none}
+  .decrypt-char{display:inline;transition:color .08s}
+  .circular-wrap{display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;flex:0 0 52px;animation:circSpin 10s linear infinite}
+  .circular-wrap svg{width:100%;height:100%;overflow:visible}
+  .circular-wrap text{font-size:14.5px;fill:rgba(255,255,255,.72);font-family:"Futura PT","Avenir Next","Helvetica Neue",Arial,sans-serif;letter-spacing:2px}
+  @keyframes circSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
   @media (max-width: 900px){
     .finalTagline{font-size:clamp(16px,4.2vw,23px);letter-spacing:.09em;padding:7px 12px 8px 10px;gap:8px}
-    .finalTagline::after{width:18px}
+    .circular-wrap{width:42px;height:42px;flex:0 0 42px}
+    .circular-wrap text{font-size:13px}
   }
 </style>
 </head>
@@ -60,7 +64,17 @@
     <img class="heroPhoto" id="heroPhoto" src="./b7830f310f59c9f898266efbffdde304.jpg" alt="hero"/>
     <div class="heroPhotoShade"></div>
   </div>
-  <div class="finalTagline" id="finalTagline">&#22791;&#32771;&#65292;&#20174;&#26410;&#22914;&#27492;&#28165;&#26224;</div>
+  <div class="finalTagline" id="finalTagline">
+    <span id="decryptText"></span>
+    <div class="circular-wrap">
+      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <path id="cp" d="M 50,50 m-38,0 a 38,38 0 1,1 76,0 a 38,38 0 1,1 -76,0"/>
+        </defs>
+        <text><textPath href="#cp">EXAM • MASTER • EXAM • MASTER •</textPath></text>
+      </svg>
+    </div>
+  </div>
   <div class="vignette"></div>
   <div class="frame" id="frame">
     <div class="frameGlow" id="frameGlow"></div>
@@ -74,7 +88,32 @@ const stage = document.getElementById('stage');
 const heroPhotoWrap = document.getElementById('heroPhotoWrap');
 const heroPhoto = document.getElementById('heroPhoto');
 const finalTagline = document.getElementById('finalTagline');
+const decryptText = document.getElementById('decryptText');
 const frame = document.getElementById('frame');
+
+const DECRYPT_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*<>?/\\|[]{}';
+const DECRYPT_TARGET = '备考，从未如此清晰';
+let decryptStarted = false;
+function rndChar(){ return DECRYPT_CHARS[Math.floor(Math.random()*DECRYPT_CHARS.length)]; }
+function startDecrypt(el, text){
+  const chars = [...text];
+  el.innerHTML = '';
+  const spans = chars.map(ch => {
+    const s = document.createElement('span');
+    s.className = 'decrypt-char';
+    s.textContent = (ch === ' ' || ch === '，' || ch === ',') ? ch : rndChar();
+    el.appendChild(s);
+    return s;
+  });
+  const STAGGER = 55, SCRAMBLE = 320;
+  chars.forEach((ch, i) => {
+    if(ch === ' ' || ch === '，' || ch === ','){ spans[i].textContent = ch; return; }
+    setTimeout(() => {
+      const iv = setInterval(() => { spans[i].textContent = rndChar(); }, 38);
+      setTimeout(() => { clearInterval(iv); spans[i].textContent = ch; }, SCRAMBLE);
+    }, i * STAGGER);
+  });
+}
 const frameGlow = document.getElementById('frameGlow');
 const frameSweep = document.getElementById('frameSweep');
 const flash = document.getElementById('flash');
@@ -374,6 +413,10 @@ function renderFinalTagline(t){
   const top = y0 + final.size * 0.74;
   finalTagline.style.left = `${left - padLeft}px`;
   finalTagline.style.top = `${top}px`;
+  if(!decryptStarted && p > 0){
+    decryptStarted = true;
+    startDecrypt(decryptText, DECRYPT_TARGET);
+  }
   if(p <= 0){
     finalTagline.style.opacity = '0';
     finalTagline.style.transform = 'translate(0,16px) scale(.985)';

@@ -19,6 +19,7 @@ import ExamMasterLogo from '@/components/ExamMasterLogo'
 import { useAuth } from '@/lib/auth-context'
 import { GlowButton, GlowLink } from '@/components/GlowButton'
 import { CubesLoader } from '@/components/Cubes'
+import TextPressure from '@/components/TextPressure'
 
 const NAV_ITEMS = ['能力', '工作流', '安全']
 
@@ -400,9 +401,21 @@ export default function LandingPage() {
               数据驱动 · AI 助教 · 专为留学生打造
             </div>
 
-            <h1 className="mt-7 text-[clamp(3rem,6vw,6rem)] font-semibold leading-[0.92] tracking-[-0.065em] text-white">
-              Exam Master
-            </h1>
+            <div className="mt-7">
+              <TextPressure
+                text="Exam Master"
+                textColor="#FFFFFF"
+                className="tracking-[-0.065em] font-semibold"
+                minFontSize={48}
+                width
+                weight
+                italic={false}
+                alpha={false}
+                flex={false}
+                stroke={false}
+                scale={false}
+              />
+            </div>
 
             <div className="mt-6 max-w-[620px] space-y-3">
               <p className="text-lg font-medium leading-8 text-white/82 sm:text-[1.45rem]">
