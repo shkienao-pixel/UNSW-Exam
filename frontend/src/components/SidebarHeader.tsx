@@ -52,7 +52,7 @@ export default function SidebarHeader({
 
         {!collapsed ? (
           <div className="mt-3 space-y-2">
-            <p className="truncate text-xs text-white/34">{user?.email}</p>
+            <p className="truncate text-xs text-white/60">{user?.email}</p>
             {role !== 'guest' && credits !== null && credits !== undefined ? (
               <>
                 <div className="flex items-center gap-2">

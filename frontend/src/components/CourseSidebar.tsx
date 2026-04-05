@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/i18n'
 import HoverLink from '@/components/HoverLink'
+import GlassIconSpan from '@/components/GlassIconSpan'
 import { ArrowLeft } from 'lucide-react'
 import { FEATURES, FEATURE_ICON_MAP, SIDEBAR_CARD } from '@/lib/navigation'
 import type { Course } from '@/lib/types'
@@ -68,12 +69,13 @@ function CourseSidebarInner({
                 boxShadow: isActive ? '0 16px 36px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.04)' : 'inset 0 1px 0 rgba(255,255,255,0.03)',
                 textShadow: 'none',
               }}>
-              <span
-                className={`flex flex-shrink-0 items-center justify-center border border-white/6 ${collapsed ? 'h-7 w-7 rounded-lg' : 'h-8 w-8 rounded-xl'}`}
-                style={{ color: featureMeta.tint, background: featureMeta.bg }}
+              <GlassIconSpan
+                tint={featureMeta.tint}
+                bg={featureMeta.bg}
+                size={collapsed ? 'sm' : 'md'}
               >
                 <Icon size={collapsed ? 14 : 16} />
-              </span>
+              </GlassIconSpan>
               {!collapsed && <span className="flex-1">{label}</span>}
               {!collapsed && isActive && (
                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#c8a55a' }} />
@@ -86,17 +88,14 @@ function CourseSidebarInner({
           <HoverLink key={f.view} href={href} onClick={onNavClick}
             className={`items-center rounded-[14px] text-sm ${collapsed ? 'h-11 w-11 justify-center px-0 py-0' : 'gap-2.5 px-3 py-2.5'}`}
             style={{
-              color: isActive ? '#ffffff' : 'rgba(255,255,255,0.44)',
+              color: isActive ? '#ffffff' : 'rgba(255,255,255,0.75)',
               background: isActive ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.01)',
               border: `1px solid ${isActive ? 'rgba(200,165,90,0.14)' : 'rgba(255,255,255,0.02)'}`,
               textShadow: 'none',
             }}>
-            <span
-              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-white/5"
-              style={{ color: featureMeta.tint, background: featureMeta.bg }}
-            >
+            <GlassIconSpan tint={featureMeta.tint} bg={featureMeta.bg} size="sm">
               <Icon size={14} />
-            </span>
+            </GlassIconSpan>
             {!collapsed && label}
           </HoverLink>
         )

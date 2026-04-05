@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/i18n'
 import HoverLink from '@/components/HoverLink'
+import GlassIconSpan from '@/components/GlassIconSpan'
 import { LayoutDashboard, CreditCard, BookOpen } from 'lucide-react'
 import { SIDEBAR_CARD } from '@/lib/navigation'
 import type { Course } from '@/lib/types'
@@ -20,27 +21,25 @@ export default function DefaultSidebar({
   const { t } = useLang()
   const { role } = useAuth()
 
-  function navItem(href: string, icon: React.ReactNode, label: string) {
+  function navItem(href: string, icon: React.ReactNode, label: string, tint = 'rgba(255,255,255,0.7)', bg = 'rgba(255,255,255,0.04)') {
     const active = pathname === href
     return (
       <HoverLink href={href} onClick={onNavClick}
         className={`items-center text-sm ${collapsed ? 'h-11 w-11 justify-center rounded-[14px] px-0 py-0' : 'gap-3 rounded-[18px] px-3 py-2.5'}`}
         style={{
-          color: active ? '#ffffff' : 'rgba(255,255,255,0.5)',
+          color: active ? '#ffffff' : 'rgba(255,255,255,0.78)',
           background: active ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.01)',
           border: `1px solid ${active ? 'rgba(200,165,90,0.16)' : 'rgba(255,255,255,0.03)'}`,
           boxShadow: active ? '0 14px 30px rgba(0,0,0,0.2)' : 'none',
           textShadow: 'none',
         }}>
-        <span
-          className={`flex flex-shrink-0 items-center justify-center border border-white/6 ${collapsed ? 'h-7 w-7 rounded-lg' : 'h-8 w-8 rounded-xl'}`}
-          style={{
-            color: active ? '#e6cf98' : 'rgba(255,255,255,0.58)',
-            background: active ? 'rgba(200,165,90,0.12)' : 'rgba(255,255,255,0.03)',
-          }}
+        <GlassIconSpan
+          tint={active ? '#e6cf98' : tint}
+          bg={active ? 'rgba(200,165,90,0.12)' : bg}
+          size={collapsed ? 'sm' : 'md'}
         >
           {icon}
-        </span>
+        </GlassIconSpan>
         {!collapsed && label}
       </HoverLink>
     )
@@ -48,14 +47,14 @@ export default function DefaultSidebar({
 
   return (
     <nav className={`no-scrollbar flex-1 overflow-y-auto overflow-x-hidden ${collapsed ? 'space-y-2 px-2 py-3' : 'space-y-2 px-3 py-4'}`}>
-      {navItem('/dashboard', <LayoutDashboard size={16} />, t('dashboard'))}
-      {role !== 'guest' && navItem('/credits', <CreditCard size={16} />, '积分 & 充值')}
+      {navItem('/dashboard', <LayoutDashboard size={16} />, t('dashboard'), '#87B6FF', 'rgba(135,182,255,0.08)')}
+      {role !== 'guest' && navItem('/credits', <CreditCard size={16} />, '积分 & 充值', '#E7D08A', 'rgba(200,165,90,0.08)')}
 
       {!collapsed && (
         <div>
           <button onClick={() => setCoursesOpen(v => !v)}
             className="flex w-full items-center gap-2 rounded-[18px] border border-white/6 bg-white/[0.02] px-3 py-2.5 text-sm transition-colors"
-            style={{ color: 'rgba(255,255,255,0.48)' }}>
+            style={{ color: 'rgba(255,255,255,0.72)' }}>
             <BookOpen size={16} />
             <span className="flex-1 text-left">{t('my_courses')}</span>
             <span style={{ fontSize: 10, color: '#555' }}>{coursesOpen ? '▲' : '▼'}</span>
@@ -69,7 +68,7 @@ export default function DefaultSidebar({
                   <HoverLink key={c.id} href={href} onClick={onNavClick}
                     className="items-center gap-2 rounded-[16px] px-3 py-2 text-[11px] truncate"
                     style={{
-                      color: active ? '#fff' : 'rgba(255,255,255,0.46)',
+                      color: active ? '#fff' : 'rgba(255,255,255,0.72)',
                       background: active ? 'rgba(255,255,255,0.05)' : 'transparent',
                       textShadow: 'none',
                     }}>
