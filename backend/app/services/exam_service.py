@@ -962,10 +962,11 @@ def grade_answers(
             if correct:
                 is_correct = user_ans.upper().strip() == correct
                 feedback = "回答正确！" if is_correct else f"正确答案是 {correct}"
+                results.append({"question_id": qid, "is_correct": is_correct, "feedback": feedback})
             else:
-                is_correct = None
-                feedback = "暂无参考答案"
-            results.append({"question_id": qid, "is_correct": is_correct, "feedback": feedback})
+                # No stored correct_answer → fall through to AI grading like short answers
+                results.append({"question_id": qid, "is_correct": None, "feedback": None})
+                short_batch.append((len(results) - 1, q, user_ans))
         else:
             results.append({"question_id": qid, "is_correct": None, "feedback": None})
             short_batch.append((len(results) - 1, q, user_ans))
@@ -1009,19 +1010,31 @@ def _grade_short_answers_batch(
     if not batch:
         return
 
+    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     lines: list[str] = []
     for idx, (_, q, user_ans) in enumerate(batch, 1):
-        ref = q.get("correct_answer") or "N/A"
+        ref = q.get("correct_answer") or ""
+        options = q.get("options") or []
+        opts_text = ""
+        if options:
+            opts_text = "\nOptions:\n" + "\n".join(
+                f"  {letters[i]}. {opt}" for i, opt in enumerate(options[:len(letters)])
+            )
+        ref_line = f"Reference answer: {ref}" if ref else "Reference answer: (use your knowledge to determine the correct answer)"
         lines.append(
-            f"[{idx}] Question: {q['question_text']}\n"
-            f"Reference: {ref}\n"
-            f"Student: {user_ans}"
+            f"[{idx}] Question: {q['question_text']}{opts_text}\n"
+            f"{ref_line}\n"
+            f"Student answer: {user_ans}"
         )
 
     system = (
         "You are a strict but fair exam marker. Grade each numbered student answer.\n"
-        "Judge ONLY correct or incorrect — accept alternative phrasing if core concept is right.\n"
-        "Provide brief feedback (1-2 sentences) in the same language as the question.\n"
+        "For MCQ questions (with A/B/C/D options): if no reference answer is provided, "
+        "use your own knowledge to determine the correct option, then judge accordingly.\n"
+        "For short-answer questions: accept alternative phrasing if the core concept is correct.\n"
+        "Provide brief feedback (1-2 sentences) explaining the result. "
+        "If you determined the correct answer yourself, state it in the feedback.\n"
+        "Use the same language as the question (Chinese or English).\n"
         "Return ONLY a raw JSON array in the same order as the input.\n"
         'Format: [{"is_correct": true/false, "feedback": "..."}]'
     )
