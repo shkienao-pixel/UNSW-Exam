@@ -385,12 +385,11 @@ function renderBall(t){
   return {energy: 1, red, x, y, targetX:tx, targetY:ty, vx, vy, s};
 }
 
-const PRESSURE_SETTLE = 7800; // ms — after all EXAM MASTER letters fully settled
 function renderTextPressure(t){
-  if(t < PRESSURE_SETTLE) return;
   const MAX_D = 320;
   entities.forEach(o => {
     if(!o.finalHold || !o.el) return;
+    if(t < o.start + o.build + 400) return; // 等该字母落定再响应
     const rect = o.el.getBoundingClientRect();
     const cx = rect.x + rect.width / 2;
     const cy = rect.y + rect.height / 2;
@@ -529,7 +528,7 @@ function frameLoop(ts){
   }
   renderSparkle(t, ballState);
 
-  if(t < totalDuration) requestAnimationFrame(frameLoop);
+  requestAnimationFrame(frameLoop);
 }
 requestAnimationFrame(frameLoop);
 window.addEventListener('resize', ()=>location.reload());
