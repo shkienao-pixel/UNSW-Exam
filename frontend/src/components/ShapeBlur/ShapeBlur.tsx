@@ -80,7 +80,14 @@ void main() {
         u_circleEdge
     );
 
-    float sdf = sdRoundRect(st, vec2(u_shapeSize), u_roundness);
+    // Stretch shape to fill the actual card dimensions (not just the square region)
+    float aspect = u_resolution.x > u_resolution.y
+        ? u_resolution.x / u_resolution.y
+        : u_resolution.y / u_resolution.x;
+    vec2 shapeRect = u_resolution.x > u_resolution.y
+        ? vec2(u_shapeSize * aspect, u_shapeSize)
+        : vec2(u_shapeSize, u_shapeSize * aspect);
+    float sdf = sdRoundRect(st, shapeRect, u_roundness);
     float alpha = strokeAA(sdf, 0.0, u_borderSize, sdfCircle) * 4.0;
 
     vec3 color = vec3(1.0);

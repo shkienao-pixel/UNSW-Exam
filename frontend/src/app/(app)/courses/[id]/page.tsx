@@ -271,11 +271,10 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
   const [remembered, setRemembered] = useState(0)
   const [forgotten, setForgotten] = useState(0)
   const [mistakeMap, setMistakeMap] = useState<Record<string, FlashcardMistake>>({})
-  const [mistakeRows, setMistakeRows] = useState<FlashcardMistake[]>([])
   const [isSliding, setIsSliding] = useState(false)
   const [slideDir, setSlideDir] = useState<'left' | 'right'>('left')
   const [forgottenHint, setForgottenHint] = useState(false)
-  const [showingMistakes, setShowingMistakes] = useState(false)
+  const [confirmGenFC, setConfirmGenFC] = useState(false)
 
   // refs for keyboard handler to read latest state without stale closure
   const stateRef = useRef({ cardIndex, flipped, revealed, chosen, cards, finished })
@@ -333,8 +332,6 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
   }
 
   async function recordFlashcardMistake(card: Flashcard, idx: number) {
-    // 错题复习模式下卡片已经是错题，无需重复记录
-    if (showingMistakes) return
     if (!selectedOutputId) return
     const cardFront = card.type === 'vocab' ? card.front : card.question
     const cardBack  = card.type === 'vocab' ? card.back  : card.answer
@@ -357,21 +354,6 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
   }
 
   async function markFlashcardMastered(idx: number) {
-    // 错题复习模式：直接用 mistakeRows[idx] 的真实 id 操作
-    if (showingMistakes) {
-      const row = mistakeRows[idx]
-      if (!row || row.mistake_status === 'mastered') return
-      setMistakeRows(prev => prev.map((r, i) => i === idx ? { ...r, mistake_status: 'mastered' as const } : r))
-      emitFlashcardMistakesChanged({ courseId })
-      try {
-        await api.flashcardMistakes.update(courseId, row.id, 'mastered')
-      } catch {
-        setMistakeRows(prev => prev.map((r, i) => i === idx ? row : r))
-      }
-      return
-    }
-
-    // 普通模式：通过 mistakeMap key 找到对应记录
     if (!selectedOutputId) return
     const key = flashcardMistakeKey(selectedOutputId, idx)
     const existing = mistakeMap[key]
@@ -425,11 +407,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
   // Show generating state if AI is running and there are no flashcards yet
   if (activeJob && outputs.length === 0) {
     return (
-      <div className="space-y-5">
-        <div className="flex items-center gap-2">
-          <Layers3 size={22} style={{ color: '#FFD700' }} />
-          <h2 className="text-2xl font-bold text-white">{t('flashcards_title')}</h2>
-        </div>
+      <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 180px)' }}>
         <GeneratingState
           label={t('gen_flashcards')}
           timeHint={activeJob.timeHint ?? '通常需要 30-60 秒'}
@@ -456,53 +434,72 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
         </div>
         <div className="flex items-center gap-2 mt-1 sm:mt-0 flex-wrap justify-end">
           <GlowButton
-            onClick={() => trackGeneration({
-              label: t('gen_flashcards'),
-              viewLink: `/courses/${courseId}?view=flashcards`,
-              promise: api.generate.flashcards(courseId, {}),
-              timeHint: '通常需要 30-60 秒',
-              onSuccess: (output) => {
-                setOutputs(prev => [output, ...prev])
-                setShowingMistakes(false)
-                loadCards(output)
-              },
-            })}
+            onClick={() => setConfirmGenFC(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all hover:opacity-85 flex-shrink-0"
             style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}
           >
             <Sparkles size={12} /> {t('gen_flashcards')} · 100 ✦
           </GlowButton>
-          {outputs.length > 0 && (
-            <button
-              onClick={() => {
-                api.flashcardMistakes.list(courseId, 'active').then(rows => {
-                  const fc: Flashcard[] = rows.map(r =>
-                    r.card_type === 'mcq'
-                      ? { type: 'mcq' as const, question: r.card_front, options: [], answer: r.card_back }
-                      : { type: 'vocab' as const, front: r.card_front, back: r.card_back }
-                  )
-                  setCards(fc)
-                  setMistakeRows(rows)
-                  setShowingMistakes(true)
-                  setCardIndex(0); setFlipped(false); setChosen(null); setRevealed(false); setFinished(false)
-                  setRemembered(0); setForgotten(0)
-                }).catch(() => {})
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all hover:opacity-85 flex-shrink-0"
-              style={showingMistakes
-                ? { background: 'rgba(255,68,68,0.18)', color: '#ff8d8d', border: '1px solid rgba(255,68,68,0.35)' }
-                : { background: 'rgba(255,68,68,0.07)', color: '#ff8d8d', border: '1px solid rgba(255,68,68,0.15)' }}
+
+          {/* 生成确认弹窗 */}
+          {confirmGenFC && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center"
+              style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+              onClick={() => setConfirmGenFC(false)}
             >
-              📌 错题
-            </button>
+              <div
+                className="relative mx-4 w-full max-w-sm rounded-2xl p-6 space-y-4"
+                style={{ background: 'rgb(16,18,26)', border: '1px solid rgba(255,215,0,0.2)', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }}
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex items-center gap-2">
+                  <Sparkles size={16} style={{ color: '#FFD700' }} />
+                  <p className="font-semibold text-white">{lang === 'zh' ? '生成闪卡' : 'Generate Flashcards'}</p>
+                </div>
+                <p className="text-sm" style={{ color: '#aaa' }}>
+                  {lang === 'zh'
+                    ? '将消耗 100 ✦ 积分生成一组新闪卡，确认继续？'
+                    : 'This will cost 100 ✦ credits to generate a new flashcard set. Continue?'}
+                </p>
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => setConfirmGenFC(false)}
+                    className="px-4 py-2 rounded-xl text-sm"
+                    style={{ background: 'rgba(255,255,255,0.05)', color: '#888', border: '1px solid rgba(255,255,255,0.08)' }}
+                  >
+                    {lang === 'zh' ? '取消' : 'Cancel'}
+                  </button>
+                  <GlowButton
+                    onClick={() => {
+                      setConfirmGenFC(false)
+                      trackGeneration({
+                        label: t('gen_flashcards'),
+                        viewLink: `/courses/${courseId}?view=flashcards`,
+                        promise: api.generate.flashcards(courseId, {}),
+                        timeHint: '通常需要 30-60 秒',
+                        onSuccess: (output) => {
+                          setOutputs(prev => [output, ...prev])
+                          loadCards(output)
+                        },
+                      })
+                    }}
+                    className="px-4 py-2 rounded-xl text-sm font-semibold"
+                    style={{ background: 'rgba(255,215,0,0.15)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.3)' }}
+                  >
+                    {lang === 'zh' ? '确认生成' : 'Confirm'}
+                  </GlowButton>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>
 
       <OutputHistory
         outputs={outputs}
-        selectedId={showingMistakes ? null : selectedOutputId}
-        onSelect={o => { setShowingMistakes(false); loadCards(o) }}
+        selectedId={selectedOutputId}
+        onSelect={o => loadCards(o)}
       />
 
       {outputs.length === 0 ? (
@@ -598,7 +595,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                   {/* ShapeBlur border overlay */}
                   <div className="absolute inset-0 pointer-events-none" style={{ borderRadius: '28px', overflow: 'hidden', zIndex: 10 }}>
                     <ShapeBlur
-                      shapeSize={1.1}
+                      shapeSize={2.0}
                       roundness={0.5}
                       borderSize={0.05}
                       circleSize={0.35}
@@ -752,7 +749,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                   <div className="relative w-full">
                   <div className="absolute inset-0 pointer-events-none" style={{ borderRadius: '26px', overflow: 'hidden', zIndex: 10 }}>
                     <ShapeBlur
-                      shapeSize={1.1}
+                      shapeSize={2.0}
                       roundness={0.45}
                       borderSize={0.05}
                       circleSize={0.35}
