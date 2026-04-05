@@ -46,10 +46,15 @@ def add_mistake(
         "mastered_at":    None,
     }
     # Upsert: if same (user, output, card_index) already exists, set back to active
+    supabase.table("flashcard_mistakes") \
+        .upsert(row, on_conflict="user_id,output_id,card_index") \
+        .execute()
     result = (
         supabase.table("flashcard_mistakes")
-        .upsert(row, on_conflict="user_id,output_id,card_index")
-        .select()
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("output_id", body.output_id)
+        .eq("card_index", body.card_index)
         .execute()
         .data
     )

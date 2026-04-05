@@ -595,12 +595,12 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                   {/* ShapeBlur border overlay */}
                   <div className="absolute inset-0 pointer-events-none" style={{ borderRadius: '28px', overflow: 'hidden', zIndex: 10 }}>
                     <ShapeBlur
-                      shapeSize={2.0}
+                      shapeSize={2.1}
                       roundness={0.5}
                       borderSize={0.05}
                       circleSize={0.35}
                       circleEdge={0.6}
-                      color="rgba(200,165,90,0.75)"
+                      color="rgba(255,255,255,0.55)"
                     />
                   </div>
                   <div
@@ -749,12 +749,12 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                   <div className="relative w-full">
                   <div className="absolute inset-0 pointer-events-none" style={{ borderRadius: '26px', overflow: 'hidden', zIndex: 10 }}>
                     <ShapeBlur
-                      shapeSize={2.0}
+                      shapeSize={2.1}
                       roundness={0.45}
                       borderSize={0.05}
                       circleSize={0.35}
                       circleEdge={0.6}
-                      color="rgba(200,165,90,0.75)"
+                      color="rgba(255,255,255,0.55)"
                     />
                   </div>
                   <div className="rounded-[26px] border border-white/8 bg-white/[0.03] p-6 shadow-[0_20px_56px_rgba(0,0,0,0.22)] space-y-4">
