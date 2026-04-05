@@ -407,14 +407,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
   // Show generating state if AI is running and there are no flashcards yet
   if (activeJob && outputs.length === 0) {
     return (
-      <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 180px)' }}>
-        <GeneratingState
-          label={t('gen_flashcards')}
-          timeHint={activeJob.timeHint ?? '通常需要 30-60 秒'}
-          progress={activeJob.progress}
-          message={activeJob.message}
-        />
-      </div>
+      <CubesLoader className="py-16 pb-32" />
     )
   }
 
