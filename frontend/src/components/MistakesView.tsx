@@ -165,14 +165,14 @@ function FlashcardList({ items, color, onMaster, onRemove }: {
   if (items.length === 0) return <EmptyState hint="闪卡训练中点「✗ 没记住」会收录到这里" />
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <StatsBar total={items.length} active={activeCount} mastered={masteredCount} color={color} />
       <FilterTabs value={filter} onChange={setFilter} color={color} />
 
       {visible.length === 0 ? (
         <EmptyFilter filter={filter} />
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {visible.map(m => (
             <FlashcardCard key={m.id} item={m} color={color} onMaster={onMaster} onRemove={onRemove} />
           ))}
@@ -193,7 +193,7 @@ function StatsBar({ total, active, mastered, color }: {
       <div className="flex-1 min-w-0">
         <div className="flex justify-between text-[11px] mb-1">
           <span style={{ color }} className="font-medium">{total} 条</span>
-          <span style={{ color: '#333' }}>{pct}% 已掌握</span>
+          <span style={{ color: '#555' }}>{pct}% 已掌握</span>
         </div>
         <div className="h-[3px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
           <div className="h-full rounded-full transition-all duration-500"
@@ -236,7 +236,7 @@ function EmptyState({ hint }: { hint?: string }) {
       style={{ background: 'rgba(255,255,255,0.015)', border: '1px solid rgba(255,255,255,0.05)' }}>
       <BookOpen size={28} className="mx-auto mb-3 opacity-[0.12]" />
       <p className="text-sm text-white mb-1.5">暂无错题</p>
-      <p className="text-[11px] px-8 leading-relaxed" style={{ color: '#2e2e3a' }}>
+      <p className="text-[11px] px-8 leading-relaxed" style={{ color: '#555' }}>
         {hint ?? '答错的题目会自动收录到这里'}
       </p>
     </div>
@@ -247,7 +247,7 @@ function EmptyFilter({ filter }: { filter: StatusFilter }) {
   return (
     <div className="rounded-2xl text-center py-8"
       style={{ background: 'rgba(255,255,255,0.015)', border: '1px solid rgba(255,255,255,0.05)' }}>
-      <p className="text-xs" style={{ color: '#333' }}>
+      <p className="text-xs" style={{ color: '#555' }}>
         {filter === 'active' ? '🎉 没有待复习的内容' : '暂无记录'}
       </p>
     </div>
@@ -382,42 +382,52 @@ function FlashcardCard({ item: m, color, onMaster, onRemove }: {
 }) {
   const isMastered = m.mistake_status === 'mastered'
   return (
-    <div className="group rounded-xl px-4 py-3 flex items-start gap-3"
+    <div className="group rounded-2xl overflow-hidden"
       style={{
-        background: isMastered ? 'rgba(34,197,94,0.04)' : 'rgba(255,255,255,0.025)',
-        border: isMastered ? '1px solid rgba(34,197,94,0.14)' : '1px solid rgba(255,255,255,0.06)',
+        background: isMastered ? 'rgba(34,197,94,0.04)' : 'rgba(255,255,255,0.03)',
+        border: isMastered ? '1px solid rgba(34,197,94,0.18)' : '1px solid rgba(255,255,255,0.08)',
       }}>
-      <div className="flex-shrink-0 mt-[7px] w-1.5 h-1.5 rounded-full"
-        style={{ background: isMastered ? '#22C55E' : color }} />
 
-      <div className="flex-1 min-w-0 space-y-1.5">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[10px] px-1.5 py-px rounded-full font-medium"
-            style={{ background: color + '18', color, border: `1px solid ${color}35` }}>
-            {m.card_type === 'vocab' ? '词汇卡' : '概念卡'}
-          </span>
-          {isMastered && (
-            <span className="text-[10px] px-1.5 py-px rounded-full"
-              style={{ background: 'rgba(34,197,94,0.08)', color: '#22C55E' }}>✓ 已掌握</span>
-          )}
+      {/* Term row */}
+      <div className="px-5 pt-4 pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[11px] px-2 py-0.5 rounded-full font-medium"
+                style={{ background: color + '15', color, border: `1px solid ${color}30` }}>
+                {m.card_type === 'vocab' ? '词汇卡' : '概念卡'}
+              </span>
+              {isMastered && (
+                <span className="text-[11px] px-2 py-0.5 rounded-full font-medium"
+                  style={{ background: 'rgba(34,197,94,0.1)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.2)' }}>
+                  ✓ 已掌握
+                </span>
+              )}
+            </div>
+            <p className="text-sm font-semibold text-white leading-snug">{m.card_front}</p>
+          </div>
+
+          <div className="flex-shrink-0 flex items-center gap-1.5 mt-0.5">
+            {!isMastered && (
+              <button onClick={() => onMaster(m.id)}
+                className="text-xs px-3 py-1.5 rounded-xl font-medium whitespace-nowrap transition-opacity hover:opacity-80"
+                style={{ background: 'rgba(34,197,94,0.09)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.22)' }}>
+                ✓ 已掌握
+              </button>
+            )}
+            <button onClick={() => onRemove(m.id)}
+              className="text-xs px-2 py-1.5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity"
+              style={{ background: 'rgba(255,255,255,0.04)', color: '#555', border: '1px solid rgba(255,255,255,0.07)' }}>
+              删除
+            </button>
+          </div>
         </div>
-        <p className="text-xs font-medium text-white leading-relaxed line-clamp-2">{m.card_front}</p>
-        <p className="text-[11px] leading-relaxed" style={{ color: '#555' }}>答案：{m.card_back}</p>
       </div>
 
-      <div className="flex-shrink-0 flex flex-col gap-1.5 items-end pt-0.5">
-        {!isMastered && (
-          <button onClick={() => onMaster(m.id)}
-            className="text-[10px] px-2 py-1 rounded-lg whitespace-nowrap"
-            style={{ background: 'rgba(34,197,94,0.07)', color: '#22C55E', border: '1px solid rgba(34,197,94,0.18)' }}>
-            ✓ 已掌握
-          </button>
-        )}
-        <button onClick={() => onRemove(m.id)}
-          className="text-[10px] px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-          style={{ background: 'rgba(255,255,255,0.03)', color: '#444', border: '1px solid rgba(255,255,255,0.06)' }}>
-          删除
-        </button>
+      {/* Answer row */}
+      <div className="px-5 py-3" style={{ borderTop: '1px solid rgba(255,255,255,0.05)', background: 'rgba(0,0,0,0.12)' }}>
+        <p className="text-[11px] uppercase tracking-wider mb-1.5 font-medium" style={{ color: color + 'aa' }}>答案</p>
+        <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.75)' }}>{m.card_back}</p>
       </div>
     </div>
   )
