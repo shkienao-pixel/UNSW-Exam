@@ -48,7 +48,9 @@ _VISION_SYSTEM = (
     "     - Cover ONLY the visual element(s), NOT the question text.\n"
     "     - Extend 2–3% above and below the visual element to avoid clipping.\n"
     "     - If multiple visuals belong to one question, span all of them in a single range.\n"
-    "  10. For MCQ questions, ALWAYS extract all answer options even if they appear below a figure or table.\n\n"
+    "  10. For MCQ questions, ALWAYS extract all answer options even if they appear below a figure or table.\n"
+    "      If the question stem is visible but the A/B/C/D options are not on this page, set continues_to_next=true.\n"
+    "      NEVER classify a question as MCQ if you cannot see at least 4 options — use short_answer instead.\n\n"
     "Field 2 — \"page_has_visual\": boolean — true if the page contains ANY visual element.\n\n"
     "Return ONLY a raw JSON object — no markdown fences, no extra text.\n"
     "Format: {\"page_has_visual\": true/false, \"questions\": [{\"question_index\":1,\"question_type\":\"mcq\","
@@ -276,6 +278,112 @@ def _upload_page_image(supabase: Client, jpeg_bytes: bytes, artifact_id: int, pa
         return None
 
 
+def _repair_missing_mcq_options(
+    questions: list[dict],
+    pdf_data: bytes,
+    openai_key: str,
+    supabase: Client,
+    artifact_id: int,
+) -> list[dict]:
+    """For text-extracted MCQ questions with < 4 options: locate the page via fitz,
+    render it as an image, and call GPT Vision to recover the options.
+    If Vision also fails, attach the full page image so users can see the original.
+    """
+    import base64
+    import fitz
+
+    broken = [
+        (i, q) for i, q in enumerate(questions)
+        if q.get("question_type") == "mcq" and len(q.get("options") or []) < 4
+    ]
+    if not broken:
+        return questions
+
+    try:
+        doc = fitz.open(stream=pdf_data, filetype="pdf")
+    except Exception:
+        return questions
+
+    mat = fitz.Matrix(1.5, 1.5)
+    page_texts = [doc[p].get_text() for p in range(len(doc))]
+
+    from openai import OpenAI
+    client = OpenAI(api_key=openai_key, timeout=60.0)
+
+    result = list(questions)
+    for q_idx, q in broken:
+        stem = (q.get("question_text") or "")[:80].strip()
+        # Find which page contains this question's first ~40 chars
+        found_page: int | None = None
+        for page_num, ptext in enumerate(page_texts):
+            if stem[:40] in ptext:
+                found_page = page_num
+                break
+
+        if found_page is None:
+            logger.debug("_repair_missing_mcq_options: could not locate q%d in PDF", q.get("question_index"))
+            continue
+
+        pix = doc[found_page].get_pixmap(matrix=mat)
+        b64 = base64.b64encode(pix.tobytes("png")).decode()
+        full_page_jpeg = pix.tobytes("jpeg", 88)
+
+        # If options might be on the next page, also render it and ask GPT to look at both
+        next_page_b64: str | None = None
+        if found_page + 1 < len(doc):
+            nxt_pix = doc[found_page + 1].get_pixmap(matrix=mat)
+            next_page_b64 = base64.b64encode(nxt_pix.tobytes("png")).decode()
+
+        system = (
+            "You are an expert exam parser. A multiple-choice question's options are missing from our text extraction.\n"
+            f"The question stem is:\n\"\"\"{stem}\"\"\"\n\n"
+            "Look at the exam page image(s) and extract ONLY the 4 answer options for this specific question.\n"
+            "Return ONLY a raw JSON array of exactly 4 strings — no labels like A/B/C/D, no markdown.\n"
+            "Example: [\"First option text\", \"Second option text\", \"Third option text\", \"Fourth option text\"]\n"
+            "If you cannot find 4 options, return []."
+        )
+        user_content: list[dict] = [
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}", "detail": "high"}},
+        ]
+        if next_page_b64:
+            user_content.append(
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{next_page_b64}", "detail": "high"}},
+            )
+
+        try:
+            resp = client.chat.completions.create(
+                model="gpt-5.4",
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user",   "content": user_content},
+                ],
+                max_completion_tokens=512,
+                temperature=0.1,
+            )
+            raw = _extract_json(resp.choices[0].message.content or "[]")
+            opts = json.loads(raw) if raw else []
+            if isinstance(opts, list) and len(opts) >= 4:
+                result[q_idx] = {**q, "options": [str(o).strip() for o in opts[:4]]}
+                logger.info(
+                    "_repair_missing_mcq_options: recovered options for q%d via Vision",
+                    q.get("question_index"),
+                )
+            else:
+                # Vision couldn't find options either — attach full page image as reference
+                url = _upload_page_image(supabase, full_page_jpeg, artifact_id, found_page, q.get("question_index", 0))
+                if url:
+                    result[q_idx] = {**q, "page_image_url": url}
+                logger.debug(
+                    "_repair_missing_mcq_options: Vision found no options for q%d, attached page image",
+                    q.get("question_index"),
+                )
+        except Exception as exc:
+            logger.warning("_repair_missing_mcq_options: Vision call failed for q%d: %s", q.get("question_index"), exc)
+
+    doc.close()
+    return result
+
+
 def _extract_questions_vision(data: bytes, openai_key: str, supabase: Client, artifact_id: int) -> list[dict]:
     """Convert each PDF page to image, send to gpt-5.4 Vision.
 
@@ -356,6 +464,13 @@ def _extract_questions_vision(data: bytes, openai_key: str, supabase: Client, ar
                     mcq_options = q.get("options") or []
                     image_bytes = full_page_jpeg if q.get("question_type") == "mcq" and len(mcq_options) < 4 else crop_jpeg
                     q_image_url = _upload_page_image(supabase, image_bytes, artifact_id, page_num, global_index)
+            # MCQ with missing options but no visual declared → still attach full page so user can see original
+            if q_image_url is None and q.get("question_type") == "mcq" and len(q.get("options") or []) < 4:
+                q_image_url = _upload_page_image(supabase, full_page_jpeg, artifact_id, page_num, global_index)
+                logger.debug(
+                    "_extract_questions_vision: MCQ q%d missing options, attached full-page fallback",
+                    global_index,
+                )
             q["question_index"] = global_index
             q["page_image_url"] = q_image_url
             all_questions.append(q)
@@ -541,6 +656,10 @@ def extract_questions_from_artifact(
     if not questions:
         logger.warning("extract_questions: no questions parsed for artifact %s", artifact_id)
         return []
+
+    # Repair MCQ questions whose options GPT missed in text extraction
+    if ft == "pdf":
+        questions = _repair_missing_mcq_options(questions, data, openai_key, supabase, artifact_id)
 
     return _insert_past_exam_questions(supabase, questions, course_id, artifact_id)
 
