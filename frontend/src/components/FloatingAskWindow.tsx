@@ -72,6 +72,21 @@ function loadPos() {
 const FAB_POS_KEY = 'floating_fab_pos'
 const FAB_SIZE = 130
 
+const CAT_MESSAGES = [
+  '有什么问题要问我吗？',
+  '考试快到了，来复习一下？',
+  '我帮你解释这道题吧~',
+  '不懂的地方尽管问我！',
+  '让我来帮你梳理一下思路',
+  '需要出几道练习题吗？',
+  '我可以帮你总结知识点哦',
+  '困了？来道题提提神！',
+  '别担心，我们一起搞定它',
+  '有没有想不通的地方？',
+  '说出来，我帮你分析~',
+  '今天学了什么？考考你！',
+]
+
 function loadFabPos() {
   if (typeof window === 'undefined') return { x: 0, y: 0 }
   try {
@@ -99,6 +114,8 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
   const [hovered, setHovered] = useState(false)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const [dragging, setDragging] = useState(false)
+  const [message, setMessage] = useState(CAT_MESSAGES[0])
+  const lastMsgIdx = useRef(0)
   const dragOffset = useRef({ dx: 0, dy: 0 })
   const didDrag = useRef(false)
   const lottieRef = useRef<any>(null)
@@ -169,7 +186,15 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
         height: FAB_SIZE,
         cursor: dragging ? 'grabbing' : 'grab',
       }}
-      onMouseEnter={() => setHovered(true)}
+      onMouseEnter={() => {
+        // 每次 hover 换一条不重复的消息
+        let idx
+        do { idx = Math.floor(Math.random() * CAT_MESSAGES.length) }
+        while (idx === lastMsgIdx.current && CAT_MESSAGES.length > 1)
+        lastMsgIdx.current = idx
+        setMessage(CAT_MESSAGES[idx])
+        setHovered(true)
+      }}
       onMouseLeave={() => setHovered(false)}
       onMouseDown={onMouseDown}
     >
@@ -199,7 +224,7 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
           letterSpacing: '0.02em',
           fontFamily: 'monospace',
         }}>
-          有什么问题要问我吗？
+          {message}
         </div>
         <div style={{
           position: 'absolute', bottom: -9, left: '50%', transform: 'translateX(-50%)',
