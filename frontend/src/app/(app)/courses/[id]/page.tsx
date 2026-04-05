@@ -30,6 +30,7 @@ import InsufficientCreditsModal from '@/components/InsufficientCreditsModal'
 import ReactMarkdown from 'react-markdown'
 
 import GeneratingState from '@/components/GeneratingState'
+import ShapeBlur from '@/components/ShapeBlur/ShapeBlur'
 import OutputHistory from '@/components/OutputHistory/OutputHistory'
 import ResourceHubTab from '@/components/ResourceHubTab'
 import ExamPlannerTab from '@/components/ExamPlannerTab'
@@ -593,13 +594,18 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
               {card.type === 'vocab' && (
                 <div className="space-y-4">
                   {/* flip card wrapper — perspective 在此层设置 */}
-                  <ElectricBorder
-                    color="#c8a55a"
-                    speed={0.1}
-                    chaos={0.01}
-                    borderRadius={50}
-                    className="mx-auto w-full max-w-[640px]"
-                  >
+                  <div className="relative mx-auto w-full max-w-[640px]">
+                  {/* ShapeBlur border overlay */}
+                  <div className="absolute inset-0 pointer-events-none" style={{ borderRadius: '28px', overflow: 'hidden', zIndex: 10 }}>
+                    <ShapeBlur
+                      shapeSize={1.1}
+                      roundness={0.5}
+                      borderSize={0.05}
+                      circleSize={0.35}
+                      circleEdge={0.6}
+                      color="rgba(200,165,90,0.75)"
+                    />
+                  </div>
                   <div
                     style={{ perspective: '1000px', WebkitPerspective: '1000px', cursor: 'pointer', userSelect: 'none' }}
                     onClick={() => setFlipped(f => !f)}>
@@ -687,7 +693,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                       </div>
                     </div>
                   </div>
-                  </ElectricBorder>
+                  </div>
 
                   {/* 没记住 hint toast */}
                   {forgottenHint && (
@@ -743,13 +749,17 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
               {/* ── MCQ card ── */}
               {card.type === 'mcq' && (
                 <div className="space-y-4">
-                  <ElectricBorder
-                    color="#c8a55a"
-                    speed={0.1}
-                    chaos={0.01}
-                    borderRadius={26}
-                    className="w-full"
-                  >
+                  <div className="relative w-full">
+                  <div className="absolute inset-0 pointer-events-none" style={{ borderRadius: '26px', overflow: 'hidden', zIndex: 10 }}>
+                    <ShapeBlur
+                      shapeSize={1.1}
+                      roundness={0.45}
+                      borderSize={0.05}
+                      circleSize={0.35}
+                      circleEdge={0.6}
+                      color="rgba(200,165,90,0.75)"
+                    />
+                  </div>
                   <div className="rounded-[26px] border border-white/8 bg-white/[0.03] p-6 shadow-[0_20px_56px_rgba(0,0,0,0.22)] space-y-4">
                     <p className="font-semibold text-white text-[1.05rem] leading-snug">{biText(card.question, biMode)}</p>
                     <div className="space-y-2.5">
@@ -799,7 +809,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                       </div>
                     )}
                   </div>
-                  </ElectricBorder>
+                  </div>
 
                   {/* MCQ navigation */}
                   <div className="flex gap-2 justify-center flex-wrap">

@@ -1,6 +1,7 @@
 'use client'
 
 import { Sparkles } from 'lucide-react'
+import { CubesLoader } from '@/components/Cubes'
 
 interface Props {
   label: string
@@ -19,15 +20,8 @@ export default function GeneratingState({ label, timeHint, progress, message }: 
   return (
     <div className="flex flex-col items-center justify-center py-20 gap-7 max-w-sm mx-auto select-none">
 
-      {/* Animated icon */}
-      <div className="relative flex items-center justify-center">
-        <div className="absolute w-24 h-24 rounded-3xl opacity-15 animate-ping"
-          style={{ background: 'rgba(167,139,250,0.5)', animationDuration: '2.5s' }} />
-        <div className="relative w-16 h-16 rounded-2xl flex items-center justify-center"
-          style={{ background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.22)' }}>
-          <Sparkles size={28} className="animate-pulse" style={{ color: '#A78BFA' }} />
-        </div>
-      </div>
+      {/* Cubes animation */}
+      <CubesLoader className="w-full" />
 
       {/* Title + step message */}
       <div className="text-center space-y-1.5">
