@@ -30,6 +30,7 @@ import InsufficientCreditsModal from '@/components/InsufficientCreditsModal'
 import ReactMarkdown from 'react-markdown'
 
 import GeneratingState from '@/components/GeneratingState'
+import OutputHistory from '@/components/OutputHistory/OutputHistory'
 import ResourceHubTab from '@/components/ResourceHubTab'
 import ExamPlannerTab from '@/components/ExamPlannerTab'
 import CourseLockedScreen from '@/components/CourseLockedScreen'
@@ -269,6 +270,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
   const [remembered, setRemembered] = useState(0)
   const [forgotten, setForgotten] = useState(0)
   const [mistakeMap, setMistakeMap] = useState<Record<string, FlashcardMistake>>({})
+  const [mistakeRows, setMistakeRows] = useState<FlashcardMistake[]>([])
   const [isSliding, setIsSliding] = useState(false)
   const [slideDir, setSlideDir] = useState<'left' | 'right'>('left')
   const [forgottenHint, setForgottenHint] = useState(false)
@@ -330,6 +332,8 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
   }
 
   async function recordFlashcardMistake(card: Flashcard, idx: number) {
+    // 错题复习模式下卡片已经是错题，无需重复记录
+    if (showingMistakes) return
     if (!selectedOutputId) return
     const cardFront = card.type === 'vocab' ? card.front : card.question
     const cardBack  = card.type === 'vocab' ? card.back  : card.answer
@@ -352,6 +356,21 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
   }
 
   async function markFlashcardMastered(idx: number) {
+    // 错题复习模式：直接用 mistakeRows[idx] 的真实 id 操作
+    if (showingMistakes) {
+      const row = mistakeRows[idx]
+      if (!row || row.mistake_status === 'mastered') return
+      setMistakeRows(prev => prev.map((r, i) => i === idx ? { ...r, mistake_status: 'mastered' as const } : r))
+      emitFlashcardMistakesChanged({ courseId })
+      try {
+        await api.flashcardMistakes.update(courseId, row.id, 'mastered')
+      } catch {
+        setMistakeRows(prev => prev.map((r, i) => i === idx ? row : r))
+      }
+      return
+    }
+
+    // 普通模式：通过 mistakeMap key 找到对应记录
     if (!selectedOutputId) return
     const key = flashcardMistakeKey(selectedOutputId, idx)
     const existing = mistakeMap[key]
@@ -453,39 +472,37 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
             <Sparkles size={12} /> {t('gen_flashcards')} · 100 ✦
           </GlowButton>
           {outputs.length > 0 && (
-            <select
-              className="input-glass text-xs py-1"
-              style={{ width: 'min(100%, 200px)' }}
-              value={showingMistakes ? 'mistakes' : (selectedOutputId ?? '')}
-              onChange={e => {
-                if (e.target.value === 'mistakes') {
-                  api.flashcardMistakes.list(courseId, 'active').then(rows => {
-                    const fc: Flashcard[] = rows.map(r =>
-                      r.card_type === 'mcq'
-                        ? { type: 'mcq' as const, question: r.card_front, options: [], answer: r.card_back }
-                        : { type: 'vocab' as const, front: r.card_front, back: r.card_back }
-                    )
-                    setCards(fc)
-                    setShowingMistakes(true)
-                    setCardIndex(0); setFlipped(false); setChosen(null); setRevealed(false); setFinished(false)
-                    setRemembered(0); setForgotten(0)
-                  }).catch(() => {})
-                } else {
-                  const o = outputs.find(x => x.id === Number(e.target.value))
-                  if (o) { setShowingMistakes(false); loadCards(o) }
-                }
-              }}>
-              <option value="mistakes">📌 全部错题</option>
-              {outputs.map(o => (
-                <option key={o.id} value={o.id}>
-                  {new Date(o.created_at).toLocaleDateString('zh-CN')}
-                  {!showingMistakes && selectedOutputId === o.id && cards.length > 0 ? ` (${cards.length})` : ''}
-                </option>
-              ))}
-            </select>
+            <button
+              onClick={() => {
+                api.flashcardMistakes.list(courseId, 'active').then(rows => {
+                  const fc: Flashcard[] = rows.map(r =>
+                    r.card_type === 'mcq'
+                      ? { type: 'mcq' as const, question: r.card_front, options: [], answer: r.card_back }
+                      : { type: 'vocab' as const, front: r.card_front, back: r.card_back }
+                  )
+                  setCards(fc)
+                  setMistakeRows(rows)
+                  setShowingMistakes(true)
+                  setCardIndex(0); setFlipped(false); setChosen(null); setRevealed(false); setFinished(false)
+                  setRemembered(0); setForgotten(0)
+                }).catch(() => {})
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all hover:opacity-85 flex-shrink-0"
+              style={showingMistakes
+                ? { background: 'rgba(255,68,68,0.18)', color: '#ff8d8d', border: '1px solid rgba(255,68,68,0.35)' }
+                : { background: 'rgba(255,68,68,0.07)', color: '#ff8d8d', border: '1px solid rgba(255,68,68,0.15)' }}
+            >
+              📌 错题
+            </button>
           )}
         </div>
       </div>
+
+      <OutputHistory
+        outputs={outputs}
+        selectedId={showingMistakes ? null : selectedOutputId}
+        onSelect={o => { setShowingMistakes(false); loadCards(o) }}
+      />
 
       {outputs.length === 0 ? (
         <div className="text-center py-20 glass rounded-2xl" style={{ color: '#444' }}>

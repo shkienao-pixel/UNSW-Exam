@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '@/lib/api'
 import type { StoredMistake, FlashcardMistake } from '@/lib/types'
+import { subscribeFlashcardMistakesChanged } from '@/lib/ui-sync'
 
 export type { StoredMistake, FlashcardMistake }
 
@@ -37,6 +38,12 @@ export function useMistakesStore(courseId?: string): MistakesStore {
   }, [courseId])
 
   useEffect(() => { refresh() }, [refresh])
+
+  useEffect(() => {
+    return subscribeFlashcardMistakesChanged(({ courseId: changed }) => {
+      if (!courseId || changed === courseId) refresh()
+    })
+  }, [courseId, refresh])
 
   function masterExam(questionId: number) {
     setExamMistakes(prev => prev.map(m =>

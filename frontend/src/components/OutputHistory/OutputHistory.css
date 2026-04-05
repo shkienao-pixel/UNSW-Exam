@@ -1,0 +1,84 @@
+.oh-wrapper {
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding-bottom: 2px;
+}
+
+.oh-wrapper::-webkit-scrollbar {
+  display: none;
+}
+
+.oh-list {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: max-content;
+}
+
+.oh-item {
+  opacity: 0; /* initial; GSAP will animate to 1 */
+}
+
+.oh-btn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s;
+  min-width: 64px;
+}
+
+.oh-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.13);
+}
+
+.oh-btn.is-active {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.oh-date {
+  font-size: 12px;
+  font-weight: 600;
+  color: #ccc;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.oh-btn.is-active .oh-date {
+  color: #fff;
+}
+
+.oh-time {
+  font-size: 10px;
+  color: #555;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.oh-btn.is-active .oh-time {
+  color: #888;
+}
+
+.oh-dot {
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+}

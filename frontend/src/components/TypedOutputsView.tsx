@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react'
 import { api } from '@/lib/api'
 import type { Output } from '@/lib/types'
-import { BookOpen, Loader2 } from 'lucide-react'
+import { BookOpen } from 'lucide-react'
 import { CubesLoader } from '@/components/Cubes'
+import OutputHistory from '@/components/OutputHistory/OutputHistory'
 
 export interface TypedOutputsViewProps {
   courseId: string
@@ -37,7 +38,7 @@ export default function TypedOutputsView({
   if (loading) return <CubesLoader className="py-16" />
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold text-white flex items-center gap-2">{icon} {title}</h2>
@@ -45,19 +46,14 @@ export default function TypedOutputsView({
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 pt-1">
           {headerExtra}
-          {outputs.length > 1 && (
-            <select className="input-glass text-xs py-1"
-              value={selected?.id ?? ''}
-              onChange={e => setSelected(outputs.find(o => o.id === Number(e.target.value)) ?? null)}>
-              {outputs.map(o => (
-                <option key={o.id} value={o.id}>
-                  {new Date(o.created_at).toLocaleDateString('zh-CN')}
-                </option>
-              ))}
-            </select>
-          )}
         </div>
       </div>
+
+      <OutputHistory
+        outputs={outputs}
+        selectedId={selected?.id ?? null}
+        onSelect={setSelected}
+      />
 
       {outputs.length === 0 ? (
         generatingSlot ?? (

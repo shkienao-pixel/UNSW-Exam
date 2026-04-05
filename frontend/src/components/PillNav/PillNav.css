@@ -1,7 +1,7 @@
 .pill-tabs {
-  --pill-pad-x: 16px;
+  --pill-pad-x: 18px;
   --pill-gap: 3px;
-  --nav-h: 38px;
+  --nav-h: 44px;
 
   position: relative;
   display: inline-flex;
@@ -39,7 +39,7 @@
   border-radius: 9999px;
   box-sizing: border-box;
   font-weight: 600;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
