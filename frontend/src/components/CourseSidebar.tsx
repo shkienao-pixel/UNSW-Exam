@@ -68,6 +68,14 @@ function CourseSidebarInner({
                 border: `1px solid ${isActive ? 'rgba(200,165,90,0.16)' : 'rgba(255,255,255,0.08)'}`,
                 boxShadow: isActive ? '0 16px 36px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.04)' : 'inset 0 1px 0 rgba(255,255,255,0.03)',
                 textShadow: 'none',
+              }}
+              hoverStyle={{
+                background: 'rgba(255,255,255,0.07)',
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
+                borderColor: `${featureMeta.tint}44`,
+                boxShadow: `0 0 20px ${featureMeta.tint}22, inset 0 1px 0 rgba(255,255,255,0.08)`,
+                color: '#ffffff',
               }}>
               <GlassIconSpan
                 tint={featureMeta.tint}
@@ -92,6 +100,14 @@ function CourseSidebarInner({
               background: isActive ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.01)',
               border: `1px solid ${isActive ? 'rgba(200,165,90,0.14)' : 'rgba(255,255,255,0.02)'}`,
               textShadow: 'none',
+            }}
+            hoverStyle={{
+              background: 'rgba(255,255,255,0.06)',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
+              borderColor: `${featureMeta.tint}33`,
+              boxShadow: `0 0 16px ${featureMeta.tint}1a, inset 0 1px 0 rgba(255,255,255,0.06)`,
+              color: '#ffffff',
             }}>
             <GlassIconSpan tint={featureMeta.tint} bg={featureMeta.bg} size="sm">
               <Icon size={14} />

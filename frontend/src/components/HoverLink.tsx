@@ -4,11 +4,12 @@ import { useState } from 'react'
 import Link from 'next/link'
 
 export default function HoverLink({
-  href, children, style, className, onClick,
+  href, children, style, hoverStyle, className, onClick,
 }: {
   href: string
   children: React.ReactNode
   style?: React.CSSProperties
+  hoverStyle?: React.CSSProperties
   className?: string
   onClick?: () => void
 }) {
@@ -19,8 +20,9 @@ export default function HoverLink({
       className={className}
       style={{
         ...style,
-        transform: hovered ? 'scale(1.025)' : 'scale(1)',
-        transition: 'transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, color 0.18s ease',
+        ...(hovered ? hoverStyle : {}),
+        transform: hovered ? 'scale(1.018)' : 'scale(1)',
+        transition: 'transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, color 0.18s ease, border-color 0.18s ease, backdrop-filter 0.18s ease',
         display: 'flex',
         willChange: 'transform',
       }}

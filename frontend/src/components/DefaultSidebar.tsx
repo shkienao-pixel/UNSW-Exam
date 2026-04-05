@@ -32,6 +32,14 @@ export default function DefaultSidebar({
           border: `1px solid ${active ? 'rgba(200,165,90,0.16)' : 'rgba(255,255,255,0.03)'}`,
           boxShadow: active ? '0 14px 30px rgba(0,0,0,0.2)' : 'none',
           textShadow: 'none',
+        }}
+        hoverStyle={{
+          background: 'rgba(255,255,255,0.07)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          borderColor: `${tint}44`,
+          boxShadow: `0 0 18px ${tint}22, inset 0 1px 0 rgba(255,255,255,0.08)`,
+          color: '#ffffff',
         }}>
         <GlassIconSpan
           tint={active ? '#e6cf98' : tint}
