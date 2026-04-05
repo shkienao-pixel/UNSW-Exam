@@ -69,6 +69,24 @@ function loadPos() {
   }
 }
 
+const FAB_POS_KEY = 'floating_fab_pos'
+const FAB_SIZE = 130
+
+function loadFabPos() {
+  if (typeof window === 'undefined') return { x: 0, y: 0 }
+  try {
+    const raw = localStorage.getItem(FAB_POS_KEY)
+    if (!raw) return { x: window.innerWidth - FAB_SIZE - 24, y: window.innerHeight - FAB_SIZE - 80 }
+    const pos = JSON.parse(raw) as { x: number; y: number }
+    return {
+      x: clamp(pos.x, 0, window.innerWidth - FAB_SIZE),
+      y: clamp(pos.y, 0, window.innerHeight - FAB_SIZE),
+    }
+  } catch {
+    return { x: window.innerWidth - FAB_SIZE - 24, y: window.innerHeight - FAB_SIZE - 80 }
+  }
+}
+
 // ── AI Ask FAB (cat Lottie) ───────────────────────────────────────────────────
 
 function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
@@ -79,7 +97,16 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
   onStop: (e: React.MouseEvent) => void
 }) {
   const [hovered, setHovered] = useState(false)
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const dragOffset = useRef({ dx: 0, dy: 0 })
+  const didDrag = useRef(false)
   const lottieRef = useRef<any>(null)
+
+  // 初始化位置（客户端）
+  useEffect(() => {
+    setPos(loadFabPos())
+  }, [])
 
   useEffect(() => {
     if (!lottieRef.current) return
@@ -90,12 +117,61 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
     }
   }, [hovered, isLoading])
 
+  // 拖拽逻辑
+  const onMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    didDrag.current = false
+    dragOffset.current = {
+      dx: e.clientX - (pos?.x ?? 0),
+      dy: e.clientY - (pos?.y ?? 0),
+    }
+    setDragging(true)
+  }
+
+  useEffect(() => {
+    if (!dragging) return
+    const onMove = (e: MouseEvent) => {
+      didDrag.current = true
+      const x = clamp(e.clientX - dragOffset.current.dx, 0, window.innerWidth - FAB_SIZE)
+      const y = clamp(e.clientY - dragOffset.current.dy, 0, window.innerHeight - FAB_SIZE)
+      setPos({ x, y })
+    }
+    const onUp = () => {
+      setDragging(false)
+      setPos(prev => {
+        if (prev) localStorage.setItem(FAB_POS_KEY, JSON.stringify(prev))
+        return prev
+      })
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [dragging])
+
+  const handleClick = () => {
+    if (didDrag.current) return
+    onClick()
+  }
+
+  if (!pos) return null
+
   return (
     <div
       className="fixed z-50 select-none"
-      style={{ right: 24, bottom: 80 }}
+      style={{
+        left: pos.x,
+        top: pos.y,
+        width: FAB_SIZE,
+        height: FAB_SIZE,
+        cursor: dragging ? 'grabbing' : 'grab',
+      }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onMouseDown={onMouseDown}
     >
       {/* 游戏对话框气泡 */}
       <div
@@ -105,18 +181,17 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
           left: '50%',
           transform: `translateX(-50%) translateY(${hovered ? '-8px' : '4px'})`,
           marginBottom: 6,
-          opacity: hovered ? 1 : 0,
+          opacity: hovered && !dragging ? 1 : 0,
           pointerEvents: 'none',
           transition: 'opacity 0.22s ease, transform 0.22s ease',
           whiteSpace: 'nowrap',
         }}
       >
-        {/* 气泡主体 */}
         <div style={{
           background: 'rgba(255,255,255,0.97)',
           border: '2px solid #1a1a2e',
           borderRadius: 8,
-          padding: '6px 12px',
+          padding: '6px 14px',
           fontSize: 13,
           fontWeight: 600,
           color: '#1a1a2e',
@@ -126,44 +201,29 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
         }}>
           有什么问题要问我吗？
         </div>
-        {/* 气泡三角 */}
         <div style={{
-          position: 'absolute',
-          bottom: -9,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          width: 0,
-          height: 0,
-          borderLeft: '7px solid transparent',
-          borderRight: '7px solid transparent',
-          borderTop: '9px solid #1a1a2e',
+          position: 'absolute', bottom: -9, left: '50%', transform: 'translateX(-50%)',
+          width: 0, height: 0,
+          borderLeft: '7px solid transparent', borderRight: '7px solid transparent', borderTop: '9px solid #1a1a2e',
         }} />
         <div style={{
-          position: 'absolute',
-          bottom: -6,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          width: 0,
-          height: 0,
-          borderLeft: '5px solid transparent',
-          borderRight: '5px solid transparent',
-          borderTop: '7px solid rgba(255,255,255,0.97)',
+          position: 'absolute', bottom: -6, left: '50%', transform: 'translateX(-50%)',
+          width: 0, height: 0,
+          borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: '7px solid rgba(255,255,255,0.97)',
         }} />
       </div>
 
       {/* 猫咪 Lottie 按钮 */}
       <button
-        onClick={onClick}
+        onClick={handleClick}
         title="AI 问答"
         style={{
-          background: 'none',
-          border: 'none',
-          padding: 0,
-          cursor: 'pointer',
-          display: 'block',
-          transform: hovered ? 'scale(1.08)' : 'scale(1)',
+          background: 'none', border: 'none', padding: 0,
+          cursor: dragging ? 'grabbing' : 'pointer',
+          display: 'block', width: '100%', height: '100%',
+          transform: hovered && !dragging ? 'scale(1.08)' : 'scale(1)',
           transition: 'transform 0.2s ease',
-          filter: hovered ? 'drop-shadow(0 0 10px rgba(255,200,80,0.5))' : 'none',
+          filter: hovered && !dragging ? 'drop-shadow(0 0 12px rgba(255,200,80,0.55))' : 'none',
         }}
       >
         <Lottie
@@ -171,13 +231,12 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
           animationData={loaderCatData}
           loop
           autoplay={false}
-          style={{ width: 90, height: 90 }}
+          style={{ width: '100%', height: '100%' }}
         />
-        {/* unread badge */}
         {!isLoading && unreadCount > 0 && (
           <span style={{
             position: 'absolute', top: 4, right: 4,
-            width: 18, height: 18, borderRadius: '50%',
+            width: 20, height: 20, borderRadius: '50%',
             background: '#ef4444', color: '#fff',
             fontSize: 10, fontWeight: 700,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -186,13 +245,12 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
-        {/* stop button when loading */}
         {isLoading && (
           <button
             onClick={onStop}
             style={{
               position: 'absolute', bottom: 4, right: 4,
-              width: 18, height: 18, borderRadius: '50%',
+              width: 20, height: 20, borderRadius: '50%',
               background: '#ef4444', color: '#fff',
               border: '2px solid rgba(20,22,30,0.9)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -203,7 +261,6 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
         )}
       </button>
 
-      {/* pulse hint */}
       {showHint && !isLoading && (
         <span className="absolute inset-0 animate-ping rounded-full pointer-events-none"
           style={{ background: 'rgba(255,215,0,0.2)', animationDuration: '1.6s' }} />
