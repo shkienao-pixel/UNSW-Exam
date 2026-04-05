@@ -120,8 +120,12 @@ export default function TextPressure({
           const wght = weight ? Math.floor(getAttr(d, maxDist, 100, 900)) : 400
           const italVal = italic ? getAttr(d, maxDist, 0, 1).toFixed(2) : '0'
           const alphaVal = alpha ? getAttr(d, maxDist, 0, 1).toFixed(2) : '1'
+          // scaleY fallback: visible even if variable font not loaded
+          const sy = 1 + (weight ? getAttr(d, maxDist, 0, 0.45) : 0)
 
           span.style.fontVariationSettings = `'wght' ${wght}, 'wdth' ${wdth}, 'ital' ${italVal}`
+          span.style.transform = `scaleY(${sy})`
+          span.style.display = 'inline-block'
           if (alpha) span.style.opacity = alphaVal
         })
       }

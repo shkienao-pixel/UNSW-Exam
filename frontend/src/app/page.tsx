@@ -401,17 +401,16 @@ export default function LandingPage() {
               数据驱动 · AI 助教 · 专为留学生打造
             </div>
 
-            <div className="mt-7">
+            <div className="mt-7 w-full max-w-[560px]">
               <TextPressure
                 text="Exam Master"
                 textColor="#FFFFFF"
-                className="tracking-[-0.065em] font-semibold"
-                minFontSize={48}
+                minFontSize={64}
                 width
                 weight
-                italic={false}
+                italic
                 alpha={false}
-                flex={false}
+                flex
                 stroke={false}
                 scale={false}
               />
