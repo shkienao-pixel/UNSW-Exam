@@ -47,6 +47,7 @@
   }
   .finalTagline::after{content:none}
   .decrypt-char{display:inline;transition:color .08s}
+  .tagline-dash{opacity:.68;letter-spacing:.05em}
   .circular-badge{position:absolute;left:0;top:0;width:90px;height:90px;opacity:0;pointer-events:none;z-index:7;transform-origin:center center}
   .circular-badge svg{width:100%;height:100%;overflow:visible;animation:circSpin 10s linear infinite;transform-origin:50% 50%}
   .circular-badge text{font-size:13px;fill:rgba(255,255,255,.80);font-family:"Futura PT","Avenir Next","Helvetica Neue",Arial,sans-serif;letter-spacing:1.8px}
@@ -65,7 +66,7 @@
     <div class="heroPhotoShade"></div>
   </div>
   <div class="finalTagline" id="finalTagline">
-    <span id="decryptText"></span>
+    <span id="decryptText"></span><span class="tagline-dash"> ——</span>
   </div>
   <div class="circular-badge" id="circularBadge">
     <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
@@ -96,7 +97,7 @@ const DECRYPT_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz01234
 const DECRYPT_TARGET = '备考，从未如此清晰';
 let decryptStarted = false;
 function rndChar(){ return DECRYPT_CHARS[Math.floor(Math.random()*DECRYPT_CHARS.length)]; }
-function startDecrypt(el, text){
+function startDecrypt(el, text, loop){
   const chars = [...text];
   el.innerHTML = '';
   const spans = chars.map(ch => {
@@ -107,6 +108,7 @@ function startDecrypt(el, text){
     return s;
   });
   const STAGGER = 55, SCRAMBLE = 320;
+  const totalMs = (chars.length - 1) * STAGGER + SCRAMBLE + 80;
   chars.forEach((ch, i) => {
     if(ch === ' ' || ch === '，' || ch === ','){ spans[i].textContent = ch; return; }
     setTimeout(() => {
@@ -114,6 +116,9 @@ function startDecrypt(el, text){
       setTimeout(() => { clearInterval(iv); spans[i].textContent = ch; }, SCRAMBLE);
     }, i * STAGGER);
   });
+  if(loop){
+    setTimeout(() => startDecrypt(el, text, true), totalMs + 1400);
+  }
 }
 const frameGlow = document.getElementById('frameGlow');
 const frameSweep = document.getElementById('frameSweep');
@@ -429,7 +434,7 @@ function renderFinalTagline(t){
   finalTagline.style.top = `${top}px`;
   if(!decryptStarted && p > 0){
     decryptStarted = true;
-    startDecrypt(decryptText, DECRYPT_TARGET);
+    startDecrypt(decryptText, DECRYPT_TARGET, true);
   }
   if(p <= 0){
     finalTagline.style.opacity = '0';

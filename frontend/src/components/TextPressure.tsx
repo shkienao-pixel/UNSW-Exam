@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 
 interface TextPressureProps {
   text?: string
@@ -17,6 +17,11 @@ interface TextPressureProps {
   strokeColor?: string
   className?: string
   minFontSize?: number
+}
+
+const getAttr = (distance: number, maxDist: number, minVal: number, maxVal: number) => {
+  const val = maxVal - Math.abs((maxVal * distance) / maxDist)
+  return Math.max(minVal, val + minVal)
 }
 
 export default function TextPressure({
@@ -38,7 +43,6 @@ export default function TextPressure({
   const containerRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLHeadingElement>(null)
   const spansRef = useRef<(HTMLSpanElement | null)[]>([])
-
   const mouseRef = useRef({ x: 0, y: 0 })
   const cursorRef = useRef({ x: 0, y: 0 })
   const rafRef = useRef<number | null>(null)
@@ -49,124 +53,134 @@ export default function TextPressure({
 
   const chars = text.split('')
 
-  const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
-    Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2)
-
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      mouseRef.current = { x: e.clientX, y: e.clientY }
+    const onMove = (e: MouseEvent) => {
+      cursorRef.current.x = e.clientX
+      cursorRef.current.y = e.clientY
     }
-    window.addEventListener('mousemove', handleMouseMove)
-    return () => window.removeEventListener('mousemove', handleMouseMove)
+    const onTouch = (e: TouchEvent) => {
+      cursorRef.current.x = e.touches[0].clientX
+      cursorRef.current.y = e.touches[0].clientY
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('touchmove', onTouch, { passive: true })
+
+    if (containerRef.current) {
+      const { left, top, width: w, height: h } = containerRef.current.getBoundingClientRect()
+      mouseRef.current = { x: left + w / 2, y: top + h / 2 }
+      cursorRef.current = { ...mouseRef.current }
+    }
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('touchmove', onTouch)
+    }
   }, [])
 
-  useEffect(() => {
-    const setSize = () => {
-      if (!containerRef.current || !titleRef.current) return
-      const { width: containerW, height: containerH } =
-        containerRef.current.getBoundingClientRect()
-      let fs = containerW / (text.length * 0.52)
-      fs = Math.max(fs, minFontSize)
-      setFontSize(fs)
-
-      if (scale) {
-        const titleH = titleRef.current.getBoundingClientRect().height
-        if (titleH > 0) {
-          setScaleY(containerH / titleH)
-          setLineHeight(containerH / titleH)
-        }
+  const setSize = useCallback(() => {
+    if (!containerRef.current || !titleRef.current) return
+    const { width: cw, height: ch } = containerRef.current.getBoundingClientRect()
+    let fs = cw / (chars.length / 2)
+    fs = Math.max(fs, minFontSize)
+    setFontSize(fs)
+    setScaleY(1)
+    setLineHeight(1)
+    requestAnimationFrame(() => {
+      if (!titleRef.current) return
+      const th = titleRef.current.getBoundingClientRect().height
+      if (scale && th > 0) {
+        setScaleY(ch / th)
+        setLineHeight(ch / th)
       }
-    }
+    })
+  }, [chars.length, minFontSize, scale])
 
-    const ro = new ResizeObserver(setSize)
-    if (containerRef.current) ro.observe(containerRef.current)
+  useEffect(() => {
     setSize()
-    return () => ro.disconnect()
-  }, [text, scale, minFontSize])
+    window.addEventListener('resize', setSize)
+    return () => window.removeEventListener('resize', setSize)
+  }, [setSize])
 
   useEffect(() => {
     const animate = () => {
-      // ease cursor toward mouse
-      cursorRef.current.x += (mouseRef.current.x - cursorRef.current.x) * 0.15
-      cursorRef.current.y += (mouseRef.current.y - cursorRef.current.y) * 0.15
+      mouseRef.current.x += (cursorRef.current.x - mouseRef.current.x) / 15
+      mouseRef.current.y += (cursorRef.current.y - mouseRef.current.y) / 15
 
-      spansRef.current.forEach((span) => {
-        if (!span) return
-        const rect = span.getBoundingClientRect()
-        const charCenter = {
-          x: rect.x + rect.width / 2,
-          y: rect.y + rect.height / 2,
-        }
-        const d = dist(cursorRef.current, charCenter)
-        const maxDist = 400
-        const ratio = Math.max(0, 1 - d / maxDist)
+      if (titleRef.current) {
+        const maxDist = titleRef.current.getBoundingClientRect().width / 2
+        spansRef.current.forEach(span => {
+          if (!span) return
+          const r = span.getBoundingClientRect()
+          const cx = r.x + r.width / 2
+          const cy = r.y + r.height / 2
+          const dx = mouseRef.current.x - cx
+          const dy = mouseRef.current.y - cy
+          const d = Math.sqrt(dx * dx + dy * dy)
 
-        const wdth = width ? Math.round(ratio * 200) : 100
-        const wght = weight ? Math.round(100 + ratio * 800) : 400
-        const italicVal = italic ? ratio * 1 : 0
-        const alphaVal = alpha ? 0.3 + ratio * 0.7 : 1
+          const wdth = width ? Math.floor(getAttr(d, maxDist, 5, 200)) : 100
+          const wght = weight ? Math.floor(getAttr(d, maxDist, 100, 900)) : 400
+          const italVal = italic ? getAttr(d, maxDist, 0, 1).toFixed(2) : '0'
+          const alphaVal = alpha ? getAttr(d, maxDist, 0, 1).toFixed(2) : '1'
 
-        span.style.fontVariationSettings = `'wdth' ${wdth}, 'wght' ${wght}, 'ital' ${italicVal}`
-        span.style.opacity = String(alphaVal)
-
-        if (stroke) {
-          span.style.webkitTextStrokeColor = strokeColor
-          span.style.webkitTextStrokeWidth = `${ratio * 3}px`
-        }
-      })
-
+          span.style.fontVariationSettings = `'wght' ${wght}, 'wdth' ${wdth}, 'ital' ${italVal}`
+          if (alpha) span.style.opacity = alphaVal
+        })
+      }
       rafRef.current = requestAnimationFrame(animate)
     }
-
     rafRef.current = requestAnimationFrame(animate)
-    return () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
-    }
-  }, [width, weight, italic, alpha, stroke, strokeColor])
+    return () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current) }
+  }, [width, weight, italic, alpha])
+
+  const dynClass = [className, flex ? 'flex' : '', stroke ? 'stroke' : ''].filter(Boolean).join(' ')
 
   return (
-    <>
+    <div ref={containerRef} style={{ position: 'relative', width: '100%', background: 'transparent' }}>
       <style>{`
         @font-face {
           font-family: '${fontFamily}';
           src: url('${fontUrl}');
           font-style: normal;
         }
+        .text-pressure-flex { display: flex; justify-content: space-between; }
+        .text-pressure-stroke span { position: relative; color: ${textColor}; }
+        .text-pressure-stroke span::after {
+          content: attr(data-char); position: absolute; left: 0; top: 0;
+          color: transparent; z-index: -1;
+          -webkit-text-stroke-width: 3px; -webkit-text-stroke-color: ${strokeColor};
+        }
       `}</style>
-      <div
-        ref={containerRef}
-        className={`flex items-center justify-start ${flex ? 'w-full' : ''} ${className}`}
-        style={{ overflow: 'hidden' }}
+      <h1
+        ref={titleRef}
+        className={[
+          flex ? 'text-pressure-flex' : '',
+          stroke ? 'text-pressure-stroke' : '',
+          dynClass,
+        ].filter(Boolean).join(' ')}
+        style={{
+          fontFamily,
+          fontSize,
+          lineHeight,
+          transform: `scale(1, ${scaleY})`,
+          transformOrigin: 'center top',
+          margin: 0,
+          userSelect: 'none',
+          whiteSpace: 'nowrap',
+          fontWeight: 100,
+          width: '100%',
+          color: textColor,
+        }}
       >
-        <h1
-          ref={titleRef}
-          style={{
-            fontFamily: `'${fontFamily}', sans-serif`,
-            fontSize: `${fontSize}px`,
-            lineHeight: scale ? lineHeight : 1,
-            transform: scale ? `scaleY(${scaleY})` : 'none',
-            transformOrigin: 'top left',
-            color: textColor,
-            margin: 0,
-            padding: 0,
-            display: 'flex',
-            userSelect: 'none',
-          }}
-        >
-          {chars.map((char, i) => (
-            <span
-              key={i}
-              ref={(el) => { spansRef.current[i] = el }}
-              style={{
-                display: 'inline-block',
-                fontVariationSettings: `'wdth' 0, 'wght' 100, 'ital' 0`,
-              }}
-            >
-              {char === ' ' ? '\u00A0' : char}
-            </span>
-          ))}
-        </h1>
-      </div>
-    </>
+        {chars.map((char, i) => (
+          <span
+            key={i}
+            ref={el => { spansRef.current[i] = el }}
+            data-char={char}
+            style={{ display: 'inline-block' }}
+          >
+            {char === ' ' ? '\u00A0' : char}
+          </span>
+        ))}
+      </h1>
+    </div>
   )
 }
