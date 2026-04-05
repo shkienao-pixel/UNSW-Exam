@@ -40,9 +40,13 @@ export default function OutputHistory({ outputs, selectedId, onSelect }: Props) 
     prevLenRef.current = items.length
   }, [outputs])
 
-  if (outputs.length <= 1) return null
+  if (outputs.length === 0) return null
 
   return (
+    <div className="space-y-1.5">
+      <p className="text-[11px] font-medium" style={{ color: '#444' }}>
+        历史记录（{outputs.length} 份）
+      </p>
     <div className="oh-wrapper">
       <ul ref={listRef} className="oh-list" role="list">
         {outputs.map((o) => {
@@ -65,6 +69,7 @@ export default function OutputHistory({ outputs, selectedId, onSelect }: Props) 
           )
         })}
       </ul>
+    </div>
     </div>
   )
 }
