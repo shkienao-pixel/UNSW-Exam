@@ -31,6 +31,8 @@ export function NoteFloatProvider({ children }: { children: ReactNode }) {
 
   function closeWindow() {
     setIsOpen(false)
+    setCourseId(null)
+    setCourseName('')
   }
 
   return (

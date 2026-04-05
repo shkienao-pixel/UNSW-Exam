@@ -324,18 +324,6 @@ export interface StoredMistake {
   mastered_at?: string
 }
 
-// ── User Notes ────────────────────────────────────────────────────────────────
-
-export interface UserNote {
-  id: number
-  user_id: string
-  course_id?: string
-  image_url: string
-  caption: string
-  ai_content: string
-  created_at: string
-}
-
 // ── Flashcard Mistakes ────────────────────────────────────────────────────────
 
 export interface FlashcardMistake {

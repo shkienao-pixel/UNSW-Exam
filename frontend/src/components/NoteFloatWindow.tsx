@@ -47,7 +47,7 @@ function loadSize(): { w: number; h: number } {
 
 // ── FAB ───────────────────────────────────────────────────────────────────────
 
-function NoteFab({ onClick }: { onClick: () => void; pos?: { x: number; y: number }; onDragEnd?: (pos: { x: number; y: number }) => void }) {
+function NoteFab({ onClick }: { onClick: () => void }) {
   const [hovered, setHovered] = useState(false)
 
   return (
@@ -148,9 +148,8 @@ export default function NoteFloatWindow() {
     setIsMobile(window.innerWidth < 768)
   }, [])
 
-  const [size,   setSize]   = useState<{ w: number; h: number }>({ w: DEFAULT_W, h: DEFAULT_H })
-  const [pos,    setPos]    = useState<{ x: number; y: number }>({ x: 80, y: 80 })
-  const [fabPos, setFabPos] = useState<{ x: number; y: number }>({ x: 80, y: 80 })
+  const [size, setSize] = useState<{ w: number; h: number }>({ w: DEFAULT_W, h: DEFAULT_H })
+  const [pos,  setPos]  = useState<{ x: number; y: number }>({ x: 80, y: 80 })
 
   useEffect(() => {
     setSize(loadSize())
@@ -159,13 +158,6 @@ export default function NoteFloatWindow() {
       x: window.innerWidth  - DEFAULT_W - 24,
       y: window.innerHeight - DEFAULT_H - 24,
     })
-    try {
-      const raw = localStorage.getItem('note_fab_pos')
-      const savedFab = raw ? (JSON.parse(raw) as { x: number; y: number }) : null
-      setFabPos(savedFab ?? { x: window.innerWidth - 60, y: window.innerHeight - 180 })
-    } catch {
-      setFabPos({ x: window.innerWidth - 60, y: window.innerHeight - 180 })
-    }
   }, [])
 
   const [initialContent, setInitialContent] = useState<unknown[]>([])
@@ -240,11 +232,7 @@ export default function NoteFloatWindow() {
 
   if (!isOpen) {
     return (
-      <NoteFab
-        pos={fabPos}
-        onClick={() => openWindow()}
-        onDragEnd={p => { setFabPos(p); localStorage.setItem('note_fab_pos', JSON.stringify(p)) }}
-      />
+      <NoteFab onClick={() => openWindow()} />
     )
   }
 
@@ -349,7 +337,7 @@ export default function NoteFloatWindow() {
               letterSpacing: '0.01em',
               flexShrink: 0,
             }}>
-              {courseId}
+              {courseName}
             </span>
           )}
 
