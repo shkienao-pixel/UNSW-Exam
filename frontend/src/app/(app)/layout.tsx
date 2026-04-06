@@ -68,6 +68,13 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   // Mobile drawer state
   const [drawerOpen, setDrawerOpen] = useState(false)
 
+  // iPad portrait（768-1023px）默认折叠侧边栏，节省内容区宽度
+  useEffect(() => {
+    if (window.innerWidth >= 768 && window.innerWidth < 1024) {
+      setCollapsed(true)
+    }
+  }, [])
+
   const { courses }                         = useCourseList(!!user)
   const { balance: credits, refresh: refreshCredits } = useCredits(!!user && role !== 'guest')
 

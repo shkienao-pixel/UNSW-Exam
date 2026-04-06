@@ -157,25 +157,63 @@ function DotMenu({
 // ── 单张资料卡片 ──────────────────────────────────────────────────────────────
 
 function PdfDrawer({ url, title, onClose }: { url: string; title: string; onClose: () => void }) {
+  const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`
+
   return (
-    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(6px)' }}>
-      <div className="flex items-center justify-between px-4 py-2.5 shrink-0"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', background: '#111' }}>
-        <span className="text-sm font-medium truncate max-w-[70%]" style={{ color: '#ddd' }}>{title}</span>
-        <div className="flex items-center gap-2">
-          <a href={url} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all hover:opacity-80"
-            style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}>
-            <ExternalLink size={12} /> 新标签页
-          </a>
-          <button onClick={onClose}
-            className="flex items-center justify-center w-8 h-8 rounded-lg transition-all hover:opacity-80"
-            style={{ background: 'rgba(255,255,255,0.06)', color: '#888' }}>
-            <X size={16} />
-          </button>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }}
+      onClick={onClose}
+    >
+      <div
+        className="flex flex-col rounded-2xl overflow-hidden"
+        style={{
+          width: 'min(92vw, 1100px)',
+          height: '88vh',
+          background: '#111',
+          border: '1px solid rgba(255,255,255,0.1)',
+          boxShadow: '0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,215,0,0.08)',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* 标题栏 */}
+        <div
+          className="flex items-center justify-between px-5 py-3 shrink-0"
+          style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)' }}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <FileText size={15} style={{ color: '#FFD700', flexShrink: 0 }} />
+            <span className="text-sm font-medium truncate" style={{ color: '#e0e0e0' }}>{title}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 ml-4">
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-80"
+              style={{ background: 'rgba(255,215,0,0.12)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.28)' }}
+            >
+              <ExternalLink size={12} /> 新标签页
+            </a>
+            <button
+              onClick={onClose}
+              className="flex items-center justify-center w-8 h-8 rounded-lg transition-all hover:opacity-80"
+              style={{ background: 'rgba(255,255,255,0.06)', color: '#777' }}
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
+
+        {/* PDF 内容区 */}
+        <iframe
+          src={viewerUrl}
+          title={title}
+          className="flex-1 w-full border-0"
+          style={{ minHeight: 0, background: '#fff' }}
+          allow="fullscreen"
+        />
       </div>
-      <iframe src={url} title={title} className="flex-1 w-full border-0" style={{ minHeight: 0 }} />
     </div>
   )
 }

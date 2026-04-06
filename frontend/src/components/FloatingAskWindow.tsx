@@ -146,6 +146,16 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
     setDragging(true)
   }
 
+  const onTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0]
+    didDrag.current = false
+    dragOffset.current = {
+      dx: touch.clientX - (pos?.x ?? 0),
+      dy: touch.clientY - (pos?.y ?? 0),
+    }
+    setDragging(true)
+  }
+
   useEffect(() => {
     if (!dragging) return
     const onMove = (e: MouseEvent) => {
@@ -161,11 +171,30 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
         return prev
       })
     }
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault()
+      didDrag.current = true
+      const touch = e.touches[0]
+      const x = clamp(touch.clientX - dragOffset.current.dx, 0, window.innerWidth - FAB_SIZE)
+      const y = clamp(touch.clientY - dragOffset.current.dy, 0, window.innerHeight - FAB_SIZE)
+      setPos({ x, y })
+    }
+    const onTouchEnd = () => {
+      setDragging(false)
+      setPos(prev => {
+        if (prev) localStorage.setItem(FAB_POS_KEY, JSON.stringify(prev))
+        return prev
+      })
+    }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
+    window.addEventListener('touchmove', onTouchMove, { passive: false })
+    window.addEventListener('touchend', onTouchEnd)
     return () => {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
+      window.removeEventListener('touchmove', onTouchMove)
+      window.removeEventListener('touchend', onTouchEnd)
     }
   }, [dragging])
 
@@ -199,6 +228,7 @@ function AiAskFab({ isLoading, unreadCount, showHint, onClick, onStop }: {
       }}
       onMouseLeave={() => setHovered(false)}
       onMouseDown={onMouseDown}
+      onTouchStart={onTouchStart}
     >
       {/* 游戏对话框气泡 */}
       <div
@@ -777,11 +807,32 @@ export default function FloatingAskWindow() {
         localStorage.setItem(POS_KEY, JSON.stringify(currentPosRef.current))
       }
     }
+    const onTouchMove = (e: TouchEvent) => {
+      if (!isDraggingRef.current) return
+      e.preventDefault()
+      const touch = e.touches[0]
+      const nextPos = {
+        x: clamp(touch.clientX - dragOffsetRef.current.x, 0, window.innerWidth - 68),
+        y: clamp(touch.clientY - dragOffsetRef.current.y, 0, window.innerHeight - 68),
+      }
+      currentPosRef.current = nextPos
+      setPos(nextPos)
+    }
+    const onTouchEnd = () => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false
+        localStorage.setItem(POS_KEY, JSON.stringify(currentPosRef.current))
+      }
+    }
     document.addEventListener('mousemove', onMouseMove)
     document.addEventListener('mouseup', onMouseUp)
+    document.addEventListener('touchmove', onTouchMove, { passive: false })
+    document.addEventListener('touchend', onTouchEnd)
     return () => {
       document.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('mouseup', onMouseUp)
+      document.removeEventListener('touchmove', onTouchMove)
+      document.removeEventListener('touchend', onTouchEnd)
     }
   }, [size])
 
@@ -794,11 +845,27 @@ export default function FloatingAskWindow() {
   function handleFabMouseUp(e: React.MouseEvent) {
     if (Math.hypot(e.clientX - dragStartRef.current.x, e.clientY - dragStartRef.current.y) < 6) openWindow()
   }
+  function handleFabTouchStart(e: React.TouchEvent) {
+    const touch = e.touches[0]
+    dragStartRef.current = { x: touch.clientX, y: touch.clientY }
+    isDraggingRef.current = true
+    dragOffsetRef.current = { x: touch.clientX - currentPosRef.current.x, y: touch.clientY - currentPosRef.current.y }
+  }
+  function handleFabTouchEnd(e: React.TouchEvent) {
+    const touch = e.changedTouches[0]
+    if (Math.hypot(touch.clientX - dragStartRef.current.x, touch.clientY - dragStartRef.current.y) < 6) openWindow()
+  }
   function handleTitleMouseDown(e: React.MouseEvent) {
     if ((e.target as HTMLElement).closest('button')) return
     e.preventDefault()
     isDraggingRef.current = true
     dragOffsetRef.current = { x: e.clientX - currentPosRef.current.x, y: e.clientY - currentPosRef.current.y }
+  }
+  function handleTitleTouchStart(e: React.TouchEvent) {
+    if ((e.target as HTMLElement).closest('button')) return
+    const touch = e.touches[0]
+    isDraggingRef.current = true
+    dragOffsetRef.current = { x: touch.clientX - currentPosRef.current.x, y: touch.clientY - currentPosRef.current.y }
   }
   function handleResizeMouseDown(e: React.MouseEvent, dir: ResizeDir) {
     e.preventDefault(); e.stopPropagation()
@@ -871,6 +938,7 @@ export default function FloatingAskWindow() {
         className={`relative flex items-center gap-2.5 px-4 py-3 ${isMobile ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'} select-none`}
         style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}
         onMouseDown={isMobile ? undefined : handleTitleMouseDown}
+        onTouchStart={isMobile ? undefined : handleTitleTouchStart}
       >
         <div className="pointer-events-none absolute inset-x-0 top-0 h-12"
           style={{ background: 'radial-gradient(ellipse at top, rgba(255,215,0,0.1), transparent 70%)' }} />

@@ -126,6 +126,7 @@ export default function PillNav({
   } as React.CSSProperties
 
   return (
+    <div className="no-scrollbar overflow-x-auto">
     <div className={`pill-tabs ${className}`} style={cssVars}>
       <ul className="pill-tabs-list" role="tablist">
         {items.map((item, i) => {
@@ -162,6 +163,7 @@ export default function PillNav({
           )
         })}
       </ul>
+    </div>
     </div>
   )
 }

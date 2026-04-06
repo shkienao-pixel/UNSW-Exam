@@ -58,7 +58,7 @@ function NoteFab({ onClick }: { onClick: () => void }) {
       onMouseLeave={() => setHovered(false)}
       className="fixed z-50 select-none overflow-hidden"
       style={{
-        right: 24, bottom: 24,
+        right: 24, bottom: 220,
         width: 182, height: 58,
         borderRadius: 24,
         border: `1px solid ${hovered ? 'rgba(200,165,90,0.55)' : 'rgba(255,255,255,0.16)'}`,
@@ -222,11 +222,30 @@ export default function NoteFloatWindow() {
         setPos(p => { localStorage.setItem(POS_KEY, JSON.stringify(p)); return p })
       }
     }
+    function onTouchMove(e: TouchEvent) {
+      if (!dragRef.current) return
+      e.preventDefault()
+      const touch = e.touches[0]
+      setPos({
+        x: Math.max(0, Math.min(window.innerWidth  - size.w, dragRef.current.winX + touch.clientX - dragRef.current.startX)),
+        y: Math.max(0, Math.min(window.innerHeight - 60,     dragRef.current.winY + touch.clientY - dragRef.current.startY)),
+      })
+    }
+    function onTouchEnd() {
+      if (dragRef.current) {
+        dragRef.current = null
+        setPos(p => { localStorage.setItem(POS_KEY, JSON.stringify(p)); return p })
+      }
+    }
     document.addEventListener('mousemove', onMouseMove)
     document.addEventListener('mouseup',   onMouseUp)
+    document.addEventListener('touchmove', onTouchMove, { passive: false })
+    document.addEventListener('touchend',  onTouchEnd)
     return () => {
       document.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('mouseup',   onMouseUp)
+      document.removeEventListener('touchmove', onTouchMove)
+      document.removeEventListener('touchend',  onTouchEnd)
     }
   }, [isOpen, pos.x, pos.y, size.w])
 
@@ -288,6 +307,10 @@ export default function NoteFloatWindow() {
             }}
             onMouseDown={e => {
               dragRef.current = { startX: e.clientX, startY: e.clientY, winX: pos.x, winY: pos.y }
+            }}
+            onTouchStart={e => {
+              const touch = e.touches[0]
+              dragRef.current = { startX: touch.clientX, startY: touch.clientY, winX: pos.x, winY: pos.y }
             }}
           >
             <GripDots />
