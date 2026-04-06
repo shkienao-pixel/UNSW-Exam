@@ -16,9 +16,19 @@ _BUCKET_CREATED = False
 
 # ── Block notes (BlockNote editor) ───────────────────────────────────────────
 
-def get_block_note(supabase: Client, user_id: str, course_id: Optional[str] = None) -> list:
-    """Return the BlockNote content array for this user/course, or [] if not found."""
-    q = supabase.table("block_notes").select("content").eq("user_id", user_id)
+def get_block_note(
+    supabase: Client,
+    user_id: str,
+    course_id: Optional[str] = None,
+    page: int = 1,
+) -> list:
+    """Return the BlockNote content array for this user/course/page, or [] if not found."""
+    q = (
+        supabase.table("block_notes")
+        .select("content")
+        .eq("user_id", user_id)
+        .eq("page", page)
+    )
     if course_id:
         q = q.eq("course_id", course_id)
     else:
@@ -27,14 +37,38 @@ def get_block_note(supabase: Client, user_id: str, course_id: Optional[str] = No
     return result.data[0]["content"] if result.data else []
 
 
+def list_block_note_pages(
+    supabase: Client,
+    user_id: str,
+    course_id: Optional[str] = None,
+) -> list[int]:
+    """Return sorted list of page numbers that have saved content for this user/course."""
+    q = supabase.table("block_notes").select("page").eq("user_id", user_id)
+    if course_id:
+        q = q.eq("course_id", course_id)
+    else:
+        q = q.is_("course_id", "null")
+    result = q.execute()
+    if not result.data:
+        return [1]
+    pages = sorted({row["page"] for row in result.data})
+    return pages if pages else [1]
+
+
 def upsert_block_note(
     supabase: Client,
     user_id: str,
     content: List[Any],
     course_id: Optional[str] = None,
+    page: int = 1,
 ) -> None:
-    """Create or update the BlockNote document for this user/course."""
-    q = supabase.table("block_notes").select("id").eq("user_id", user_id)
+    """Create or update the BlockNote document for this user/course/page."""
+    q = (
+        supabase.table("block_notes")
+        .select("id")
+        .eq("user_id", user_id)
+        .eq("page", page)
+    )
     if course_id:
         q = q.eq("course_id", course_id)
     else:
@@ -46,7 +80,7 @@ def upsert_block_note(
             "content": content,
         }).eq("id", existing.data[0]["id"]).execute()
     else:
-        row: dict = {"user_id": user_id, "content": content}
+        row: dict = {"user_id": user_id, "content": content, "page": page}
         if course_id:
             row["course_id"] = course_id
         supabase.table("block_notes").insert(row).execute()
@@ -80,5 +114,3 @@ def _ensure_bucket(supabase: Client) -> None:
     except Exception:
         pass  # Already exists
     _BUCKET_CREATED = True
-
-

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { FileText, X, Check, Loader2, NotebookPen } from 'lucide-react'
+import { FileText, X, Check, Loader2, NotebookPen, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { useNoteFloat } from '@/lib/note-float-context'
 import { api } from '@/lib/api'
 import DynamicBlockNoteEditor from '@/components/notes/DynamicBlockNoteEditor'
@@ -15,6 +15,7 @@ const MIN_H = 440
 const POS_KEY  = 'note_float_pos'
 const SIZE_KEY = 'note_float_size'
 const SAVE_DEBOUNCE_MS = 1200
+const MAX_PAGES = 20
 
 type ResizeDir = 'e' | 's' | 'se'
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
@@ -138,6 +139,141 @@ function SaveIndicator({ state }: { state: SaveState }) {
   )
 }
 
+// ── Page bar ──────────────────────────────────────────────────────────────────
+
+interface PageBarProps {
+  currentPage: number
+  totalPages: number
+  onPrev: () => void
+  onNext: () => void
+  onAddPage: () => void
+  onGoTo: (page: number) => void
+}
+
+function PageBar({ currentPage, totalPages, onPrev, onNext, onAddPage, onGoTo }: PageBarProps) {
+  const canPrev = currentPage > 1
+  const canNext = currentPage < totalPages
+  const canAdd  = totalPages < MAX_PAGES
+
+  // Show at most 7 page dots; collapse with ellipsis if more
+  const dots: Array<number | 'ellipsis'> = []
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) dots.push(i)
+  } else {
+    dots.push(1)
+    if (currentPage > 3) dots.push('ellipsis')
+    for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) {
+      dots.push(i)
+    }
+    if (currentPage < totalPages - 2) dots.push('ellipsis')
+    dots.push(totalPages)
+  }
+
+  const btnBase: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    width: 24, height: 24, borderRadius: 6,
+    border: 'none', background: 'transparent',
+    cursor: 'pointer', transition: 'background 0.15s, color 0.15s',
+    flexShrink: 0,
+  }
+
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 2,
+      height: 36,
+      borderTop: '1px solid rgba(255,255,255,0.055)',
+      flexShrink: 0,
+      padding: '0 12px',
+    }}>
+      {/* Prev */}
+      <button
+        onClick={onPrev}
+        disabled={!canPrev}
+        title="上一页"
+        style={{
+          ...btnBase,
+          color: canPrev ? 'rgba(255,255,255,0.50)' : 'rgba(255,255,255,0.15)',
+          cursor: canPrev ? 'pointer' : 'default',
+        }}
+        onMouseEnter={e => { if (canPrev) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)' }}
+        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+      >
+        <ChevronLeft size={14} strokeWidth={2} />
+      </button>
+
+      {/* Page dots/numbers */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+        {dots.map((d, i) =>
+          d === 'ellipsis' ? (
+            <span key={`e-${i}`} style={{ fontSize: 11, color: 'rgba(255,255,255,0.22)', padding: '0 2px' }}>…</span>
+          ) : (
+            <button
+              key={d}
+              onClick={() => onGoTo(d)}
+              style={{
+                ...btnBase,
+                minWidth: 24,
+                fontSize: 11,
+                fontWeight: d === currentPage ? 600 : 400,
+                color: d === currentPage ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.38)',
+                background: d === currentPage ? 'rgba(255,255,255,0.10)' : 'transparent',
+                border: d === currentPage ? '1px solid rgba(255,255,255,0.12)' : 'none',
+              }}
+              onMouseEnter={e => { if (d !== currentPage) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)' }}
+              onMouseLeave={e => { if (d !== currentPage) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+            >
+              {d}
+            </button>
+          )
+        )}
+      </div>
+
+      {/* Next */}
+      <button
+        onClick={onNext}
+        disabled={!canNext}
+        title="下一页"
+        style={{
+          ...btnBase,
+          color: canNext ? 'rgba(255,255,255,0.50)' : 'rgba(255,255,255,0.15)',
+          cursor: canNext ? 'pointer' : 'default',
+        }}
+        onMouseEnter={e => { if (canNext) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)' }}
+        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+      >
+        <ChevronRight size={14} strokeWidth={2} />
+      </button>
+
+      {/* Add page */}
+      {canAdd && (
+        <button
+          onClick={onAddPage}
+          title="新建页"
+          style={{
+            ...btnBase,
+            marginLeft: 4,
+            color: 'rgba(255,255,255,0.32)',
+            border: '1px dashed rgba(255,255,255,0.15)',
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'
+            ;(e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.65)'
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLButtonElement).style.background = 'transparent'
+            ;(e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.32)'
+          }}
+        >
+          <Plus size={11} strokeWidth={2.5} />
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ── Main window ───────────────────────────────────────────────────────────────
 
 export default function NoteFloatWindow() {
@@ -160,38 +296,109 @@ export default function NoteFloatWindow() {
     })
   }, [])
 
+  // ── Pagination state ──────────────────────────────────────────────────────
+  const [currentPage,  setCurrentPage]  = useState(1)
+  const [totalPages,   setTotalPages]   = useState(1)
+
+  // ── Editor state ──────────────────────────────────────────────────────────
   const [initialContent, setInitialContent] = useState<unknown[]>([])
   const [contentLoaded,  setContentLoaded]  = useState(false)
   const [saveState,      setSaveState]      = useState<SaveState>('idle')
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Track latest blocks for immediate flush on page switch
+  const latestBlocksRef  = useRef<unknown[]>([])
+  const saveTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const currentPageRef   = useRef(currentPage)
+  const courseIdRef      = useRef(courseId)
+  currentPageRef.current = currentPage
+  courseIdRef.current    = courseId
 
   const dragRef     = useRef<{ startX: number; startY: number; winX: number; winY: number } | null>(null)
   const isResizing  = useRef<ResizeDir | null>(null)
   const resizeStart = useRef({ mouseX: 0, mouseY: 0, w: 0, h: 0 })
 
+  // Load pages list when window opens
   useEffect(() => {
-    if (!isOpen || contentLoaded) return
-    api.notes.getBlock(courseId ?? undefined)
-      .then(data => { setInitialContent(data.content ?? []); setContentLoaded(true) })
-      .catch(() => setContentLoaded(true))
-  }, [isOpen, courseId, contentLoaded])
+    if (!isOpen) return
+    api.notes.getPages(courseId ?? undefined)
+      .then(data => {
+        const pages = data.pages ?? [1]
+        setTotalPages(Math.max(...pages))
+      })
+      .catch(() => setTotalPages(1))
+  }, [isOpen, courseId])
 
+  // Load content when page changes (or window first opens)
   useEffect(() => {
-    if (!isOpen) setContentLoaded(false)
+    if (!isOpen) return
+    setContentLoaded(false)
+    api.notes.getBlock(courseId ?? undefined, currentPage)
+      .then(data => { setInitialContent(data.content ?? []); setContentLoaded(true) })
+      .catch(() => { setInitialContent([]); setContentLoaded(true) })
+  }, [isOpen, courseId, currentPage])
+
+  // Reset on close
+  useEffect(() => {
+    if (!isOpen) {
+      setContentLoaded(false)
+      setCurrentPage(1)
+      setTotalPages(1)
+      latestBlocksRef.current = []
+    }
   }, [isOpen])
 
+  // Flush pending save immediately, then switch page
+  const flushAndSwitch = useCallback(async (targetPage: number) => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
+    // Save current page content immediately before switching
+    if (latestBlocksRef.current.length > 0 || contentLoaded) {
+      try {
+        await api.notes.saveBlock(
+          latestBlocksRef.current,
+          courseIdRef.current ?? undefined,
+          currentPageRef.current,
+        )
+      } catch { /* non-critical */ }
+    }
+    setCurrentPage(targetPage)
+  }, [contentLoaded])
+
   const handleChange = useCallback((blocks: unknown[]) => {
+    latestBlocksRef.current = blocks
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     setSaveState('saving')
     saveTimerRef.current = setTimeout(async () => {
       try {
-        await api.notes.saveBlock(blocks, courseId ?? undefined)
+        await api.notes.saveBlock(blocks, courseIdRef.current ?? undefined, currentPageRef.current)
         setSaveState('saved')
         setTimeout(() => setSaveState('idle'), 2000)
       } catch { setSaveState('error') }
     }, SAVE_DEBOUNCE_MS)
-  }, [courseId])
+  }, [])
 
+  const handlePrev = useCallback(() => {
+    if (currentPage > 1) flushAndSwitch(currentPage - 1)
+  }, [currentPage, flushAndSwitch])
+
+  const handleNext = useCallback(() => {
+    if (currentPage < totalPages) flushAndSwitch(currentPage + 1)
+  }, [currentPage, totalPages, flushAndSwitch])
+
+  const handleAddPage = useCallback(() => {
+    if (totalPages >= MAX_PAGES) return
+    const newPage = totalPages + 1
+    setTotalPages(newPage)
+    flushAndSwitch(newPage)
+  }, [totalPages, flushAndSwitch])
+
+  const handleGoTo = useCallback((page: number) => {
+    if (page !== currentPage) flushAndSwitch(page)
+  }, [currentPage, flushAndSwitch])
+
+  // Mouse / touch drag & resize
   useEffect(() => {
     if (!isOpen) return
     function onMouseMove(e: MouseEvent) {
@@ -413,6 +620,7 @@ export default function NoteFloatWindow() {
         >
           {contentLoaded ? (
             <DynamicBlockNoteEditor
+              key={`page-${currentPage}`}
               initialContent={initialContent}
               onChange={handleChange}
             />
@@ -428,6 +636,16 @@ export default function NoteFloatWindow() {
             </div>
           )}
         </div>
+
+        {/* ── Page bar ───────────────────────────────────────────────── */}
+        <PageBar
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPrev={handlePrev}
+          onNext={handleNext}
+          onAddPage={handleAddPage}
+          onGoTo={handleGoTo}
+        />
 
         {/* ── Resize handles (desktop only) ──────────────────────────── */}
         {!isMobile && (

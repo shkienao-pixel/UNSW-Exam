@@ -20,15 +20,27 @@ _MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 class UpsertBlockNoteRequest(BaseModel):
     content: List[Any]
     course_id: Optional[str] = None
+    page: int = 1
+
+
+@router.get("/notes/block/pages")
+def get_block_note_pages(
+    course_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_db),
+) -> dict[str, Any]:
+    pages = notes_service.list_block_note_pages(supabase, current_user["id"], course_id)
+    return {"pages": pages}
 
 
 @router.get("/notes/block")
 def get_block_note(
     course_id: Optional[str] = None,
+    page: int = 1,
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_db),
 ) -> dict[str, Any]:
-    content = notes_service.get_block_note(supabase, current_user["id"], course_id)
+    content = notes_service.get_block_note(supabase, current_user["id"], course_id, page)
     return {"content": content}
 
 
@@ -38,7 +50,9 @@ def upsert_block_note(
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_db),
 ) -> dict[str, Any]:
-    notes_service.upsert_block_note(supabase, current_user["id"], body.content, body.course_id)
+    notes_service.upsert_block_note(
+        supabase, current_user["id"], body.content, body.course_id, body.page
+    )
     return {"ok": True}
 
 

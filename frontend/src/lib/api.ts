@@ -523,14 +523,21 @@ export const api = {
 
   notes: {
     // Block notes (BlockNote rich-text editor)
-    getBlock: (courseId?: string) => {
-      const qs = courseId ? `?course_id=${courseId}` : ''
+    getBlock: (courseId?: string, page = 1) => {
+      const params = new URLSearchParams()
+      if (courseId) params.set('course_id', courseId)
+      if (page !== 1) params.set('page', String(page))
+      const qs = params.toString() ? `?${params}` : ''
       return req<{ content: unknown[] }>(`/notes/block${qs}`)
     },
-    saveBlock: (content: unknown[], courseId?: string) =>
+    getPages: (courseId?: string) => {
+      const qs = courseId ? `?course_id=${courseId}` : ''
+      return req<{ pages: number[] }>(`/notes/block/pages${qs}`)
+    },
+    saveBlock: (content: unknown[], courseId?: string, page = 1) =>
       req<{ ok: boolean }>('/notes/block', {
         method: 'PUT',
-        body: JSON.stringify({ content, course_id: courseId ?? null }),
+        body: JSON.stringify({ content, course_id: courseId ?? null, page }),
       }),
 
   },
