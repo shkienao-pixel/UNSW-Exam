@@ -440,18 +440,22 @@ export const api = {
       return req<ExamQuestionsResponse>(`/courses/${courseId}/exam/questions?${qs}`)
     },
 
-    /** Trigger mock generation. Poll job until done, then return session_id. */
-    generateMock: async (
-      courseId: string,
-      body: { num_mcq: number; num_short: number },
-    ): Promise<{ session_id: string }> => {
+    /** Trigger mock generation. Backend auto-detects question type distribution from past exams. */
+    generateMock: async (courseId: string): Promise<{ session_id: string }> => {
       const { job_id, session_id } = await req<{ job_id: string; session_id: string }>(
         `/courses/${courseId}/exam/mock/generate`,
-        { method: 'POST', body: JSON.stringify(body) },
+        { method: 'POST', body: JSON.stringify({ num_mcq: 15, num_short: 5 }) },
       )
       await _waitJob(courseId, job_id)
       return { session_id }
     },
+
+    /** Upload a base64 answer image, returns its public URL. */
+    uploadAnswerImage: (courseId: string, data: string, mimeType: string) =>
+      req<{ url: string }>(
+        `/courses/${courseId}/exam/answer-image`,
+        { method: 'POST', body: JSON.stringify({ data, mime_type: mimeType }) },
+      ),
 
     listMockSessions: (courseId: string) =>
       req<MockSession[]>(`/courses/${courseId}/exam/mock/sessions`),

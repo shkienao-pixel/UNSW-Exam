@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   AlertCircle,
   Bookmark,
@@ -36,7 +36,10 @@ function tt(lang: 'zh' | 'en', zh: string, en: string) {
 }
 
 function hasAnswer(value?: string | null) {
-  return Boolean(value && value.trim())
+  if (!value) return false
+  // Treat [IMG:...] prefix as an answer even with empty text
+  if (value.startsWith('[IMG:')) return true
+  return Boolean(value.trim())
 }
 
 function getInitialAnswers(questions: ExamQuestion[]): AnswerMap {
@@ -400,8 +403,6 @@ function MockSessionList({
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [starting, setStarting] = useState<string | null>(null)
-  const [numMcq, setNumMcq] = useState(10)
-  const [numShort, setNumShort] = useState(5)
   const { lang } = useLang()
 
   const loadSessions = useCallback(async () => {
@@ -420,7 +421,7 @@ function MockSessionList({
   async function handleGenerate() {
     setGenerating(true)
     try {
-      const { session_id } = await api.exam.generateMock(courseId, { num_mcq: numMcq, num_short: numShort })
+      const { session_id } = await api.exam.generateMock(courseId)
       await loadSessions()
       const { questions } = await api.exam.getQuestions(courseId, { mock_session_id: session_id })
       if (!questions.length) {
@@ -472,34 +473,10 @@ function MockSessionList({
             <p className="text-sm leading-6" style={{ color: '#cbd5e1' }}>
               {tt(
                 lang,
-                '系统会根据你已上传的真题风格重新组织题型和措辞，尽量做出更像学校正式考试的感觉。',
-                'The system will reuse your past-paper style signals to produce a paper that feels closer to the real school exam.'
+                '系统自动参考已上传真题的题型分布出题：真题全是选择题则只出选择题；有计算/简答则同步出计算/简答题，并提供可粘贴图片的答题框。',
+                'The system auto-mirrors the real past-paper question type breakdown. MCQ-only papers produce MCQ-only mocks; papers with written/calculation questions include image-pasteable answer boxes.'
               )}
             </p>
-          </div>
-
-          <div className="flex flex-wrap gap-4">
-            <label className="space-y-1 text-sm" style={{ color: '#e2e8f0' }}>
-              <span>{tt(lang, '选择题数量', 'MCQ count')}</span>
-              <select
-                value={numMcq}
-                onChange={e => setNumMcq(Number(e.target.value))}
-                className="input-glass min-w-[120px] py-2 text-sm"
-              >
-                {[5, 10, 15, 20].map(count => <option key={count} value={count}>{count}</option>)}
-              </select>
-            </label>
-
-            <label className="space-y-1 text-sm" style={{ color: '#e2e8f0' }}>
-              <span>{tt(lang, '简答题数量', 'Short-answer count')}</span>
-              <select
-                value={numShort}
-                onChange={e => setNumShort(Number(e.target.value))}
-                className="input-glass min-w-[120px] py-2 text-sm"
-              >
-                {[0, 3, 5, 8].map(count => <option key={count} value={count}>{count}</option>)}
-              </select>
-            </label>
           </div>
 
           <GlowButton
@@ -822,6 +799,7 @@ function ExamDoingPage({
               question={currentQuestion}
               questionNumber={currentIndex + 1}
               answer={answers[currentQuestion.id]}
+              courseId={courseId}
               onAnswer={value => setAnswers(state => ({ ...state, [currentQuestion.id]: value }))}
             />
 
@@ -1263,23 +1241,67 @@ function QuestionNavigator({
   )
 }
 
+/** Encode answer text + optional image URL into a single string stored in answers map. */
+function encodeAnswer(text: string, imageUrl: string | null): string {
+  if (imageUrl) return `[IMG:${imageUrl}]\n${text}`
+  return text
+}
+
+/** Decode answer string back into {text, imageUrl}. */
+function decodeAnswer(answer: string | undefined): { text: string; imageUrl: string | null } {
+  if (!answer) return { text: '', imageUrl: null }
+  const m = answer.match(/^\[IMG:(https?:\/\/[^\]]+)\]\n?(.*)$/s)
+  if (m) return { text: m[2], imageUrl: m[1] }
+  return { text: answer, imageUrl: null }
+}
+
 function QuestionPanel({
   lang,
   question,
   questionNumber,
   answer,
+  courseId,
   onAnswer,
 }: {
   lang: 'zh' | 'en'
   question: ExamQuestion
   questionNumber: number
   answer: string | undefined
+  courseId: string
   onAnswer: (value: string) => void
 }) {
   const [lightbox, setLightbox] = useState(false)
+  const [uploadingImg, setUploadingImg] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const renderableOptions = getRenderableOptions(question)
   const treatAsMcq = question.question_type === 'mcq' || isLikelyMcqStem(question)
   const missingMcqOptions = treatAsMcq && renderableOptions.length < 4
+  const { text: answerText, imageUrl: answerImageUrl } = decodeAnswer(answer)
+
+  async function handleImageFile(file: File) {
+    if (!file.type.startsWith('image/')) return
+    setUploadingImg(true)
+    try {
+      const buf = await file.arrayBuffer()
+      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)))
+      const { url } = await api.exam.uploadAnswerImage(courseId, b64, file.type)
+      onAnswer(encodeAnswer(answerText, url))
+    } catch {
+      alert(tt(lang, '图片上传失败，请重试', 'Image upload failed, please try again'))
+    } finally {
+      setUploadingImg(false)
+    }
+  }
+
+  function handlePaste(e: React.ClipboardEvent) {
+    const items = Array.from(e.clipboardData.items)
+    const imgItem = items.find(item => item.type.startsWith('image/'))
+    if (imgItem) {
+      e.preventDefault()
+      const file = imgItem.getAsFile()
+      if (file) void handleImageFile(file)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -1383,15 +1405,35 @@ function QuestionPanel({
               })}
             </div>
           ) : !treatAsMcq ? (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <label className="text-sm font-medium" style={{ color: '#475569' }}>
                 {tt(lang, '你的答案', 'Your Answer')}
               </label>
+
+              {/* Pasted image preview */}
+              {answerImageUrl && (
+                <div className="relative overflow-hidden rounded-[18px]" style={{ border: '1px solid rgba(148,163,184,0.28)', background: '#f8fafc' }}>
+                  <img src={answerImageUrl} alt="answer" className="w-full object-contain" style={{ maxHeight: 360 }} />
+                  <button
+                    onClick={() => onAnswer(encodeAnswer(answerText, null))}
+                    className="absolute right-2 top-2 flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold"
+                    style={{ background: 'rgba(239,68,68,0.9)', color: '#fff' }}
+                  >
+                    ✕ {tt(lang, '移除图片', 'Remove')}
+                  </button>
+                </div>
+              )}
+
               <textarea
-                value={answer ?? ''}
-                onChange={event => onAnswer(event.target.value)}
+                value={answerText}
+                onChange={e => onAnswer(encodeAnswer(e.target.value, answerImageUrl))}
+                onPaste={handlePaste}
                 rows={7}
-                placeholder={tt(lang, '在这里输入你的作答内容...', 'Type your answer here...')}
+                placeholder={tt(
+                  lang,
+                  '在这里输入你的作答内容…\n也可以 Ctrl+V 直接粘贴截图',
+                  'Type your answer here…\nYou can also Ctrl+V to paste a screenshot directly',
+                )}
                 className="w-full rounded-[22px] px-4 py-4 text-sm leading-7"
                 style={{
                   background: '#ffffff',
@@ -1401,6 +1443,31 @@ function QuestionPanel({
                   resize: 'vertical',
                 }}
               />
+
+              {/* Image upload hint / button */}
+              <div className="flex items-center gap-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) void handleImageFile(f) }}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingImg}
+                  className="inline-flex items-center gap-1.5 rounded-2xl px-3 py-1.5 text-xs font-medium transition-all disabled:opacity-60"
+                  style={{ background: '#f1f5f9', color: '#475569', border: '1px solid rgba(148,163,184,0.24)' }}
+                >
+                  {uploadingImg ? <Loader2 size={12} className="animate-spin" /> : '🖼'}
+                  {uploadingImg
+                    ? tt(lang, '上传中…', 'Uploading…')
+                    : tt(lang, '上传图片 / 截图粘贴', 'Upload image or paste screenshot')}
+                </button>
+                <span className="text-xs" style={{ color: '#94a3b8' }}>
+                  {tt(lang, '含图片的答案会交给 AI Vision 批改', 'Image answers are graded by AI Vision')}
+                </span>
+              </div>
             </div>
           ) : null}
         </div>
@@ -1425,6 +1492,7 @@ function QuestionReviewPanel({
   const correctLetter = getChoiceLetter(question.correct_answer)
   const renderableOptions = getRenderableOptions(question)
   const treatAsMcq = question.question_type === 'mcq' || isLikelyMcqStem(question)
+  const { text: reviewAnswerText, imageUrl: reviewImageUrl } = decodeAnswer(answer)
 
   return (
     <div className="space-y-4">
@@ -1491,13 +1559,20 @@ function QuestionReviewPanel({
             </div>
           ) : !treatAsMcq ? (
             <div className="grid gap-4 lg:grid-cols-2">
-              <ReviewAnswerBlock
-                title={tt(lang, '你的答案', 'Your answer')}
-                content={hasAnswer(answer) ? answer! : tt(lang, '未作答', 'Not answered')}
-                toneBorder="rgba(148,163,184,0.22)"
-                toneBg="#ffffff"
-                toneText="#0f172a"
-              />
+              {/* Student answer — show image if present */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: '#64748b' }}>
+                  {tt(lang, '你的答案', 'Your answer')}
+                </p>
+                <div className="rounded-[18px] p-4" style={{ background: '#ffffff', border: '1px solid rgba(148,163,184,0.22)', color: '#0f172a' }}>
+                  {reviewImageUrl && (
+                    <img src={reviewImageUrl} alt="your answer" className="mb-3 w-full rounded-xl object-contain" style={{ maxHeight: 300, border: '1px solid rgba(148,163,184,0.18)' }} />
+                  )}
+                  <p className="whitespace-pre-wrap text-sm leading-7">
+                    {reviewAnswerText || (!reviewImageUrl ? tt(lang, '未作答', 'Not answered') : '')}
+                  </p>
+                </div>
+              </div>
 
               <ReviewAnswerBlock
                 title={tt(lang, '参考答案', 'Reference answer')}

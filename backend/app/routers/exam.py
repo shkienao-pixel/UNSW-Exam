@@ -41,6 +41,67 @@ class MockGenerateRequest(BaseModel):
     num_short: int = 5
 
 
+class AnswerImageRequest(BaseModel):
+    data: str       # base64-encoded image bytes
+    mime_type: str  # e.g. "image/png" or "image/jpeg"
+
+
+# ── Answer image upload ────────────────────────────────────────────────────────
+
+_ANSWER_IMG_BUCKET = "answer-images"
+_answer_bucket_created = False
+
+
+def _ensure_answer_bucket(supabase: Client) -> None:
+    global _answer_bucket_created
+    if _answer_bucket_created:
+        return
+    try:
+        supabase.storage.create_bucket(_ANSWER_IMG_BUCKET, options={"public": True})
+    except Exception:
+        pass
+    _answer_bucket_created = True
+
+
+@router.post("/exam/answer-image")
+def upload_answer_image(
+    course_id: str,
+    body: AnswerImageRequest,
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_db),
+) -> dict[str, str]:
+    """Upload a base64-encoded answer image, return its public URL."""
+    import base64
+    import uuid as _uuid
+
+    allowed_types = {"image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"}
+    if body.mime_type not in allowed_types:
+        raise HTTPException(status_code=422, detail="不支持的图片格式")
+
+    try:
+        img_bytes = base64.b64decode(body.data)
+    except Exception:
+        raise HTTPException(status_code=422, detail="图片数据无效")
+
+    if len(img_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="图片大小超过 10MB 限制")
+
+    ext = body.mime_type.split("/")[-1].replace("jpeg", "jpg")
+    path = f"{current_user['id']}/{_uuid.uuid4()}.{ext}"
+
+    try:
+        _ensure_answer_bucket(supabase)
+        supabase.storage.from_(_ANSWER_IMG_BUCKET).upload(
+            path, img_bytes, {"content-type": body.mime_type, "upsert": "false"}
+        )
+        url = supabase.storage.from_(_ANSWER_IMG_BUCKET).get_public_url(path)
+    except Exception as exc:
+        logger.error("answer image upload failed: %s", exc)
+        raise HTTPException(status_code=500, detail="图片上传失败，请重试")
+
+    return {"url": url}
+
+
 # ── Past exam list ─────────────────────────────────────────────────────────────
 
 @router.get("/exam/past-exams")

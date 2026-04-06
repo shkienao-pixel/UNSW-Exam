@@ -798,12 +798,17 @@ def run_mock_generation(db: Client, user_id: str, course_id: str, body: Any) -> 
 
     Returns {"id": None, "session_id": ...} — no outputs table row.
     Called by generation_worker for job_type='exam_mock'.
+
+    Question type distribution is AUTO-DETECTED from past exam rows:
+    - If past exams contain only MCQ → num_short forced to 0
+    - If past exams contain only short_answer → num_mcq forced to 0
+    - Otherwise, scale proportionally to the requested total.
     """
     from app.services.generate_service import _get_openai_key
     openai_key = _get_openai_key(db)
 
-    num_mcq = int(getattr(body, "num_mcq", 10))
-    num_short = int(getattr(body, "num_short", 5))
+    requested_mcq   = int(getattr(body, "num_mcq",   10))
+    requested_short = int(getattr(body, "num_short",  5))
     session_id = str(getattr(body, "session_id", ""))
 
     past_rows = (
@@ -821,6 +826,35 @@ def run_mock_generation(db: Client, user_id: str, course_id: str, body: Any) -> 
     if not past_rows:
         raise AppError("没有找到往年真题，请先上传并审核 past_exam 类型文件")
 
+    # ── Auto-detect question type distribution ─────────────────────────────────
+    past_mcq_count   = sum(1 for r in past_rows if r.get("question_type") == "mcq")
+    past_short_count = len(past_rows) - past_mcq_count
+    past_has_mcq     = past_mcq_count > 0
+    past_has_short   = past_short_count > 0
+
+    if past_has_mcq and not past_has_short:
+        # Past exams are all MCQ → generate only MCQ
+        total = requested_mcq + requested_short
+        num_mcq   = total
+        num_short = 0
+        logger.info("run_mock_generation: past exams are MCQ-only → forcing num_short=0, num_mcq=%d", num_mcq)
+    elif past_has_short and not past_has_mcq:
+        # Past exams are all short answer → generate only short answer
+        total = requested_mcq + requested_short
+        num_mcq   = 0
+        num_short = total
+        logger.info("run_mock_generation: past exams are short-answer-only → forcing num_mcq=0, num_short=%d", num_short)
+    else:
+        # Mixed: scale to requested counts but clamp short to reasonable ratio
+        mcq_ratio = past_mcq_count / len(past_rows)
+        total     = requested_mcq + requested_short
+        num_mcq   = max(0, round(total * mcq_ratio))
+        num_short = total - num_mcq
+        logger.info(
+            "run_mock_generation: mixed past exams (%.0f%% mcq) → num_mcq=%d num_short=%d",
+            mcq_ratio * 100, num_mcq, num_short,
+        )
+
     past_sample = _build_mock_reference(past_rows, num_mcq, num_short)
     visual_rows = [
         row for row in past_rows
@@ -832,10 +866,28 @@ def run_mock_generation(db: Client, user_id: str, course_id: str, body: Any) -> 
         f"V{idx}": row for idx, row in enumerate(visual_rows[: min(8, len(visual_rows))], 1)
     }
 
+    type_instruction = ""
+    if num_mcq > 0 and num_short == 0:
+        type_instruction = (
+            f"CRITICAL: The real past exams for this course contain ONLY multiple-choice questions. "
+            f"You MUST generate exactly {num_mcq} MCQ and ZERO short-answer questions. "
+            "Do NOT add any short-answer or open-ended questions."
+        )
+    elif num_short > 0 and num_mcq == 0:
+        type_instruction = (
+            f"CRITICAL: The real past exams for this course contain ONLY short-answer/written questions. "
+            f"You MUST generate exactly {num_short} short-answer questions and ZERO MCQ. "
+            "Do NOT add any multiple-choice questions."
+        )
+    else:
+        type_instruction = (
+            f"Generate exactly {num_mcq} multiple-choice questions and {num_short} short-answer questions, "
+            "matching the real exam's question-type distribution shown below."
+        )
+
     system = (
         "You are a careful university exam-paper writer.\n"
-        f"Generate exactly {num_mcq} multiple-choice questions and {num_short} short-answer questions "
-        "using the real past-paper style shown below.\n\n"
+        f"{type_instruction}\n\n"
         "Rules:\n"
         "1. Questions must be DIFFERENT from the examples — do NOT copy them.\n"
         "2. Match the voice of the real papers: wording, difficulty, pacing, and distractor style.\n"
@@ -845,9 +897,9 @@ def run_mock_generation(db: Client, user_id: str, course_id: str, body: Any) -> 
         f"6. If visual references are available, create {target_visual} generated questions that explicitly use one of them.\n"
         "   For those questions set visual_ref to the chosen reference id such as V1. Otherwise set visual_ref to null.\n"
         "   The question must genuinely depend on the referenced visual to answer it.\n"
-        f"6. Number sequentially: MCQ first (indices 1–{num_mcq}), "
+        f"7. Number sequentially: MCQ first (indices 1–{num_mcq}), "
         f"then short_answer (indices {num_mcq + 1}–{num_mcq + num_short}).\n"
-        "7. Return ONLY a raw JSON array — no markdown fences, no extra text.\n\n"
+        "8. Return ONLY a raw JSON array — no markdown fences, no extra text.\n\n"
         "Output format:\n"
         "[{\"question_index\":1,\"question_type\":\"mcq\","
         "\"question_text\":\"...\",\"options\":[\"opt\",\"opt\",\"opt\",\"opt\"],"
@@ -1001,12 +1053,30 @@ def grade_answers(
     return results
 
 
+_IMG_PREFIX_RE = None
+
+def _parse_image_answer(user_ans: str) -> tuple[str | None, str]:
+    """Split '[IMG:url]\\n text' into (image_url, text).
+
+    Returns (None, original) if no image marker found.
+    """
+    import re
+    m = re.match(r'^\[IMG:(https?://[^\]]+)\]\n?(.*)', user_ans, re.DOTALL)
+    if m:
+        return m.group(1), m.group(2).strip()
+    return None, user_ans
+
+
 def _grade_short_answers_batch(
     results: list[dict],
     batch: list[tuple[int, dict, str]],
     openai_key: str,
 ) -> None:
-    """Grade short answer questions in one AI call. Mutates results in-place."""
+    """Grade short answer questions in one AI call. Mutates results in-place.
+
+    Answers containing '[IMG:url]' prefix are graded via GPT Vision individually.
+    All other answers are batched into a single text call.
+    """
     if not batch:
         return
 
@@ -1016,31 +1086,6 @@ def _grade_short_answers_batch(
         _re.MULTILINE,
     )
     letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    lines: list[str] = []
-    for idx, (_, q, user_ans) in enumerate(batch, 1):
-        ref = q.get("correct_answer") or ""
-        options = [str(o).strip() for o in (q.get("options") or []) if str(o).strip()]
-
-        # Fallback: parse options from question_text when options array is empty
-        if not options and q.get("question_type") == "mcq":
-            text = q.get("question_text") or ""
-            matches = _mcq_opt_re.findall(text)
-            ordered = sorted(matches, key=lambda m: m[0])
-            if len(ordered) >= 4:
-                options = [m[1].replace('\n', ' ').strip() for m in ordered[:4]]
-
-        opts_text = ""
-        if options:
-            opts_text = "\nOptions:\n" + "\n".join(
-                f"  {letters[i]}. {opt}" for i, opt in enumerate(options[:len(letters)])
-            )
-
-        ref_line = f"Reference answer: {ref}" if ref else "Reference answer: use your knowledge"
-        lines.append(
-            f"[{idx}] Question: {q['question_text']}{opts_text}\n"
-            f"{ref_line}\n"
-            f"Student answer: {user_ans}"
-        )
 
     system = (
         "You are a strict but fair exam marker. Grade each numbered student answer.\n"
@@ -1048,7 +1093,8 @@ def _grade_short_answers_batch(
         "1. For MCQ (A/B/C/D options shown): use your knowledge to determine the correct option "
         "even if no reference is given. Never say options are missing — they are embedded above.\n"
         "2. For short-answer: accept correct core concept even if phrasing differs.\n"
-        "3. Feedback MUST be bilingual (Chinese + English), in this exact structure:\n"
+        "3. If the student's answer is an image, examine it carefully and grade based on what is shown.\n"
+        "4. Feedback MUST be bilingual (Chinese + English), in this exact structure:\n"
         "   【中文解析】<Chinese explanation here>\n"
         "   [English Analysis] <English explanation here>\n"
         "   - If CORRECT: one sentence in each language confirming why.\n"
@@ -1059,9 +1105,78 @@ def _grade_short_answers_batch(
         'Format: [{"is_correct": true/false, "feedback": "..."}]'
     )
 
+    from openai import OpenAI
+    client = OpenAI(api_key=openai_key, timeout=120.0)
+
+    # Split into vision items (have image) and text items
+    vision_items: list[tuple[int, int, dict, str, str]] = []   # (batch_idx, result_idx, q, img_url, text)
+    text_batch:   list[tuple[int, int, dict, str]]    = []     # (batch_idx, result_idx, q, user_ans)
+
+    for batch_idx, (result_idx, q, raw_ans) in enumerate(batch):
+        img_url, text = _parse_image_answer(raw_ans)
+        if img_url:
+            vision_items.append((batch_idx, result_idx, q, img_url, text))
+        else:
+            text_batch.append((batch_idx, result_idx, q, raw_ans))
+
+    def _build_question_context(q: dict, idx: int, user_ans_text: str) -> str:
+        ref = q.get("correct_answer") or ""
+        options = [str(o).strip() for o in (q.get("options") or []) if str(o).strip()]
+        if not options and q.get("question_type") == "mcq":
+            text = q.get("question_text") or ""
+            matches = _mcq_opt_re.findall(text)
+            ordered = sorted(matches, key=lambda m: m[0])
+            if len(ordered) >= 4:
+                options = [m[1].replace('\n', ' ').strip() for m in ordered[:4]]
+        opts_text = ""
+        if options:
+            opts_text = "\nOptions:\n" + "\n".join(
+                f"  {letters[i]}. {opt}" for i, opt in enumerate(options[:len(letters)])
+            )
+        ref_line = f"Reference answer: {ref}" if ref else "Reference answer: use your knowledge"
+        return (
+            f"[{idx}] Question: {q['question_text']}{opts_text}\n"
+            f"{ref_line}\n"
+            f"Student answer: {user_ans_text}"
+        )
+
+    # ── Grade vision answers one-by-one ───────────────────────────────────────
+    for _, result_idx, q, img_url, text in vision_items:
+        ctx = _build_question_context(q, 1, text or "(see image below)")
+        user_content: list[dict] = [
+            {"type": "text", "text": ctx},
+            {"type": "image_url", "image_url": {"url": img_url, "detail": "high"}},
+        ]
+        try:
+            resp = client.chat.completions.create(
+                model="gpt-5.4",
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_content},
+                ],
+                temperature=0.1,
+            )
+            raw = resp.choices[0].message.content or "[]"
+            raw = _extract_json(raw)
+            graded = json.loads(raw)
+            if isinstance(graded, list) and graded and isinstance(graded[0], dict):
+                results[result_idx]["is_correct"] = graded[0].get("is_correct")
+                results[result_idx]["feedback"]   = graded[0].get("feedback", "")
+            else:
+                results[result_idx]["feedback"] = "AI 批改失败，请自行判断"
+        except Exception as exc:
+            logger.error("Vision grading failed for result_idx %s: %s", result_idx, exc)
+            results[result_idx]["feedback"] = "AI 批改失败，请对照参考答案自行判断"
+
+    if not text_batch:
+        return
+
+    # ── Grade text answers in batch ────────────────────────────────────────────
+    lines: list[str] = []
+    for local_idx, (_, result_idx, q, user_ans) in enumerate(text_batch, 1):
+        lines.append(_build_question_context(q, local_idx, user_ans))
+
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=openai_key, timeout=120.0)
         resp = client.chat.completions.create(
             model="gpt-5.4",
             messages=[
@@ -1073,7 +1188,7 @@ def _grade_short_answers_batch(
         raw = resp.choices[0].message.content or "[]"
     except Exception as exc:
         logger.error("AI short-answer grading failed: %s", exc)
-        for result_idx, q, _ in batch:
+        for _, result_idx, q, _ in text_batch:
             results[result_idx]["feedback"] = (
                 "AI 批改失败，请对照参考答案自行判断"
                 if q.get("correct_answer") else
@@ -1089,7 +1204,7 @@ def _grade_short_answers_batch(
     except Exception:
         graded = []
 
-    for i, (result_idx, q, _) in enumerate(batch):
+    for i, (_, result_idx, q, _) in enumerate(text_batch):
         if i < len(graded) and isinstance(graded[i], dict):
             results[result_idx]["is_correct"] = graded[i].get("is_correct")
             results[result_idx]["feedback"]   = graded[i].get("feedback", "")
