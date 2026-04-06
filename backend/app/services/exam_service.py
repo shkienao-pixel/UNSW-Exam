@@ -1149,7 +1149,7 @@ def _grade_short_answers_batch(
         ]
         try:
             resp = client.chat.completions.create(
-                model="gpt-5.4",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system},
                     {"role": "user", "content": user_content},
@@ -1178,7 +1178,7 @@ def _grade_short_answers_batch(
 
     try:
         resp = client.chat.completions.create(
-            model="gpt-5.4",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user",   "content": "\n\n".join(lines)},
