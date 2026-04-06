@@ -1277,7 +1277,7 @@ def list_mistakes(
         .select(
             "question_id, course_id, user_answer, is_correct, feedback, "
             "mistake_status, mastered_at, created_at, "
-            "exam_questions(id, question_text, question_type, options, correct_answer, explanation, source_type)"
+            "exam_questions(id, question_text, question_type, options, correct_answer, explanation, source_type, page_image_url, has_visual)"
         )
         .eq("user_id", user_id)
         .not_.is_("mistake_status", "null")
@@ -1306,6 +1306,8 @@ def list_mistakes(
             "correct_answer": q_data.get("correct_answer"),
             "explanation":    q_data.get("explanation"),
             "source_type":    q_data.get("source_type"),
+            "page_image_url": q_data.get("page_image_url"),
+            "has_visual":     bool(q_data.get("has_visual", False)),
         }
         result.append(item)
     return result

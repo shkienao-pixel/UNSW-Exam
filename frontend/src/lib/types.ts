@@ -322,6 +322,8 @@ export interface StoredMistake {
   mistake_status: 'active' | 'mastered'
   created_at: string
   mastered_at?: string
+  page_image_url?: string
+  has_visual?: boolean
 }
 
 // ── Flashcard Mistakes ────────────────────────────────────────────────────────

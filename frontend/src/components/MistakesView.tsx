@@ -263,110 +263,147 @@ function ExamCard({ mistake: m, onMaster, onRemove }: {
 }) {
   const [expanded, setExpanded] = useState(false)
   const isMastered = m.mistake_status === 'mastered'
-  const hasDetails = !!(m.options || m.feedback || m.explanation)
+  const hasDetails = !!(m.options || m.feedback || m.explanation || m.page_image_url)
+  const accentColor = isMastered ? '#22C55E' : m.source_type === 'mock' ? '#34D399' : '#FFD700'
 
   return (
-    <div className="group rounded-xl overflow-hidden"
+    <div className="group rounded-2xl overflow-hidden"
       style={{
-        background: isMastered ? 'rgba(34,197,94,0.04)' : 'rgba(255,255,255,0.025)',
-        border: isMastered ? '1px solid rgba(34,197,94,0.14)' : '1px solid rgba(255,255,255,0.06)',
+        background: isMastered ? 'rgba(34,197,94,0.04)' : 'rgba(255,255,255,0.03)',
+        border: isMastered ? '1px solid rgba(34,197,94,0.16)' : '1px solid rgba(255,255,255,0.07)',
       }}>
 
-      <div className="px-4 py-3 flex items-start gap-3">
-        <div className="flex-shrink-0 mt-[7px] w-1.5 h-1.5 rounded-full"
-          style={{ background: isMastered ? '#22C55E' : m.source_type === 'mock' ? '#34D399' : '#FFD700' }} />
+      {/* Header row */}
+      <div className="px-5 pt-4 pb-3">
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0 space-y-2.5">
+            {/* Badges */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] px-2 py-0.5 rounded-full font-medium"
+                style={{ background: accentColor + '18', color: accentColor, border: `1px solid ${accentColor}30` }}>
+                {m.question_type === 'mcq' ? '选择题' : '简答题'}
+              </span>
+              {isMastered && (
+                <span className="text-[11px] px-2 py-0.5 rounded-full font-medium"
+                  style={{ background: 'rgba(34,197,94,0.1)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.2)' }}>
+                  ✓ 已掌握
+                </span>
+              )}
+              {m.has_visual && !m.page_image_url && (
+                <span className="text-[11px] px-2 py-0.5 rounded-full"
+                  style={{ background: 'rgba(168,139,250,0.1)', color: '#a78bfa', border: '1px solid rgba(168,139,250,0.2)' }}>
+                  📊 含图表
+                </span>
+              )}
+              <span className="ml-auto text-[11px]" style={{ color: '#3a3a48' }}>
+                {new Date(m.created_at).toLocaleDateString('zh-CN')}
+              </span>
+            </div>
 
-        <div className="flex-1 min-w-0 space-y-1.5">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[10px] px-1.5 py-px rounded-full"
-              style={{ background: 'rgba(255,255,255,0.04)', color: '#444', border: '1px solid rgba(255,255,255,0.07)' }}>
-              {m.question_type === 'mcq' ? '选择题' : '简答题'}
-            </span>
-            {isMastered && (
-              <span className="text-[10px] px-1.5 py-px rounded-full"
-                style={{ background: 'rgba(34,197,94,0.08)', color: '#22C55E' }}>✓ 已掌握</span>
+            {/* Question text */}
+            <p className="text-sm text-white leading-relaxed">{m.question_text}</p>
+
+            {/* Quick answer hint when collapsed */}
+            {!expanded && m.question_type === 'mcq' && m.correct_answer && (
+              <p className="text-xs" style={{ color: '#22C55E' }}>
+                正确答案：<span className="font-semibold">{m.correct_answer}</span>
+                {m.user_answer && m.user_answer !== m.correct_answer && (
+                  <span style={{ color: '#FF8080' }}> · 你选了 {m.user_answer}</span>
+                )}
+              </p>
             )}
-            <span className="ml-auto text-[10px]" style={{ color: '#252530' }}>
-              {new Date(m.created_at).toLocaleDateString('zh-CN')}
-            </span>
           </div>
 
-          <p className="text-xs text-white leading-relaxed line-clamp-2">{m.question_text}</p>
-
-          {!expanded && m.question_type === 'mcq' && m.correct_answer && (
-            <p className="text-[10px]" style={{ color: '#22C55E' }}>
-              正确：{m.correct_answer}
-              {m.user_answer && m.user_answer !== m.correct_answer && (
-                <span style={{ color: '#FF8080' }}> · 你选了 {m.user_answer}</span>
-              )}
-            </p>
-          )}
-        </div>
-
-        <div className="flex-shrink-0 flex flex-col gap-1.5 items-end pt-0.5">
-          {!isMastered && (
-            <button onClick={() => onMaster(m.question_id)}
-              className="text-[10px] px-2 py-1 rounded-lg whitespace-nowrap"
-              style={{ background: 'rgba(34,197,94,0.07)', color: '#22C55E', border: '1px solid rgba(34,197,94,0.18)' }}>
-              ✓ 已掌握
+          {/* Actions */}
+          <div className="flex-shrink-0 flex flex-col gap-2 items-end">
+            {!isMastered && (
+              <button onClick={() => onMaster(m.question_id)}
+                className="text-xs px-3 py-1.5 rounded-xl font-medium whitespace-nowrap transition-opacity hover:opacity-80"
+                style={{ background: 'rgba(34,197,94,0.09)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.22)' }}>
+                ✓ 已掌握
+              </button>
+            )}
+            <button onClick={() => onRemove(m.question_id)}
+              className="text-xs px-2 py-1.5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity"
+              style={{ background: 'rgba(255,255,255,0.04)', color: '#555', border: '1px solid rgba(255,255,255,0.07)' }}>
+              删除
             </button>
-          )}
-          <button onClick={() => onRemove(m.question_id)}
-            className="text-[10px] px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-            style={{ background: 'rgba(255,255,255,0.03)', color: '#444', border: '1px solid rgba(255,255,255,0.06)' }}>
-            删除
-          </button>
+          </div>
         </div>
       </div>
 
+      {/* Expand toggle */}
       {hasDetails && (
-        <>
-          <button onClick={() => setExpanded(v => !v)}
-            className="w-full flex items-center justify-center gap-1 py-1.5 text-[10px] hover:opacity-70 transition-opacity"
-            style={{ color: '#2e2e3a', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-            {expanded ? <><ChevronUp size={10} />收起</> : <><ChevronDown size={10} />展开详情</>}
-          </button>
+        <button onClick={() => setExpanded(v => !v)}
+          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs hover:opacity-70 transition-opacity"
+          style={{ color: '#3a3a50', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+          {expanded ? <><ChevronUp size={12} />收起</> : <><ChevronDown size={12} />展开答案 / 图片</>}
+        </button>
+      )}
 
-          {expanded && (
-            <div className="px-4 pb-3 pt-2 space-y-2"
-              style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-              {m.options && m.question_type === 'mcq' && (
-                <div className="space-y-1">
-                  {m.options.map((opt, j) => {
-                    const label = String.fromCharCode(65 + j)
-                    const isCorrect = label === m.correct_answer
-                    const isWrong = m.user_answer === label && !isCorrect
-                    return (
-                      <div key={j} className="px-3 py-1.5 rounded-lg text-[11px] flex items-start gap-1.5"
-                        style={{
-                          background: isCorrect ? 'rgba(34,197,94,0.08)' : isWrong ? 'rgba(255,68,68,0.06)' : 'rgba(255,255,255,0.02)',
-                          border: `1px solid ${isCorrect ? 'rgba(34,197,94,0.2)' : isWrong ? 'rgba(255,68,68,0.14)' : 'rgba(255,255,255,0.04)'}`,
-                          color: isCorrect ? '#22C55E' : isWrong ? '#FF8080' : '#555',
-                        }}>
-                        <span style={{ flexShrink: 0, fontWeight: 600 }}>{label}.</span>
-                        <span className="flex-1">{opt}</span>
-                        {isCorrect && <span className="opacity-40 flex-shrink-0">← 正确</span>}
-                        {isWrong && <span className="opacity-40 flex-shrink-0">← 你选的</span>}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-              {m.question_type === 'short_answer' && m.correct_answer && (
-                <div className="px-3 py-2 rounded-lg text-[11px]"
-                  style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.14)', color: '#22C55E' }}>
-                  参考答案：{m.correct_answer}
-                </div>
-              )}
-              {(m.feedback || m.explanation) && (
-                <div className="px-3 py-2 rounded-lg text-[11px]"
-                  style={{ background: 'rgba(255,215,0,0.04)', color: '#666', border: '1px solid rgba(255,215,0,0.08)' }}>
-                  💡 {m.feedback || m.explanation}
-                </div>
-              )}
+      {/* Expanded details */}
+      {expanded && (
+        <div className="px-5 pb-4 pt-3 space-y-3"
+          style={{ borderTop: '1px solid rgba(255,255,255,0.05)', background: 'rgba(0,0,0,0.1)' }}>
+
+          {/* Image (if available) */}
+          {m.page_image_url && (
+            <div className="rounded-xl overflow-hidden"
+              style={{ border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(0,0,0,0.2)' }}>
+              <p className="text-[11px] px-3 py-1.5 font-medium" style={{ color: '#555', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                📎 原题图片
+              </p>
+              <img
+                src={m.page_image_url}
+                alt="题目图片"
+                className="w-full object-contain"
+                style={{ maxHeight: 480 }}
+              />
             </div>
           )}
-        </>
+
+          {/* MCQ options */}
+          {m.options && m.question_type === 'mcq' && (
+            <div className="space-y-1.5">
+              {m.options.map((opt, j) => {
+                const label = String.fromCharCode(65 + j)
+                const isCorrect = label === m.correct_answer
+                const isWrong = m.user_answer === label && !isCorrect
+                return (
+                  <div key={j} className="px-4 py-2.5 rounded-xl text-sm flex items-start gap-2"
+                    style={{
+                      background: isCorrect ? 'rgba(34,197,94,0.09)' : isWrong ? 'rgba(255,68,68,0.07)' : 'rgba(255,255,255,0.025)',
+                      border: `1px solid ${isCorrect ? 'rgba(34,197,94,0.22)' : isWrong ? 'rgba(255,68,68,0.16)' : 'rgba(255,255,255,0.05)'}`,
+                      color: isCorrect ? '#4ade80' : isWrong ? '#FF8080' : '#666',
+                    }}>
+                    <span style={{ flexShrink: 0, fontWeight: 700, minWidth: '1.2em' }}>{label}.</span>
+                    <span className="flex-1 leading-relaxed">{opt}</span>
+                    {isCorrect && <span className="text-xs opacity-60 flex-shrink-0 self-center">← 正确</span>}
+                    {isWrong && <span className="text-xs opacity-60 flex-shrink-0 self-center">← 你选的</span>}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Short answer */}
+          {m.question_type === 'short_answer' && m.correct_answer && (
+            <div className="px-4 py-3 rounded-xl text-sm leading-relaxed"
+              style={{ background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.16)', color: '#4ade80' }}>
+              <span className="font-medium opacity-70 text-xs block mb-1">参考答案</span>
+              {m.correct_answer}
+            </div>
+          )}
+
+          {/* Feedback / explanation */}
+          {(m.feedback || m.explanation) && (
+            <div className="px-4 py-3 rounded-xl text-sm leading-relaxed"
+              style={{ background: 'rgba(255,215,0,0.04)', color: '#888', border: '1px solid rgba(255,215,0,0.1)' }}>
+              <span className="text-xs font-medium block mb-1 opacity-60">💡 解析</span>
+              {m.feedback || m.explanation}
+            </div>
+          )}
+        </div>
       )}
     </div>
   )
@@ -530,54 +567,72 @@ function PracticeMode({ mistakes, color, onMaster, onExit }: {
       </div>
 
       {/* Card */}
-      <div className="rounded-2xl p-5 space-y-4"
+      <div className="rounded-2xl overflow-hidden"
         style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)' }}>
-        <span className="text-[10px]" style={{ color: '#444' }}>{isShort ? '简答题' : '选择题'}</span>
-        <p className="text-sm font-semibold text-white leading-relaxed">{m.question_text}</p>
 
-        {m.options && !isShort && (
-          <div className="space-y-2">
-            {m.options.map((opt, j) => {
-              const label = String.fromCharCode(65 + j)
-              const isChosen = chosen === label
-              const isCorrect = label === m.correct_answer
-              let bg = 'rgba(255,255,255,0.03)', border = 'rgba(255,255,255,0.07)', txtColor = '#CCC'
-              if (revealed) {
-                if (isCorrect) { bg = 'rgba(34,197,94,0.1)'; border = '#22C55E44'; txtColor = '#22C55E' }
-                else if (isChosen) { bg = 'rgba(255,68,68,0.08)'; border = '#FF444433'; txtColor = '#FF8080' }
-              }
-              return (
-                <button key={j} onClick={() => handleMCQ(label)}
-                  disabled={chosen !== null}
-                  className="w-full text-left px-4 py-2.5 rounded-xl text-sm transition-all disabled:cursor-default"
-                  style={{ background: bg, border: `1px solid ${border}`, color: txtColor }}>
-                  <span style={{ color, marginRight: 6 }}>{label}.</span>{opt}
-                </button>
-              )
-            })}
+        {/* Image (if available) */}
+        {m.page_image_url && (
+          <div style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.2)' }}>
+            <p className="text-[11px] px-4 py-1.5 font-medium" style={{ color: '#444' }}>📎 原题图片</p>
+            <img
+              src={m.page_image_url}
+              alt="题目图片"
+              className="w-full object-contain"
+              style={{ maxHeight: 400 }}
+            />
           </div>
         )}
 
-        {isShort && !revealed && (
-          <button onClick={() => setRevealed(true)}
-            className="w-full py-3 rounded-xl text-sm font-medium"
-            style={{ background: color + '14', color, border: `1px solid ${color}33` }}>
-            查看参考答案
-          </button>
-        )}
-        {isShort && revealed && m.correct_answer && (
-          <div className="px-4 py-3 rounded-xl text-sm"
-            style={{ background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.18)', color: '#22C55E' }}>
-            {m.correct_answer}
-          </div>
-        )}
+        <div className="p-5 space-y-4">
+          <span className="text-xs px-2 py-0.5 rounded-full" style={{ color: '#555', background: 'rgba(255,255,255,0.05)' }}>{isShort ? '简答题' : '选择题'}</span>
+          <p className="text-base font-semibold text-white leading-relaxed">{m.question_text}</p>
 
-        {revealed && (m.feedback || m.explanation) && (
-          <p className="text-xs px-3 py-2 rounded-lg"
-            style={{ background: 'rgba(255,215,0,0.04)', color: '#888' }}>
-            💡 {m.feedback || m.explanation}
-          </p>
-        )}
+          {m.options && !isShort && (
+            <div className="space-y-2">
+              {m.options.map((opt, j) => {
+                const label = String.fromCharCode(65 + j)
+                const isChosen = chosen === label
+                const isCorrect = label === m.correct_answer
+                let bg = 'rgba(255,255,255,0.03)', border = 'rgba(255,255,255,0.07)', txtColor = '#CCC'
+                if (revealed) {
+                  if (isCorrect) { bg = 'rgba(34,197,94,0.1)'; border = '#22C55E44'; txtColor = '#22C55E' }
+                  else if (isChosen) { bg = 'rgba(255,68,68,0.08)'; border = '#FF444433'; txtColor = '#FF8080' }
+                }
+                return (
+                  <button key={j} onClick={() => handleMCQ(label)}
+                    disabled={chosen !== null}
+                    className="w-full text-left px-4 py-3 rounded-xl text-sm transition-all disabled:cursor-default"
+                    style={{ background: bg, border: `1px solid ${border}`, color: txtColor }}>
+                    <span style={{ color, marginRight: 6 }}>{label}.</span>{opt}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {isShort && !revealed && (
+            <button onClick={() => setRevealed(true)}
+              className="w-full py-3 rounded-xl text-sm font-medium"
+              style={{ background: color + '14', color, border: `1px solid ${color}33` }}>
+              查看参考答案
+            </button>
+          )}
+          {isShort && revealed && m.correct_answer && (
+            <div className="px-4 py-3 rounded-xl text-sm leading-relaxed"
+              style={{ background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.18)', color: '#4ade80' }}>
+              <span className="text-xs font-medium opacity-60 block mb-1">参考答案</span>
+              {m.correct_answer}
+            </div>
+          )}
+
+          {revealed && (m.feedback || m.explanation) && (
+            <div className="px-4 py-3 rounded-xl text-sm leading-relaxed"
+              style={{ background: 'rgba(255,215,0,0.04)', color: '#888', border: '1px solid rgba(255,215,0,0.08)' }}>
+              <span className="text-xs font-medium opacity-60 block mb-1">💡 解析</span>
+              {m.feedback || m.explanation}
+            </div>
+          )}
+        </div>
       </div>
 
       {isShort && revealed && (
