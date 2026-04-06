@@ -36,18 +36,8 @@ export default function HomePage() {
 
   if (loading) {
     return (
-      <div
-        style={{
-          background: '#000',
-          width: '100vw',
-          height: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <CubesLoader />
-      </div>
+      <div style={{ background: '#000', width: '100vw', height: '100vh', display: 'flex' }}>
+        <CubesLoader full />
     )
   }
 

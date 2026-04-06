@@ -976,7 +976,7 @@ export default function ReviewOutlineTab({ courseId }: Props) {
 
   // ── Loading state ──────────────────────────────────────────────────────────
   if (outlineLoading || reviewLoading) {
-    return <CubesLoader className="py-20" />
+    return <CubesLoader />
   }
 
   if (roots.length === 0) {

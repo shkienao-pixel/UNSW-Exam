@@ -21,7 +21,7 @@ export default function GeneratingState({ label, timeHint, progress, message }: 
     <div className="flex flex-col items-center justify-center py-20 gap-7 max-w-sm mx-auto select-none">
 
       {/* Cubes animation */}
-      <CubesLoader className="w-full" />
+      <CubesLoader compact />
 
       {/* Title + step message */}
       <div className="text-center space-y-1.5">

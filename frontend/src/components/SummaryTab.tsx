@@ -159,7 +159,7 @@ export default function SummaryTab({ courseId }: { courseId: string }) {
     el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  if (status === 'loading') return <CubesLoader className="py-20" />
+  if (status === 'loading') return <CubesLoader />
 
   if (status === 'not_published') return (
     <div className="text-center py-20 glass rounded-2xl" style={{ color: '#444' }}>

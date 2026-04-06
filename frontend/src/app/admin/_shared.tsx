@@ -122,7 +122,7 @@ export const cardStyle: React.CSSProperties = {
 // ── Shared UI primitives ───────────────────────────────────────────────────────
 
 export function Spinner() {
-  return <CubesLoader className="py-10" />
+  return <CubesLoader />
 }
 
 export function Empty({ text }: { text: string }) {

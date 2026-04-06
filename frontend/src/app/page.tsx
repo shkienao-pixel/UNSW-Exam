@@ -322,8 +322,8 @@ export default function LandingPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#050608]">
-        <CubesLoader />
+      <div className="flex min-h-screen bg-[#050608]">
+        <CubesLoader full />
       </div>
     )
   }

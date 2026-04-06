@@ -341,7 +341,7 @@ export default function ExamPlannerTab({ courseId }: { courseId: string }) {
   }, [courseId])
 
   if (loading) {
-    return <CubesLoader className="py-20" />
+    return <CubesLoader />
   }
 
   if (error) {

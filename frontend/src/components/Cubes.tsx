@@ -284,9 +284,9 @@ export default Cubes
 
 // ── wrapper used as loading indicator ────────────────────────────────────────
 
-export function CubesLoader({ className = '', full = false }: { className?: string; full?: boolean }) {
+export function CubesLoader({ className = '', full = false, compact = false }: { className?: string; full?: boolean; compact?: boolean }) {
   return (
-    <div className={`flex items-center justify-center ${full ? 'flex-1 min-h-[55dvh]' : 'py-14'} ${className}`}>
+    <div className={`flex items-center justify-center ${full ? 'flex-1 min-h-[55dvh]' : compact ? '' : 'py-14'} ${className}`}>
       <Cubes
         gridSize={8}
         cubeSize={13}

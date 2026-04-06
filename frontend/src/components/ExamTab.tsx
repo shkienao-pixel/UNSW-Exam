@@ -1682,5 +1682,5 @@ function EmptyState({
 }
 
 function LoadingSpinner() {
-  return <CubesLoader className="py-16" />
+  return <CubesLoader />
 }

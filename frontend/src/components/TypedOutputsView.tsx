@@ -35,7 +35,7 @@ export default function TypedOutputsView({
       .finally(() => setLoading(false))
   }, [courseId, outputType])
 
-  if (loading) return <CubesLoader className="py-16" />
+  if (loading) return <CubesLoader />
 
   return (
     <div className="space-y-4">

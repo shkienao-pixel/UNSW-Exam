@@ -123,7 +123,7 @@ function CreditsPageInner() {
           <div className="min-w-[250px] rounded-[26px] border border-[#c8a55a]/20 bg-[#c8a55a]/8 px-6 py-5">
             <p className="text-xs uppercase tracking-[0.18em] text-white/32">{t('credits_balance_label')}</p>
             {loading ? (
-              <CubesLoader className="mt-2" />
+              <CubesLoader compact className="mt-2" />
             ) : (
               <div className="mt-4 flex items-end gap-3">
                 <span className="text-5xl font-semibold tracking-[-0.06em] text-white">{balance ?? 0}</span>
