@@ -307,6 +307,7 @@ export default function NoteFloatWindow() {
 
   // Track latest blocks for immediate flush on page switch
   const latestBlocksRef  = useRef<unknown[]>([])
+  const hasChangesRef    = useRef(false)   // only true if user actually edited
   const saveTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null)
   const currentPageRef   = useRef(currentPage)
   const courseIdRef      = useRef(courseId)
@@ -344,6 +345,7 @@ export default function NoteFloatWindow() {
       setCurrentPage(1)
       setTotalPages(1)
       latestBlocksRef.current = []
+      hasChangesRef.current = false
     }
   }, [isOpen])
 
@@ -353,26 +355,29 @@ export default function NoteFloatWindow() {
       clearTimeout(saveTimerRef.current)
       saveTimerRef.current = null
     }
-    // Save current page content immediately before switching
-    if (latestBlocksRef.current.length > 0 || contentLoaded) {
+    // Only save if the user actually made changes (prevents wiping content with empty ref)
+    if (hasChangesRef.current && latestBlocksRef.current.length > 0) {
       try {
         await api.notes.saveBlock(
           latestBlocksRef.current,
           courseIdRef.current ?? undefined,
           currentPageRef.current,
         )
+        hasChangesRef.current = false
       } catch { /* non-critical */ }
     }
     setCurrentPage(targetPage)
-  }, [contentLoaded])
+  }, [])
 
   const handleChange = useCallback((blocks: unknown[]) => {
     latestBlocksRef.current = blocks
+    hasChangesRef.current = true
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     setSaveState('saving')
     saveTimerRef.current = setTimeout(async () => {
       try {
         await api.notes.saveBlock(blocks, courseIdRef.current ?? undefined, currentPageRef.current)
+        hasChangesRef.current = false
         setSaveState('saved')
         setTimeout(() => setSaveState('idle'), 2000)
       } catch { setSaveState('error') }
