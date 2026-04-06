@@ -392,6 +392,17 @@ function PastExamList({
   )
 }
 
+type MockGenState = { jobId: string; sessionId: string }
+
+function mockGenLsKey(courseId: string) { return `mock_gen_${courseId}` }
+
+function loadMockGenState(courseId: string): MockGenState | null {
+  try {
+    const raw = localStorage.getItem(mockGenLsKey(courseId))
+    return raw ? (JSON.parse(raw) as MockGenState) : null
+  } catch { return null }
+}
+
 function MockSessionList({
   courseId,
   onStart,
@@ -401,7 +412,7 @@ function MockSessionList({
 }) {
   const [sessions, setSessions] = useState<MockSession[]>([])
   const [loading, setLoading] = useState(true)
-  const [generating, setGenerating] = useState(false)
+  const [genState, setGenState] = useState<MockGenState | null>(() => loadMockGenState(courseId))
   const [starting, setStarting] = useState<string | null>(null)
   const { lang } = useLang()
 
@@ -418,25 +429,61 @@ function MockSessionList({
     void loadSessions()
   }, [loadSessions])
 
-  async function handleGenerate() {
-    setGenerating(true)
-    try {
-      const { session_id } = await api.exam.generateMock(courseId)
-      await loadSessions()
-      const { questions } = await api.exam.getQuestions(courseId, { mock_session_id: session_id })
-      if (!questions.length) {
-        alert(tt(lang, '题目生成完成，但还没有拿到题目数据，请再试一次。', 'Generation finished, but no questions were returned yet. Please retry.'))
-        return
+  // Poll job status when genState is set (survives navigation via localStorage)
+  useEffect(() => {
+    if (!genState) return
+    let cancelled = false
+
+    const poll = async () => {
+      while (!cancelled) {
+        await new Promise(r => setTimeout(r, 2000))
+        if (cancelled) break
+        try {
+          const job = await api.exam.getJobStatus(courseId, genState.jobId)
+          if (job.status === 'done') {
+            localStorage.removeItem(mockGenLsKey(courseId))
+            await loadSessions()
+            const { questions } = await api.exam.getQuestions(courseId, { mock_session_id: genState.sessionId })
+            if (!cancelled) {
+              setGenState(null)
+              if (questions.length) {
+                onStart(questions)
+              } else {
+                alert(tt(lang, '题目生成完成，但还没有拿到题目数据，请再试一次。', 'Generation finished, but no questions were returned yet. Please retry.'))
+              }
+            }
+            return
+          }
+          if (job.status === 'failed') {
+            localStorage.removeItem(mockGenLsKey(courseId))
+            if (!cancelled) {
+              setGenState(null)
+              alert(job.error_msg || tt(lang, '生成失败，请重试。', 'Generation failed, please retry.'))
+            }
+            return
+          }
+        } catch {
+          // network hiccup — keep polling
+        }
       }
-      onStart(questions)
+    }
+
+    void poll()
+    return () => { cancelled = true }
+  }, [genState?.jobId, courseId, loadSessions, lang, onStart])
+
+  async function handleGenerate() {
+    try {
+      const { job_id, session_id } = await api.exam.startMockGen(courseId)
+      const state: MockGenState = { jobId: job_id, sessionId: session_id }
+      localStorage.setItem(mockGenLsKey(courseId), JSON.stringify(state))
+      setGenState(state)
     } catch (error: unknown) {
       alert(error instanceof Error ? error.message : String(error))
-    } finally {
-      setGenerating(false)
     }
   }
 
-  if (generating) {
+  if (genState) {
     return (
       <GeneratingState
         label={tt(lang, '模拟试卷', 'mock paper')}
@@ -481,14 +528,11 @@ function MockSessionList({
 
           <GlowButton
             onClick={handleGenerate}
-            disabled={generating}
             className="inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold transition-all disabled:opacity-60"
             style={{ background: 'rgba(212,168,67,0.16)', color: '#f4d37a', border: '1px solid rgba(212,168,67,0.32)' }}
           >
-            {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-            {generating
-              ? tt(lang, '正在生成试卷...', 'Generating paper...')
-              : tt(lang, '生成模拟卷 · 100 积分', 'Generate Mock · 100 credits')}
+            <Sparkles size={16} />
+            {tt(lang, '生成模拟卷 · 100 积分', 'Generate Mock · 100 credits')}
           </GlowButton>
         </div>
       </div>
@@ -1250,7 +1294,7 @@ function encodeAnswer(text: string, imageUrl: string | null): string {
 /** Decode answer string back into {text, imageUrl}. */
 function decodeAnswer(answer: string | undefined): { text: string; imageUrl: string | null } {
   if (!answer) return { text: '', imageUrl: null }
-  const m = answer.match(/^\[IMG:(https?:\/\/[^\]]+)\]\n?(.*)$/s)
+  const m = answer.match(/^\[IMG:(https?:\/\/[^\]]+)\]\n?([\s\S]*)$/)
   if (m) return { text: m[2], imageUrl: m[1] }
   return { text: answer, imageUrl: null }
 }
