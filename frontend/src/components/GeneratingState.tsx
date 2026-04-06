@@ -24,14 +24,22 @@ export default function GeneratingState({ label, timeHint, progress, message }: 
 
   const content = (
     <div
-      className="flex flex-col items-center justify-center gap-8 select-none"
       style={{
         position: 'fixed',
-        inset: 0,
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 32,
         zIndex: 9999,
         background: 'rgba(6, 0, 16, 0.88)',
         backdropFilter: 'blur(14px)',
         WebkitBackdropFilter: 'blur(14px)',
+        userSelect: 'none',
       }}
     >
       {/* Cubes animation — cellGap=0 prevents grid overflow beyond container */}
