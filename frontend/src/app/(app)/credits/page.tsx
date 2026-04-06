@@ -340,7 +340,7 @@ function CreditsPageInner() {
         <p className="mt-1 text-sm text-white/42">{t('credits_txn_sub')}</p>
 
         {loading ? (
-          <CubesLoader className="py-16" />
+          <CubesLoader />
         ) : txns.length === 0 ? (
           <div className="mt-5 rounded-[28px] border border-white/8 bg-white/[0.03] px-6 py-16 text-center text-sm text-white/42">
             {t('credits_txn_empty')}
@@ -378,9 +378,7 @@ export default function CreditsPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center">
-          <CubesLoader />
-        </div>
+        <CubesLoader full />
       }
     >
       <CreditsPageInner />

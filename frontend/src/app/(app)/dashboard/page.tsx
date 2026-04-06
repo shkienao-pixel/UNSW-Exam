@@ -325,7 +325,7 @@ export default function DashboardPage() {
       )}
 
       {loading ? (
-        <CubesLoader className="py-24" />
+        <CubesLoader />
       ) : (
         <>
           {/* My Courses */}

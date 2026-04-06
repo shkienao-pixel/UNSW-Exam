@@ -284,11 +284,12 @@ export default Cubes
 
 // ── wrapper used as loading indicator ────────────────────────────────────────
 
-export function CubesLoader({ className = '' }: { className?: string }) {
+export function CubesLoader({ className = '', full = false }: { className?: string; full?: boolean }) {
   return (
-    <div className={`flex items-center justify-center ${className}`}>
+    <div className={`flex items-center justify-center ${full ? 'flex-1 min-h-[55dvh]' : 'py-14'} ${className}`}>
       <Cubes
         gridSize={8}
+        cubeSize={13}
         maxAngle={180}
         radius={5}
         autoAnimate

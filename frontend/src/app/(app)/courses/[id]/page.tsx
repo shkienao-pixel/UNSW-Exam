@@ -62,11 +62,7 @@ function CoursePageInner() {
     if (courseId && course) setCourseContext(courseId, course.name)
   }, [courseId, course?.name, setCourseContext])
 
-  if (loading) return (
-    <div className="flex items-center justify-center min-h-screen">
-      <CubesLoader />
-    </div>
-  )
+  if (loading) return <CubesLoader full />
   if (!course) return <div className="p-8 text-red-400">{t('course_404')}</div>
 
   // 未选课 → 锁屏（guest 跳过，管理员跳过）
@@ -154,11 +150,7 @@ function CoursePageInner() {
 
 export default function CoursePage() {
   return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center min-h-screen">
-        <CubesLoader />
-      </div>
-    }>
+    <Suspense fallback={<CubesLoader full />}>
       <CoursePageInner />
     </Suspense>
   )
@@ -401,7 +393,7 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
   }, [courseId])
 
   if (loading) return (
-    <CubesLoader className="py-16" />
+    <CubesLoader />
   )
 
   // Show generating state if AI is running and there are no flashcards yet

@@ -86,8 +86,8 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   useEffect(() => { setDrawerOpen(false) }, [pathname])
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: '#08080f' }}>
-      <CubesLoader />
+    <div className="flex min-h-screen" style={{ background: '#08080f' }}>
+      <CubesLoader full />
     </div>
   )
   if (!user) return null
