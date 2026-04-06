@@ -8,6 +8,31 @@ import os
 import socket
 from typing import Any
 
+# ── 进程锁：8 个 uvicorn worker 进程中只有 1 个真正运行 generation worker ──────
+# 使用 fcntl 文件排他锁（Linux/macOS），Windows 开发环境 fallback 为始终允许
+try:
+    import fcntl as _fcntl
+    _HAS_FCNTL = True
+except ImportError:
+    _HAS_FCNTL = False
+
+_worker_lock_fd = None  # 保持引用防止 GC 释放锁
+
+
+def _try_acquire_worker_lock() -> bool:
+    """尝试获取排他文件锁，成功则本进程成为唯一的 generation worker。"""
+    global _worker_lock_fd
+    if not _HAS_FCNTL:
+        return True  # Windows 开发环境：直接允许
+    lock_path = "/tmp/exammaster_generation_worker.lock"
+    try:
+        fd = open(lock_path, "w")
+        _fcntl.flock(fd, _fcntl.LOCK_EX | _fcntl.LOCK_NB)
+        _worker_lock_fd = fd  # 防止 GC 关闭文件（会自动释放锁）
+        return True
+    except (IOError, OSError):
+        return False
+
 from supabase import Client
 
 from app.core.config import get_settings
@@ -150,7 +175,13 @@ async def _dispatch_loop(worker_id: str) -> None:
 
 
 def start_generation_worker() -> list[asyncio.Task]:
-    """Start generation worker task(s) for this process."""
+    """Start generation worker task(s) for this process.
+
+    With ``--workers N`` uvicorn spawns N independent processes; each calls
+    this function on startup.  We use a file lock so only one process actually
+    runs the worker loop — the others skip silently.  This prevents N×4=32
+    concurrent LLM calls that would exhaust the API key rate limits.
+    """
     cfg = get_settings()
     if not cfg.generation_worker_enabled:
         logger.info("generation worker disabled by config")
@@ -159,7 +190,12 @@ def start_generation_worker() -> list[asyncio.Task]:
         logger.info("generation worker disabled under pytest")
         return []
 
+    if not _try_acquire_worker_lock():
+        logger.info("generation worker: lock held by another process (pid=%s), skipping", os.getpid())
+        return []
+
     worker_id = f"{socket.gethostname()}-{os.getpid()}"
+    logger.info("generation worker acquired lock, running in pid=%s", os.getpid())
     task = asyncio.create_task(_dispatch_loop(worker_id), name=f"generation-worker-{worker_id}")
     return [task]
 

@@ -18,6 +18,33 @@ from supabase import Client
 _bearer = HTTPBearer(auto_error=False)
 logger = logging.getLogger(__name__)
 
+# ── Auth token 本地缓存 ────────────────────────────────────────────────────────
+# 每个 uvicorn worker 进程独立缓存，避免每次请求都打 Supabase Auth API
+# TTL=5分钟：token 被撤销后最多 5 分钟内仍被接受（可接受的权衡）
+_AUTH_CACHE_TTL = 300          # 秒
+_AUTH_CACHE_MAX = 2000         # 最多缓存条目数，防止内存泄漏
+_auth_cache: dict[str, tuple[dict, float]] = {}
+
+
+def _auth_cache_get(token: str) -> "dict | None":
+    entry = _auth_cache.get(token)
+    if entry is None:
+        return None
+    user, exp = entry
+    if time.time() < exp:
+        return user
+    _auth_cache.pop(token, None)
+    return None
+
+
+def _auth_cache_set(token: str, user: dict) -> None:
+    if len(_auth_cache) >= _AUTH_CACHE_MAX:
+        # 简单淘汰：删除最先插入的 200 条（按过期时间升序）
+        oldest = sorted(_auth_cache.items(), key=lambda x: x[1][1])[:200]
+        for k, _ in oldest:
+            _auth_cache.pop(k, None)
+    _auth_cache[token] = (user, time.time() + _AUTH_CACHE_TTL)
+
 
 def get_db() -> Client:
     """Dependency: returns the shared Supabase client."""
@@ -90,6 +117,11 @@ def get_current_user(
 
     token = credentials.credentials
 
+    # ── 缓存命中：跳过 Supabase Auth 网络调用 ────────────────────────────────
+    cached = _auth_cache_get(token)
+    if cached is not None:
+        return cached
+
     # ── Primary: network validation via Supabase Auth ─────────────────────────
     try:
         resp = supabase.auth.get_user(token)
@@ -100,11 +132,13 @@ def get_current_user(
         _cfg = _gs()
         email = str(user.email or "")
         is_guest = bool(_cfg.guest_email and email == _cfg.guest_email)
-        return {
+        result = {
             "id":       str(user.id),
             "email":    email,
             "is_guest": is_guest,
         }
+        _auth_cache_set(token, result)
+        return result
     except AuthError:
         raise
     except Exception as exc:
@@ -133,7 +167,9 @@ def get_current_user(
                 from app.core.config import get_settings as _gs
                 _cfg2 = _gs()
                 is_guest_fallback = bool(_cfg2.guest_email and email == _cfg2.guest_email)
-                return {"id": user_id, "email": email, "is_guest": is_guest_fallback}
+                fallback_result = {"id": user_id, "email": email, "is_guest": is_guest_fallback}
+                _auth_cache_set(token, fallback_result)
+                return fallback_result
             except AuthError:
                 raise
             except Exception as local_exc:
