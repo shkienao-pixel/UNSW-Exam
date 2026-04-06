@@ -180,16 +180,35 @@ function QuizTab({ courseId }: { courseId: string }) {
   const { trackGeneration } = useGeneration()
   const activeJob = useTabGeneration(`/courses/${courseId}?view=quiz`)
   const [refreshKey, setRefreshKey] = useState(0)
+  // Track whether the generation was started on this component instance
+  const jobStartedHereRef = useRef(false)
+  const prevActiveJobRef = useRef(activeJob)
+
+  // When activeJob goes null, the job finished. If onSuccess didn't run on this
+  // instance (user navigated away during generation), trigger a manual refresh.
+  useEffect(() => {
+    const wasGenerating = prevActiveJobRef.current !== null
+    prevActiveJobRef.current = activeJob
+    if (wasGenerating && activeJob === null && !jobStartedHereRef.current) {
+      setRefreshKey(k => k + 1)
+    }
+  }, [activeJob])
 
   const generateButton = (
     <GlowButton
-      onClick={() => trackGeneration({
-        label: t('gen_quiz'),
-        viewLink: `/courses/${courseId}?view=quiz`,
-        promise: api.generate.quiz(courseId, {}),
-        timeHint: '通常需要 30-60 秒',
-        onSuccess: () => setRefreshKey(k => k + 1),
-      })}
+      onClick={() => {
+        jobStartedHereRef.current = true
+        trackGeneration({
+          label: t('gen_quiz'),
+          viewLink: `/courses/${courseId}?view=quiz`,
+          promise: api.generate.quiz(courseId, {}),
+          timeHint: '通常需要 30-60 秒',
+          onSuccess: () => {
+            jobStartedHereRef.current = false
+            setRefreshKey(k => k + 1)
+          },
+        })
+      }}
       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all hover:opacity-85"
       style={{ background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid rgba(255,215,0,0.25)' }}
     >
@@ -267,6 +286,9 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
   const [slideDir, setSlideDir] = useState<'left' | 'right'>('left')
   const [forgottenHint, setForgottenHint] = useState(false)
   const [confirmGenFC, setConfirmGenFC] = useState(false)
+  // Track whether the generation was started on this component instance
+  const jobStartedHereRef = useRef(false)
+  const prevActiveJobRef = useRef(activeJob)
 
   // refs for keyboard handler to read latest state without stale closure
   const stateRef = useRef({ cardIndex, flipped, revealed, chosen, cards, finished })
@@ -287,6 +309,18 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
       .then(data => { setOutputs(data); if (data.length > 0) loadCards(data[0]) })
       .finally(() => setLoading(false))
   }, [courseId, loadCards])
+
+  // When activeJob goes null, the job finished. If onSuccess didn't run on this
+  // instance (user navigated away during generation), reload outputs to show new result.
+  useEffect(() => {
+    const wasGenerating = prevActiveJobRef.current !== null
+    prevActiveJobRef.current = activeJob
+    if (wasGenerating && activeJob === null && !jobStartedHereRef.current) {
+      api.outputs.list(courseId, 'flashcards')
+        .then(data => { setOutputs(data); if (data.length > 0) loadCards(data[0]) })
+        .catch(() => {})
+    }
+  }, [activeJob, courseId, loadCards])
 
   useEffect(() => {
     api.flashcardMistakes.list(courseId)
@@ -463,12 +497,14 @@ function FlashcardsTab({ courseId }: { courseId: string }) {
                   <GlowButton
                     onClick={() => {
                       setConfirmGenFC(false)
+                      jobStartedHereRef.current = true
                       trackGeneration({
                         label: t('gen_flashcards'),
                         viewLink: `/courses/${courseId}?view=flashcards`,
                         promise: api.generate.flashcards(courseId, {}),
                         timeHint: '通常需要 30-60 秒',
                         onSuccess: (output) => {
+                          jobStartedHereRef.current = false
                           setOutputs(prev => [output, ...prev])
                           loadCards(output)
                         },

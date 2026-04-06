@@ -450,6 +450,17 @@ export const api = {
       return { session_id }
     },
 
+    /** Start mock generation without waiting — returns job_id + session_id for component-level polling. */
+    startMockGen: (courseId: string) =>
+      req<{ job_id: string; session_id: string }>(
+        `/courses/${courseId}/exam/mock/generate`,
+        { method: 'POST', body: JSON.stringify({ num_mcq: 15, num_short: 5 }) },
+      ),
+
+    /** Poll a generation job status. */
+    getJobStatus: (courseId: string, jobId: string) =>
+      req<{ status: string; error_msg: string | null }>(`/courses/${courseId}/jobs/${jobId}`),
+
     /** Upload a base64 answer image, returns its public URL. */
     uploadAnswerImage: (courseId: string, data: string, mimeType: string) =>
       req<{ url: string }>(
